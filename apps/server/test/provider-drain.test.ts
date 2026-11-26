@@ -8,6 +8,7 @@ import { pgDb, providers, ProjectionRunner, rebuildProviderProjection } from '@o
 import { createLogger } from '@opencrane/observability';
 import { providerSecretRef } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
+import { chatModel, chatVerification } from './support/chat-default.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 afterEach(vi.restoreAllMocks);
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
@@ -37,7 +38,8 @@ async function appendAndAuthorise(
     await auth.handler.handle(record, pgDb(dbs.queue));
   }
 }
-async function connection(providerId: string, verified = true, apply = true) {
+async function connection(providerId: string, verified = true, apply = true,
+  models = [chatModel]) {
   const common = { providerId, changedBy: 'owner' };
   await appendAndAuthorise({
     subject: `provider-${providerId}`, type: 'provider.created',
@@ -56,8 +58,13 @@ async function connection(providerId: string, verified = true, apply = true) {
   }
   await appendAndAuthorise({
     subject: `provider-${providerId}`, type: 'provider.models_selected',
-    data: { ...common, revision: 3, models: ['gpt-6.1-sol'] },
+    data: { ...common, revision: 3, models },
   });
+}
+async function readyConnection(providerId: string, models = [chatModel]) {
+  await connection(providerId, true, true, models);
+  const verification = chatVerification(providerId);
+  await appendAndAuthorise(verification);
 }
 async function initialise() {
   nats = await natsFixture();
@@ -78,9 +85,12 @@ async function initialise() {
       data: { assistantId, ownerId: 'bob', kind: 'personal' },
     });
   }
-  await connection('primary');
-  await connection('secondary');
+  await readyConnection('primary');
+  await readyConnection('secondary');
+  await readyConnection('lost-reachability');
+  await readyConnection('no-enabled-models', []);
   await connection('unverified', false);
+  await connection('untested');
   await connection('unapplied', true, false);
   function memberId(_silo: string, _issuer: string, sub: string) {
     return Promise.resolve(sub);
@@ -105,16 +115,21 @@ function request(method: 'GET' | 'POST', providerId = 'primary', payload?: unkno
   const session = { sub, orgId, roles: ['owner'], authTime: 1, exp: 2000000000 };
   const cookie = `${config.cookieName}=${encodeSession(config, session)}`;
   const headers = { origin, 'content-type': 'application/json', cookie };
-  const options = { method, url: `/api/org/providers/${providerId}/${suffix}`, headers,
+  const route = `/api/org/providers/${providerId}`;
+  const url = suffix ? `${route}/${suffix}` : route;
+  const options = { method, url, headers,
     ...(payload === undefined ? {} : { payload: JSON.stringify(payload) }) };
   return app.inject(options);
 }
-async function input(action = 'start', overrides: Record<string, unknown> = {}) {
-  const response = await request('GET');
-  const current = response.json<{ sequence: number }>();
+async function input(action = 'start', overrides: Record<string, unknown> = {},
+  providerId = 'primary') {
+  const response = await request('GET', providerId);
+  expect(response.statusCode).toBe(200);
+  const current = response.json<{ revision: number; sequence: number;
+    expectedProviderSequence: number }>();
   return {
-    commandId: `drain-${++counter}`, action, expectedRevision: 3,
-    expectedProviderSequence: await nats.store.head('provider-*'),
+    commandId: `drain-${++counter}`, action, expectedRevision: current.revision,
+    expectedProviderSequence: current.expectedProviderSequence,
     expectedDrainSequence: current.sequence, ...overrides,
   };
 }
@@ -136,8 +151,10 @@ async function recordsAndRecovers() {
   expect(await nats.store.head()).toBe(position);
   const changed = { ...command, action: 'cancel' };
   expect((await request('POST', 'primary', changed)).statusCode).toBe(409);
-  const cancel = await input('cancel');
-  expect((await request('POST', 'primary', cancel, 'admin')).statusCode).toBe(200);
+  const cancelOverrides = {};
+  const cancel = await input('cancel', cancelOverrides, 'unverified');
+  const cancelled = await request('POST', 'unverified', cancel, 'admin');
+  expect(cancelled.statusCode).toBe(200);
   expect(await nats.store.head()).toBe(position + 1);
   expect((await request('GET')).json()).toMatchObject({ draining: false, enabled: false });
   // Recover the original start without silently starting another drain.
@@ -160,6 +177,46 @@ async function recordsAndRecovers() {
 }
 it('records one event per drain change and recovers old replies without repeating a change',
   recordsAndRecovers);
+
+async function refusesUnreadyStart(providerId: string) {
+  const overrides = {};
+  const command = await input('start', overrides, providerId);
+  const before = await nats.store.head();
+  const refused = await request('POST', providerId, command);
+  const read = await request('GET', providerId);
+  try {
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toMatchObject({ status: 'refused', reason: 'connection_not_ready' });
+    expect(await nats.store.head()).toBe(before);
+    expect(read.json()).toMatchObject({ draining: false, enabled: false });
+  } finally {
+    // Clear a drain saved by a regression so the next test starts with calls open.
+    if (refused.statusCode === 200) {
+      const cancel = await input('cancel', overrides, providerId);
+      const cancelled = await request('POST', providerId, cancel);
+      expect(cancelled.statusCode).toBe(200);
+    }
+  }
+}
+const unreadyConnections = ['unverified', 'untested', 'no-enabled-models'];
+it.each(unreadyConnections)('refuses to start a drain from %s', refusesUnreadyStart);
+
+async function refusesAfterLostReachability() {
+  const providerId = 'lost-reachability';
+  await runner.run(providers);
+  const page = await request('GET', providerId, undefined, 'owner',
+    'https://app.example.test', 'org-acme', '');
+  expect(page.statusCode).toBe(200);
+  expect(page.json()).toMatchObject({ rows: [{ providerId, status: 'ready' }] });
+
+  const failedCheck = { kind: 'reachability', outcome: 'fail' } as const;
+  const verification = chatVerification(providerId, failedCheck);
+  await appendAndAuthorise(verification);
+  // Use the new drain positions, as the page does when the owner clicks Pause.
+  await refusesUnreadyStart(providerId);
+}
+it('refuses to pause when reachability fails after the page reads a ready connection',
+  refusesAfterLostReachability);
 
 async function refuses(overrides: Record<string, unknown>, code: number) {
   const command = await input('start', overrides);

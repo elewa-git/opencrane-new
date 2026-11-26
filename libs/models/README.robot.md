@@ -2052,12 +2052,18 @@ history follows the same order. Routine execution and destructive-operation bloc
 are unchanged.
 Tests: `apps/server/test/provider-routine-presence.test.ts` and the existing provider suites.
 
-Binding commands find saved ids across actors on the same provider. Actor or request
-changes return a conflict. After append, `readEventAt` checks the stored event before
+The chat-default command takes the silo from the checked installation. It uses
+position zero for the first choice and the saved position for a replacement.
+A move checks permission on both connections and records the old connection's
+revision. Both public actions for setting the silo default use the same status
+as the provider list. They require a reachability pass and a passing model
+answer. The chosen model must also be supported and enabled. Binding commands
+find saved ids across actors on the same provider. A different actor or changed
+choice returns a conflict. After append, `readEventAt` checks the stored event before
 returning its receipt, including duplicate recovery. The automatic default calls the
 private binding command with `system:seed-provider-default`; public command schemas
 reject its colon. Only automatic selection follows the first verified provider.
-Explicit initial choices can use any eligible connection.
+An owner or admin can choose any ready connection with an enabled chat model.
 For a `provider.models_selected` trigger, the handler requires that exact event in
 its provider history before considering the automatic choice. A missing event
 throws so the dispatcher retries. Verification before model selection can still
@@ -2344,6 +2350,9 @@ P4-22 row 4d is the first split of the remaining migration work. It provides
 provider management permission and the applied provider creation receipt. POST
 also requires the trusted Origin. Status uses the existing changes GET URL.
 
+Starting a drain requires a current reachability pass, a passing model test
+and at least one enabled model. The server reads those facts from the provider
+events. It returns HTTP 403 with `connection_not_ready` if any is missing.
 Each command makes one conditional append to `provider-*`. A same-id retry returns
 the original receipt, even after cancellation. Changed arguments or a different
 administrator conflict. A stale position or revision conflicts. Configuration

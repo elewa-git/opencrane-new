@@ -5,6 +5,7 @@ import { parseEventByType, providerIdSchema, providerModelIdSchema,
   type EventEnvelope } from '@opencrane/events';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
+import type { ProviderChoiceRefusal } from '@opencrane/protocol';
 import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { applyProvider, type ProviderState } from '@opencrane/projections';
 import { authorityFence } from './authority.ts';
@@ -28,6 +29,13 @@ export const providerCommandSchema = z.discriminatedUnion('action', [
   z.object({ ...common, action: z.literal('models'), models: z.array(modelId).max(11) }).strict(),
 ]);
 export class ProviderRefused extends Error {}
+export class ProviderChoiceRefused extends ProviderRefused {
+  readonly reason: ProviderChoiceRefusal;
+  constructor(reason: ProviderChoiceRefusal) {
+    super(reason);
+    this.reason = reason;
+  }
+}
 export class ProviderUnpriced extends ProviderRefused {}
 export class ProviderConflict extends Error {}
 
@@ -204,4 +212,24 @@ export async function providerCommand(store: EventStore, binding: Binding,
   checkConfiguration(input, state, binding.silo);
   return appendProvider(store, binding.silo, input.providerId, memberId, input.commandId,
     type, payload, rows.at(-1)?.sequence ?? 0, fresh);
+}
+
+export function providerStatus(state: ProviderState): string {
+  if (state.retired) {
+    return 'retired';
+  }
+  if (state.reachable?.outcome === 'pass') {
+    const outcome = state.modelAnswer?.outcome;
+    if (outcome === 'pass') {
+      return 'ready';
+    }
+    if (outcome && outcome !== 'skipped') {
+      return `model_test_${outcome}`;
+    }
+    return 'connected_not_tested';
+  }
+  if (state.saved) {
+    return 'saved_unverified';
+  }
+  return 'needs_key';
 }

@@ -187,9 +187,12 @@ main-branch comparison and own checks.
 Provider routes return HTTP 425 with `{ status: 'access_applying' }` when the existing
 membership check throws `AuthorityApplying`. This includes a saved `ownership.seeded`
 event whose OpenFGA receipt is missing. The create has not reached its append at that
-point. Retrying uses the same input and command id. Membership, admin permission and
-applied-event checks still run on every attempt. Unavailable dependencies still return
-503; a lost or uncertain write still requires reading its original result.
+point. A create can repeat the original input and command id. The Models page
+lets the person submit a fresh chat default choice after this reply. Membership, admin permission and applied-event checks run on every
+attempt. Unavailable dependencies still return 503. A lost or uncertain write
+requires reading the result for its original command id.
+The [provider request contract](src/providers/README.robot.md#chat-default) lists
+the positions needed to set or move the chat default.
 
 `test/provider-startup.test.ts` uses real NATS, PostgreSQL and OpenFGA. It withholds the
 ownership receipt while the Owner already has admin permission. It checks 425 without

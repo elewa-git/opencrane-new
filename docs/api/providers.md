@@ -235,7 +235,13 @@ private definitions. Lag, failed reads, rebuilds or changing routine positions r
 Current member and provider permissions are checked after preparation, including failures;
 removed and non-admin callers receive the same 403 refusal. Unrelated chat activity is allowed.
 `POST` accepts `commandId`, `expectedProviderSequence`, `expectedRevision`, `kind` (`assistant` or `silo_default`), `dependantId`, `task: chat_turn`, `expectedBindingSequence`, and `action: select|pause`.
-Select requires `model`; a move also requires `expectedSourceRevision`. Pause keeps the provider and model. The existing changes GET recovers the original receipt; retry uses the same body and id.
+Select requires `model`. `select_chat_default` takes the silo, dependant and
+task from the installation. The bindings read returns `chatDefault` as `null`
+before a choice exists and returns its saved `position` afterwards. A move also
+uses the `sourceRevision` returned for the old connection as
+`expectedSourceRevision`. Only a move records the source revision. Pause keeps
+the provider and model. The existing changes GET recovers the original receipt
+from its command id. An identical retry uses the original body and command id.
 After switch-on, new turns use these choices. Models process requirements appear
 below. The bindings reply does not report process readiness. Retirement remains unavailable.
 
@@ -243,8 +249,27 @@ Identical concurrent retries return the saved event id and sequence. A different
 changed request reusing a command id on the same provider gets 409. The automatic default
 uses a reserved internal command id that user requests cannot supply. It chooses the
 first verified provider only when there is no saved default or pause, and waits for that
-provider to enable the chat model. An administrator can explicitly choose any eligible
-verified provider as the initial default.
+provider to enable the chat model. Both actions for an administrator to set a
+silo default require the connection to pass reachability and a model test.
+The selected model must be supported and enabled. A 403 can name
+`permission_denied`, `connection_not_ready` or `model_not_enabled`. HTTP 425
+means the attempt did not save because membership was still being applied.
+
+## Pausing new calls
+
+`GET /api/org/providers/:providerId/drain` returns the current provider revision,
+provider and pause positions, and whether calls are paused or switched on.
+`POST` on the same route takes `commandId`, `action`, `expectedRevision`,
+`expectedProviderSequence` and `expectedDrainSequence`. The action is `start`
+or `cancel`. Both requests require current Owner/Admin access, permission to
+manage the connection and an applied creation receipt. The write also requires
+the configured Origin.
+
+To start a pause, the connection's latest saved reachability check and model
+test must pass, and at least one model must be enabled. A start with current
+positions returns HTTP 403 with `connection_not_ready` if the connection is
+unready, without saving a pause. If the saved positions changed, it returns
+HTTP 409. An existing pause can still be cancelled if readiness is lost.
 
 ## Switching on managed calls
 

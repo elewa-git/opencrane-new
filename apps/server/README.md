@@ -24,8 +24,7 @@ flowchart LR
   server -->|reads tables| postgres["PostgreSQL<br/>read tables"]
   server -->|signs people in| zitadel["Zitadel<br/>sign-in service"]
   server -->|checks permissions| openfga["OpenFGA<br/>permissions service"]
-  restore["Verified pilot restore"] -->|opens reads with writes held| server
-  server -.->|checks calls and approvals| models["libs/models<br/>AI access rules"]
+  server -.->|checks calls, approvals and chat default choices| models["libs/models<br/>AI access rules"]
 ```
 
 ## What it is responsible for
@@ -60,7 +59,7 @@ Not built yet:
    cost and releases unused money. Tool approvals use saved event positions so earlier
    chat messages do not need to be replayed.
    With a connected provider, the process reads its private key for an admitted call.
-   An admin can finish setup before switching on model calls.
+   An admin can choose a reachable connection with a passing model test as the chat default.
 4. **A person uses a tool.** A reviewed tool may need their approval before it runs.
    The server saves the decision and checks access again before allowing work.
 5. **An admin changes settings.** The server checks their rights and saves the change.

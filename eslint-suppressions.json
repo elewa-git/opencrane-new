@@ -787,11 +787,6 @@
       "count": 3
     }
   },
-  "libs/models/src/provider-bindings.ts": {
-    "max-params": {
-      "count": 2
-    }
-  },
   "libs/models/src/provider-retirement-preview.ts": {
     "max-params": {
       "count": 8

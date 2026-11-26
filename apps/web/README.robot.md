@@ -1668,13 +1668,24 @@ widths under `docs/process/evidence/chat-tail-window/` using browser fixtures.
 
 ## Switching on a chat provider
 
-Models & providers shows member-chat setup for connections with enabled models.
-`provider-chat.ts` selects a model through the existing bindings route, pauses calls
-through the drain route and requests switch-on. Each action reads current positions
-first. If the bindings read returns 503 while selecting the chat default, the page
+Models & providers shows how to finish setting up each OpenAI connection. The
+list points to Check status for an unfinished check, the Models step when no
+models are enabled, and Test again for a settled model test that did not pass.
+A recorded reachability result that did not confirm access lets the owner run
+a new free check. An unfinished check still uses its original request id.
+When a connection is reachable, a model has answered, and a model is enabled,
+the owner can choose it as the default even after member chats are switched on.
+Only ready connections offer Pause new calls. `provider-chat.ts` reads the
+current chat default across connections and
+sends `select_chat_default` through the bindings route. A `null` default means the
+first choice uses binding position zero. Moving an existing choice uses its saved
+position and the current revision of the other connection. The drain and switch-on
+routes use their own current positions. If the bindings read returns 503, the page
 reads it once more. The server uses the same unavailable response when provider
 history changes and when it cannot prepare dependencies for another reason. If the
-second read fails, the page shows an error and sends no command. An unknown
-command keeps its original reference and blocks another write
-until Check chat setup finds the receipt. No control grants model access or bypasses
-the server's verification, drain or default-selection checks.
+second read fails, the page shows an error and sends no command. HTTP 425 tells
+the page that the write stopped while membership was still being applied. The
+person can make a new choice after access settles. A lost or uncertain reply
+keeps the original command reference and blocks another write until Check chat
+setup finds the saved result. The page names permission, connection and model
+refusals separately.

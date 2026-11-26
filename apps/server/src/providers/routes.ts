@@ -9,10 +9,10 @@ import { providerAuthority, providerCommand, providerReceipt,
   providerDrainCommand, providerDrainStatus, providerSwitchOn, providerSwitchOnChange,
   readActiveMember, MemberAccessRefused, providerBindingCommand, providerDependencies,
   providerRetirementPreview,
-  ProviderRefused, ProviderUnpriced, ProviderConflict, AuthorityApplying,
+  ProviderRefused, ProviderUnpriced, ProviderConflict, ProviderChoiceRefused, AuthorityApplying,
   providerHistory, providerSecretRef,
   type ProviderSecrets, requestProviderVerification, providerTestQuote,
-  providerVerificationSchema, providerPermission } from '@opencrane/models';
+  providerVerificationSchema, providerPermission, providerStatus } from '@opencrane/models';
 import type { GroupOptions } from '../members/group-routes.ts';
 import { sessionFor } from '../members/routes.ts';
 
@@ -70,6 +70,9 @@ export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
       } catch (error) {
         if (error instanceof AuthorityApplying) {
           return reply.code(425).send({ status: 'access_applying' });
+        }
+        if (error instanceof ProviderChoiceRefused) {
+          return reply.code(403).send({ status: 'refused', reason: error.reason });
         }
         const code = errorCode(error);
         const result = { status: code === 503 ? 'unavailable' : 'refused',
@@ -289,33 +292,22 @@ async function cleanProviderSecrets(options: ProviderOptions, providerId: string
   }
 }
 function providerRow(state: Awaited<ReturnType<typeof readProviders>>[number]) {
-  if (state.retired) {
-    return { ...state, status: 'retired' };
-  }
-  let status = 'needs_key';
-  if (state.saved) {
-    status = 'saved_unverified';
-  }
-  if (state.reachable?.outcome === 'pass') {
-    status = 'connected_not_tested';
-  }
-  if (state.reachable?.outcome === 'pass' && state.modelAnswer) {
-    const outcome = state.modelAnswer.outcome;
-    if (outcome === 'pass') {
-      status = 'ready';
-    } else if (outcome !== 'skipped') {
-      status = `model_test_${outcome}`;
-    }
-  }
-  return { ...state, status };
+  return { ...state, status: providerStatus(state) };
 }
 async function bindings(request: FastifyRequest, reply: FastifyReply,
   options: ProviderOptions, memberId: string) {
   const { providerId } = providerParameters.parse(request.params);
   if (request.method === 'POST') {
-    const receipt = await providerBindingCommand(options.store, options.binding,
-      memberId, providerId, request.body);
-    return reply.send(receipt);
+    try {
+      const receipt = await providerBindingCommand(options.store, options.binding,
+        memberId, providerId, request.body);
+      return reply.send(receipt);
+    } catch (error) {
+      if (error instanceof ProviderRefused && !(error instanceof ProviderChoiceRefused)) {
+        return reply.code(403).send({ status: 'refused', reason: 'permission_denied' });
+      }
+      throw error;
+    }
   }
   const result = await providerDependencies(options.store, options.binding,
     memberId, providerId, options.db);

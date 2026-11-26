@@ -8,11 +8,13 @@ This folder lets owners and admins connect OpenCrane to AI model providers. It h
 - Stores keys in the secret store and saves only references in the event log.
 - Offers a price estimate for a connection test and requests the chosen checks.
 - Reports connection and model-test results without returning keys.
-- Saves provider choices, counts affected assistants and returns original saved results.
-- Shows saved assistant bindings, safe replacement choices and unresolved routines
+- Sets or moves the chat default to a reachable connection with a passing model test.
+  A move also needs permission to manage the old connection.
+- Shows saved assistant bindings, counts affected assistants and lists unresolved routines
   before a provider can retire. It checks the payer and spending limits. A
   proposed choice changes nothing.
-- Pauses new model turns before a provider change and records when managed provider calls are switched on.
+- Checks that the connection is ready before pausing new model turns. It also records
+  when managed provider calls are switched on.
 
 A turn is one message and the assistant's reply. New managed turns use the assistant's chosen provider or the installation default. Renewing, repeating or closing a saved turn keeps its original model and provider. Running turns keep their original path during a pause. Provider lists also report that the model-access requests are available. Starting or cancelling the pause saves a change.
 
@@ -37,7 +39,7 @@ take a new key, model selection or check. Confirming retirement is still unavail
 | File | What it does |
 | --- | --- |
 | [routes.ts](routes.ts) | Handles provider lists, keys, verification, model choices, pauses and switch-on. |
-| [README.robot.md](README.robot.md) | Gives the preview route contract and safety limits. |
+| [README.robot.md](README.robot.md) | Describes chat defaults, pauses and retirement previews. |
 
 ## How it connects
 
@@ -45,7 +47,7 @@ The [server](../../README.md) registers these requests for the [website](../../.
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>provider pages"] -->|requests| routes["providers<br/>server routes"]
+  web["apps/web<br/>provider pages"] -->|requests including chat default choice| routes["providers<br/>server routes"]
   routes -.-> models["libs/models<br/>provider and retirement rules"]
   models -->|reads provider, payer and spending changes| store["event log<br/>saved changes"]
   routes -->|reads progress| tables["read tables<br/>routine view"]

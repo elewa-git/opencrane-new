@@ -1267,20 +1267,31 @@ async function appendSwitchSettlement(callId: string, unknown: boolean) {
     expectedSequence: await nats.store.head('budget-acme') });
   expect(result.status).toBe('appended');
 }
+async function leavePaidTestUnsettled() {
+  // Use another connection so the chosen default stays ready to start the pause.
+  const providerId = 'unresolved-paid-test';
+  await preparesVerificationProvider(providerId);
+  const route = `/api/org/providers/${providerId}/verify`;
+  const input = verificationInput('unresolved-test', 'test');
+  upstreamInvalidJson = true;
+  try {
+    const response = await request('POST', route, input);
+    expect(response.statusCode).toBe(200);
+    const reservation = actor.state.reservations.at(-1);
+    if (!reservation) {
+      throw new Error('Expected a reservation for the unresolved model test');
+    }
+    expect(reservation.settledCents).toBeUndefined();
+    return reservation.id;
+  } finally {
+    upstreamInvalidJson = false;
+  }
+}
 async function switchesAfterRealVerification(kind: 'reachability' | 'paid' | 'unreserved') {
   await prepareRealSwitchOn();
   let unresolvedId = '';
   if (kind === 'paid') {
-    upstreamInvalidJson = true;
-    try {
-      const input = { ...verificationInput('unresolved-test', 'test'), expectedRevision: 3 };
-      const response = await request('POST', '/api/org/providers/primary/verify', input);
-      expect(response.statusCode).toBe(200);
-      unresolvedId = actor.state.reservations.at(-1)!.id;
-      expect(actor.state.reservations.at(-1)?.settledCents).toBeUndefined();
-    } finally {
-      upstreamInvalidJson = false;
-    }
+    unresolvedId = await leavePaidTestUnsettled();
   }
   if (kind === 'unreserved') {
     unresolvedId = 'ordinary-unreserved';

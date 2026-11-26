@@ -40,12 +40,14 @@ export class ModelsScreen extends ProviderKeyChanges {
       this.pendingChecks.set({ ...this.pendingChecks(), [providerIdValue]: notRecorded });
       this.commandReference.set(pending.commandId);
       this.resultText.set('This free check was not recorded. Start over to try again.');
+      this.liveStatus.set(this.resultText());
       this.resultKind.set('refused');
       return;
     }
-    const outcome = result.kind === 'ok' ? result.value.outcome : undefined;
-    this.applyCheckOutcome(providerIdValue, pending, outcome ?? 'outcome_unknown');
-    if (isSettledOutcome(outcome ?? '')) {
+    const outcome = result.kind === 'ok'
+      ? result.value.outcome ?? 'outcome_unknown' : 'outcome_unknown';
+    this.applyCheckOutcome(providerIdValue, pending, outcome);
+    if (isSettledOutcome(outcome, pending.operation)) {
       await this.refreshOne(providerIdValue);
     }
   }
@@ -103,15 +105,23 @@ export class ModelsScreen extends ProviderKeyChanges {
     await this.runCheck('skip');
   }
 
-  protected startOverCheck(): void {
-    const providerIdValue = this.providerIdDraft();
-    const pending = this.pendingChecks()[providerIdValue];
-    if (!pending?.notRecorded || pending.operation === 'test' || this.busy()) {
+  protected canStartOverCheck(providerId: string): boolean {
+    const pending = this.pendingChecks()[providerId];
+    return !!pending?.notRecorded && pending.operation !== 'test';
+  }
+
+  protected startOverCheck(providerIdValue = this.providerIdDraft()): void {
+    if (!this.canStartOverCheck(providerIdValue) || this.busy()) {
       return;
     }
     this.pendingChecks.set(without(this.pendingChecks(), providerIdValue));
     this.clearActionMessage();
-    this.focusStepHeadingAfterRender();
+    this.liveStatus.set('You can check this connection again.');
+    if (this.setupOpen()) {
+      this.focusStepHeadingAfterRender();
+    } else {
+      focusProviderRowAfterRender(providerIdValue);
+    }
   }
 
   private async runCheck(
@@ -425,8 +435,7 @@ export class ModelsScreen extends ProviderKeyChanges {
         await this.checkVerificationStatus(provider.providerId);
       }
       if (restoreRowFocus) {
-        const focusChangedRow = focusProviderRow.bind(null, provider.providerId);
-        globalThis.setTimeout(focusChangedRow, 0);
+        focusProviderRowAfterRender(provider.providerId);
       }
       return;
     }
@@ -447,7 +456,7 @@ export class ModelsScreen extends ProviderKeyChanges {
 
 
   private applyCheckOutcome(id: string, pending: PendingChange, outcome: string): void {
-    if (isSettledOutcome(outcome)) {
+    if (isSettledOutcome(outcome, pending.operation)) {
       this.pendingChecks.set(without(this.pendingChecks(), id));
     }
     this.modelTestConsent.set(undefined);
@@ -496,6 +505,11 @@ function verificationBody(action: 'reachability' | 'test' | 'skip', pending: Pen
     body['consent'] = true;
   }
   return body;
+}
+
+function focusProviderRowAfterRender(id: string): void {
+  const focus = focusProviderRow.bind(null, id);
+  globalThis.setTimeout(focus, 0);
 }
 
 function focusProviderRow(id: string): void {
