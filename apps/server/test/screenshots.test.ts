@@ -8,6 +8,7 @@ import { files, conversations } from '@opencrane/projections';
 import { history } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { viewFixture } from './support/view-fixture.ts';
+import type { FileOptions } from '../src/files/routes.ts';
 import { uploadServices } from './support/upload-services.ts';
 import { sharedChildChat, teamViewChat, viewHeaders } from './support/view-requests.ts';
 
@@ -150,7 +151,7 @@ it('refuses stale authority, arbitrary capture input, failed scans and oversized
 }, 180_000);
 
 async function savesTeamScreenshot() {
-  const fixture = await viewFixture(desktop);
+  const fixture = await viewFixture(openScreenshotDesktop);
   const services = await uploadServices();
   const { config, nats, binding, feed, db, runner } = fixture;
   const options = { silo: 'test', store: nats.store, binding, feed, db };
@@ -198,7 +199,7 @@ async function savesTeamScreenshot() {
 it('lets a current team-chat reader save and reopen a screenshot', savesTeamScreenshot, 120_000);
 
 async function refusesPublicationAfterRemoval(removal: 'before recheck' | 'after recheck') {
-  const fixture = await viewFixture(desktop);
+  const fixture = await viewFixture(openScreenshotDesktop);
   const services = await uploadServices();
   const { config, nats, binding, feed, db, append } = fixture;
   const options = { silo: 'test', store: nats.store, binding, feed, db };
@@ -264,7 +265,7 @@ async function refusesMismatchedCaptureResources(mismatch: CaptureBinding) {
   const services = await uploadServices();
   const { config, nats, binding, feed, db } = fixture;
   const chat = { silo: 'test', store: nats.store, binding, feed, db };
-  const fileOptions = { ...chat, ...services };
+  const fileOptions: FileOptions = { ...chat, ...services };
   const view = { ...chat, open };
   if (mismatch === 'silo') {
     fileOptions.silo = 'another';
@@ -344,6 +345,10 @@ async function savesInheritedScreenshot() {
 }
 it('lets an inherited child-chat reader save a screenshot until their parent join ends',
   savesInheritedScreenshot, 120_000);
+
+function openScreenshotDesktop() {
+  return desktop();
+}
 
 function cleanVerdict() {
   return 'clean' as const;

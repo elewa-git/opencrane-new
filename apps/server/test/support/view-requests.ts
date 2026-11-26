@@ -39,7 +39,7 @@ export async function teamViewChat({ append }: Fixture, applyAssistant = true) {
 export async function sharedChildChat(fixture: Fixture) {
   const { append, nats } = fixture;
   const parent = {
-    conversationId: 'parent', createdBy: 'alice', mode: 'direct',
+    conversationId: 'parent', createdBy: 'alice', mode: 'group',
     participantIds: ['alice', 'bob'],
   };
   const parentEvent = await append('conversation-parent', 'conversation.created', parent, true);
@@ -49,8 +49,14 @@ export async function sharedChildChat(fixture: Fixture) {
     { participantId: 'alice', ...parentJoin },
     { participantId: 'bob', ...parentJoin },
   ];
-  const origin = { parentConversationId: 'parent', sourceMessageId: 'source', sourcePosition: 2,
-    intentEventId: 'intent', intentPosition: 3, requestId: 'request', firstInputId: 'input' };
+  const source = await append('conversation-parent', 'message.posted', {
+    conversationId: 'parent', authorId: 'alice', authorKind: 'human',
+    utterance: 'Ask for help', contentType: 'text',
+  });
+  const sourcePosition = await nats.store.head('conversation-parent');
+  const origin = { parentConversationId: 'parent', sourceMessageId: source.id, sourcePosition,
+    intentEventId: 'intent', intentPosition: sourcePosition + 1, requestId: 'request',
+    firstInputId: 'input' };
   const data = {
     conversationId: 'child', mode: 'agent_session', contextKind: 'shared_child',
     createdBy: 'alice', assistantId: 'assistant', payingGroupId: 'sales', initialJoins, origin,
