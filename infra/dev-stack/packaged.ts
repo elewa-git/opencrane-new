@@ -13,6 +13,7 @@ import { secondary, stackId } from './identity.ts';
 import { targetConnection, targetRecorded } from './target.ts';
 import { checkCnpgInstallation } from './cnpg.ts';
 import { checkPackageHosts, type HostCheckOptions, type HostCheckRecord } from './package-hosts.ts';
+import { computerImagePullRefusal } from './package-error.ts';
 import { checkPublicSettings, type PublicPackageValues } from '../package/public-settings.mjs';
 import { checkNatsInputs } from '../package/check-nats-inputs.ts';
 import { requireFleetStandInProvider } from './journey-guard.ts';
@@ -111,7 +112,11 @@ async function command(program: string, args: string[], timeoutMs = 120_000, cwd
     const result = await execute(program, args, options);
     commandTimeout(timeoutMs, limits);
     return result.stdout.trim();
-  } catch {
+  } catch (error) {
+    if (program === 'helm' && (args[0] === 'install' || args[0] === 'upgrade')) {
+      const refusal = computerImagePullRefusal(error);
+      if (refusal) throw refusal;
+    }
     // Discard dependency output because it may contain credentials.
     throw new Error('Package command failed');
   }
@@ -749,7 +754,7 @@ export async function installPackage(valuesFile: string) {
     await command('helm', ['install', release, chartDirectory,
       '--kube-context', owner.context, '--namespace', namespace, '--values', location.name,
       '--labels', `${installIdLabel}=${owner.installId}`,
-      '--wait=false', '--set', fleetSetting], 180_000, location.directory);
+      '--wait=false', '--set', fleetSetting], 420_000, location.directory);
   } catch (error) {
     const releaseUid = await ownedReleaseSecretUid(owner);
     if (releaseUid) owner.releaseSecretUid = releaseUid;

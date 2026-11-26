@@ -207,6 +207,15 @@ The chart runs the member, catalogue, computer, conversation, file, budget and
 audit workers, plus the dispatcher. It starts the model gateway beside the server
 and installs the checked computer template and a zero-size warm pool. One computer
 is claimed per assistant, including shared group assistants, and starts when needed.
+Before Helm installs or updates the release, it waits for a Job on each uncordoned
+node without a `NoSchedule` or `NoExecute` taint. The Jobs use the same gVisor runtime
+class and the same `images.computer` digest as the computer template. The digest gives
+both Kubernetes' `IfNotPresent` pull policy. The offline render includes the Job image,
+so the existing image and licence checks cover it. The Jobs run `/bin/true` without
+mounts or an API token. Each Job fails after two minutes if it cannot finish.
+Helm removes successful Jobs and keeps failed Jobs for inspection. A failed Job
+stops Helm before it applies the release. `package-up` names the failed pull and
+directs the operator to the Job and its Pod events.
 The installer reads the server Service ClusterIP and puts that IP in the computer ConfigMap. The computer policy permits only TCP
 port 43000 to the server Pod and has no DNS egress. The memory worker needs a
 private key directory and is not started by this package. Object storage and

@@ -13,7 +13,7 @@
         }
       },
       "spec": {
-        "runtimeClassName": "gvisor",
+        "runtimeClassName": "{{ include "opencrane.computerRuntimeClass" . }}",
         "automountServiceAccountToken": false,
         "terminationGracePeriodSeconds": 5,
         "containers": [

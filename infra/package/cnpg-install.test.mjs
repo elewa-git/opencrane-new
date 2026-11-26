@@ -275,9 +275,18 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
     if (environmentValues) {
       valuesArgument = 'process.env.PACKAGE_VALUES_FILE';
     }
+    const packageError = JSON.stringify(`${source}/infra/dev-stack/package-error.ts`);
     const script = `import { installPackage } from ${JSON.stringify(`${source}/infra/dev-stack/packaged.ts`)};
+      import { packageCommandMessage } from ${packageError};
       try { await installPackage(${valuesArgument}); }
-      catch (error) { console.error(error); process.exitCode = 1; }`;
+      catch (error) {
+        if (${fixture.failComputerPull === true}) {
+          console.error('Error: ' + packageCommandMessage(error));
+        } else {
+          console.error(error);
+        }
+        process.exitCode = 1;
+      }`;
     const args = ['--experimental-strip-types', '--import',
       `${source}/infra/package/cnpg-install-preload.mjs`, '--input-type=module', '-e', script];
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, DEV_STACK_ID: '1',

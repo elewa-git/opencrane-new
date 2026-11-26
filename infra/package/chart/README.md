@@ -12,7 +12,7 @@ saved data on a spare test stack. It is part of the work towards a customer inst
 - Can preview recovery from an exact backup and log position; installation refuses.
 - Lists the required program images and names of private settings.
 - Keeps public network access switched off in the default settings.
-- Groups the templates that start apps, services, workers and assistant computers.
+- Pulls the approved assistant computer image before installing or updating the apps.
 - Schedules one nightly pilot backup on a separate volume with a read-only catalogue.
 - Includes persistent file storage and a private virus scanner for chat attachments.
 - Keeps the stand-in model by default or uses a provider connected through Settings.
@@ -39,7 +39,7 @@ combines those settings with the templates.
 flowchart LR
   package["Local installation tools"] --> chart["chart<br/>installation, files, scanner, scheduled backups and database previews"]
   package --> prepare["Preparation and checks"]
-  chart --> templates["templates<br/>programs, settings and private provider storage"]
+  chart --> templates["templates<br/>programs, computer image pull and settings"]
 ```
 
 ## Not done here

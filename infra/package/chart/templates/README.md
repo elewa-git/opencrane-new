@@ -42,6 +42,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 | `services.yaml` | Gives the programs private network addresses. |
 | `bootstrap.yaml` | Sets up initial data and the access needed by setup and workers. |
 | `computer.yaml` | Describes assistant computers, their settings and network limits. |
+| `computer-image-pull.yaml` | Pulls the approved computer image onto the nodes before Helm applies the release. |
 | `guard.yaml` | Rejects unsafe or incomplete installation settings. |
 
 ## How it connects
@@ -54,7 +55,7 @@ images first. The setup job runs [bootstrap.ts](../../bootstrap.ts); workers run
 
 ```mermaid
 flowchart LR
-  chart["Local installation chart"] --> templates["templates<br/>programs, private provider storage, files, scanner, backup and restore"]
+  chart["Local installation chart"] --> templates["templates<br/>programs, computer image pull, storage, backup and restore"]
   chart --> values["values.yaml<br/>installation settings"]
   values --> templates
 ```

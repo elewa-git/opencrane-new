@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import { sharedCertificates, certificates, issueCertificate }
   from '../../libs/event-store/test/certificates.ts';
 import { parseAllDocuments } from 'yaml';
+
+const execute = promisify(execFile);
 
 function chartValues() {
   const digest = 'a'.repeat(64);
@@ -149,6 +153,77 @@ function pullsOnUpgrade() {
 
 test('the chart pulls the pinned computer image before install', pullsOnInstall);
 test('the chart pulls the new pinned computer image before upgrade', pullsOnUpgrade);
+
+function nodeApi(nodes) {
+  const resources = [{ name: 'nodes', kind: 'Node', namespaced: false, verbs: ['list'] }];
+  const discovery = { kind: 'APIResourceList', groupVersion: 'v1', resources };
+  const nodeList = { apiVersion: 'v1', kind: 'NodeList', items: nodes };
+  function respond(request, response) {
+    const { pathname } = new URL(request.url, 'http://localhost');
+    const body = { '/api/v1': discovery, '/api/v1/nodes': nodeList }[pathname];
+    const missing = { kind: 'Status', code: 404, reason: 'NotFound' };
+    response.writeHead(body ? 200 : 404, { 'content-type': 'application/json' });
+    response.end(JSON.stringify(body ?? missing));
+  }
+  return createServer(respond);
+}
+
+async function renderForNodes(nodes) {
+  const values = chartValues();
+  const temporary = await mkdtemp(join(tmpdir(), 'chart-node-render-'));
+  const input = join(temporary, 'values.json');
+  const server = nodeApi(nodes);
+  try {
+    await writeFile(input, JSON.stringify(values));
+    function listen(resolve) {
+      server.listen(0, '127.0.0.1', resolve);
+    }
+    await new Promise(listen);
+    const address = `http://127.0.0.1:${server.address().port}`;
+    const args = ['template', 'chart-test', 'infra/package/chart', '--dry-run=server',
+      '--kube-apiserver', address, '--values', input];
+    const result = await execute('helm', args);
+    return result.stdout;
+  } finally {
+    server.close();
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+async function pullsOnAllComputerNodes() {
+  const taint = { key: 'dedicated', effect: 'NoSchedule' };
+  const nodes = [
+    { metadata: { name: 'node-a' }, spec: {} },
+    { metadata: { name: 'node-b' }, spec: {} },
+    { metadata: { name: 'cordoned' }, spec: { unschedulable: true } },
+    { metadata: { name: 'dedicated' }, spec: { taints: [taint] } },
+  ];
+  const rendered = await renderForNodes(nodes);
+  const pulledNodes = [];
+  for (const document of parseAllDocuments(rendered)) {
+    assert.deepEqual(document.errors, []);
+    const resource = document.toJS();
+    if (resource?.kind !== 'Job' || !resource.metadata.name.startsWith('computer-image-prepull')) {
+      continue;
+    }
+    const affinity = resource.spec.template.spec.affinity.nodeAffinity;
+    const [term] = affinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms;
+    const [field] = term.matchFields;
+    assert.equal(field.key, 'metadata.name');
+    assert.equal(field.operator, 'In');
+    assert.equal(field.values.length, 1);
+    pulledNodes.push(field.values[0]);
+  }
+  assert.deepEqual(pulledNodes.sort(), ['node-a', 'node-b']);
+}
+
+async function refusesWhenThereAreNoComputerNodes() {
+  const nodes = [{ metadata: { name: 'cordoned' }, spec: { unschedulable: true } }];
+  await assert.rejects(renderForNodes(nodes), /Computer image pre-pull needs a node/u);
+}
+
+test('the pull Job runs once on each node that can run computers', pullsOnAllComputerNodes);
+test('a live render refuses when every node is cordoned', refusesWhenThereAreNoComputerNodes);
 
 function dispatcherCpuBudget() {
   const resources = renderedResources(chartValues());
@@ -966,9 +1041,15 @@ async function defaultModelBytesStayTheSame() {
   const values = chartValues();
   const original = renderChart(values);
   assert.equal(original.status, 0, original.stderr);
-  // Compare immutable source with the same renderer; Helm versions format YAML differently.
+  // Compare the original resources byte for byte and check the new Job separately.
   const baseline = await originalChartRender(values);
-  assert.equal(original.stdout, baseline);
+  const manifests = original.stdout.split(/(?=^---\n)/mu);
+  function wasInOriginalChart(manifest) {
+    const header = '---\n# Source: opencrane-local/templates/computer-image-pull.yaml\n';
+    return !manifest.startsWith(header);
+  }
+  const originalManifests = manifests.filter(wasInOriginalChart);
+  assert.equal(originalManifests.join(''), baseline);
   values.models = { mode: 'stub' };
   assert.equal(renderChart(values).stdout, original.stdout);
 }

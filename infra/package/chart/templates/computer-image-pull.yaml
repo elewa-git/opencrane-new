@@ -1,0 +1,20 @@
+{{- $nodes := lookup "v1" "Node" "" "" -}}
+{{- if not (hasKey $nodes "items") -}}
+  {{- /* Render the reviewed image even when Helm has no cluster connection. */ -}}
+  {{- include "opencrane.computerImagePull" (dict "chart" . "name" "computer-image-prepull") -}}
+{{- else -}}
+  {{- $jobs := list -}}
+  {{- range $node := $nodes.items -}}
+    {{- if include "opencrane.computerNodeAcceptsPods" $node -}}
+      {{- $nodeHash := sha256sum $node.metadata.name | trunc 12 -}}
+      {{- $name := printf "computer-image-prepull-%s" $nodeHash -}}
+      {{- $settings := dict "chart" $ "name" $name "node" $node.metadata.name -}}
+      {{- $job := include "opencrane.computerImagePull" $settings -}}
+      {{- $jobs = append $jobs $job -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if not $jobs -}}
+    {{- fail "Computer image pre-pull needs a node that accepts computer Pods" -}}
+  {{- end -}}
+  {{- join "\n---\n" $jobs -}}
+{{- end -}}
