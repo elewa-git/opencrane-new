@@ -17,6 +17,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 - Schedules one pilot backup of events, databases and files, with a private catalogue.
 - Holds a new installation empty for restore, then opens verified reading with effects stopped.
 - Runs persistent file storage and an authenticated scanner with a private ClamAV listener.
+- Keeps the old scanner available while a new scanner Pod becomes ready.
 - Describes an optional database standby with its own storage on another node.
 - Gives background workers the settings and access needed for their jobs.
 - Prepares storage, database setup and the first owner.
@@ -28,7 +29,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 
 | File | What it does |
 | --- | --- |
-| `files.yaml` | Runs MinIO, the scanner and the rule that permits only its HTTPS port. |
+| `files.yaml` | Runs MinIO and the scanner, and supplies the checked list of scanner hashes. |
 | `apps.yaml` | Runs the website, server, AI access process and permissions service. |
 | `workers.yaml` | Runs background jobs and connects gateway preparation to content storage. |
 | `model-qualification.yaml` | Runs the separate free provider for restricted package checks. |
@@ -54,7 +55,7 @@ images first. The setup job runs [bootstrap.ts](../../bootstrap.ts); workers run
 
 ```mermaid
 flowchart LR
-  chart["Local installation chart"] --> templates["templates<br/>programs, private provider storage, files, scanner, backup and restore"]
+  chart["Local installation chart"] --> templates["templates<br/>programs, private provider storage, files, scanner updates, backup and restore"]
   chart --> values["values.yaml<br/>installation settings"]
   values --> templates
 ```

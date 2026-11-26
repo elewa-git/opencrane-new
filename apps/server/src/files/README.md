@@ -28,8 +28,10 @@ A file waits in server memory while [ClamAV](../../../../GLOSSARY.md#clamav-viru
 A local test can start the reviewed scanner service and send clean and virus test
 bytes through this same upload path. It requires a fresh, separately approved
 scanner database and never saves the test file contents.
-The server also checks that the scanner's reply names the virus list approved
-for this deployment. A reply from an older list cannot save a file.
+The server checks each scanner reply against the approved virus lists. It reads
+the approval again after checking access and before storing the file. During a
+scanner replacement, it can accept a reply from either approved list that is still
+fresh.
 
 File lists use the saved read tables before checking newer events. They return a waiting response while the file table catches up with a saved upload. The website checks again before showing the upload as Ready. Other chat activity does not hold up the list, and old messages do not need to be replayed.
 
@@ -59,7 +61,7 @@ flowchart LR
   server[Server] --> files[Files]
   chat[Chat] -->|current access| files
   files -->|reads upload permission| events[Events and session settings]
-  files -->|scans uploads| scanner[Scanner]
+  files -->|checks replies against the approved list| scanner[Scanner]
   files -->|stores clean bytes| storage[File storage]
   computer[Assistant computer] -->|sends saved files| files
 ```

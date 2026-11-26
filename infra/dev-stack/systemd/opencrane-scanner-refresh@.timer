@@ -1,0 +1,10 @@
+[Unit]
+Description=Check for an approved OpenCrane scanner each day in slot %i
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00 UTC
+Persistent=true
+Unit=opencrane-scanner-refresh@%i.service
+
+[Install]
+WantedBy=timers.target

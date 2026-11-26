@@ -1,0 +1,30 @@
+{
+  "source": "7acb49a90b2146381a0bc98ae2641ccf7cd473d0",
+  "slot": 1,
+  "journey": "PARTIAL",
+  "applicationRunId": 45904823967,
+  "initialScannerRunId": 45904824008,
+  "candidateRunId": 45904989776,
+  "uploadsBefore": [
+    {
+      "width": 1280,
+      "httpStatus": 201,
+      "attachment": "Ready",
+      "picture": "upload-before-1280.png"
+    },
+    {
+      "width": 390,
+      "httpStatus": 201,
+      "attachment": "Ready",
+      "picture": "upload-before-390.png"
+    }
+  ],
+  "mismatch": "PASS",
+  "replacementReachedRolloutWait": true,
+  "interruptionRecovery": "NOT RUN",
+  "scheduledRefresh": "NOT RUN",
+  "uploadsAfter": "NOT RUN",
+  "uploadRefusalDuringOutage": "NOT RUN",
+  "supersedingRollout": "NOT RUN",
+  "teardown": "slot free"
+}

@@ -957,7 +957,8 @@ try {
       requireOwnerRun(ownerRun);
     }
   } else if (flags.length > 1 ||
-      (flag && action !== 'package-up' && action !== 'package-rollback')) {
+      (flag && action !== 'package-up' && action !== 'package-rollback' &&
+        action !== 'package-refresh-scanner')) {
     throw new Error('Usage: up.sh [--fresh], down.sh, status.sh, journey.sh');
   }
   const directoryPresent = await stat(directory).then(() => true, () => false);
@@ -1021,6 +1022,10 @@ try {
     else if (action === 'package-rollback' && flag) await rollbackPackage(flag);
     else if (action === 'package-down') await removePackage();
     else if (action === 'package-check') await verifyPackageOwner();
+    else if (action === 'package-refresh-scanner') {
+      const { refreshPackageScanner } = await import('./refresh-scanner.ts');
+      await refreshPackageScanner(flag);
+    }
     else throw new Error('Unknown package action');
     process.exit(0);
   }

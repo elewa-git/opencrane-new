@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:https';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -153,6 +153,63 @@ async function exactUpload() {
   expect(requests).toHaveLength(1);
 }
 test('stores exact clean bytes once and preserves the hash upload identity', exactUpload);
+
+async function readsApprovedManifestsPerUpload() {
+  const previousDigest = settings.manifestDigest;
+  const nextDigest = `sha256:${'c'.repeat(64)}`;
+  settings.approvedManifestFile = join(directory, 'approved-manifests');
+  await writeFile(settings.approvedManifestFile, `${previousDigest}\n${nextDigest}\n`);
+  await upload();
+  function useNewManifest(result) {
+    result.manifestDigest = nextDigest;
+  }
+  mode = useNewManifest;
+  await upload();
+  vi.clearAllMocks();
+  await writeFile(settings.approvedManifestFile, `${nextDigest}\n`);
+  mode = '';
+  await refused();
+  await writeFile(settings.approvedManifestFile, `${previousDigest}\ninvalid\n`);
+  await refused();
+  await rm(settings.approvedManifestFile);
+  await refused();
+}
+test('accepts either approved manifest during a rollout and fails closed without the file',
+  readsApprovedManifestsPerUpload);
+
+const approvalChanges = ['replaced', 'removed'];
+async function approvalChangesDuringAccess(change) {
+  settings.approvedManifestFile = join(directory, 'approved-manifests');
+  await writeFile(settings.approvedManifestFile, `${settings.manifestDigest}\n`);
+  let changed = false;
+  async function changeApproval() {
+    if (changed) {
+      return;
+    }
+    changed = true;
+    expect(received).toEqual([bytes]);
+    if (change === 'removed') {
+      await rm(settings.approvedManifestFile);
+      return;
+    }
+    const nextDigest = `sha256:${'c'.repeat(64)}`;
+    await writeFile(settings.approvedManifestFile, `${nextDigest}\n`);
+  }
+  await refused(bytes, changeApproval);
+}
+test.each(approvalChanges)('refuses when the approval file is %s after the scanner replies',
+  approvalChangesDuringAccess);
+
+async function threeApprovedHashesRefuse() {
+  const nextDigest = `sha256:${'c'.repeat(64)}`;
+  const extraDigest = `sha256:${'e'.repeat(64)}`;
+  const hashes = [settings.manifestDigest, nextDigest, extraDigest];
+  settings.approvedManifestFile = join(directory, 'approved-manifests');
+  await writeFile(settings.approvedManifestFile, `${hashes.join('\n')}\n`);
+  await refused();
+  expect(received).toEqual([]);
+}
+test('refuses three otherwise valid manifest hashes before sending bytes', threeApprovedHashesRefuse);
 const invalid = [
   ['request', { requestId: randomUUID() }], ['silo', { silo: 'other' }],
   ['purpose', { purpose: 'image' }], ['file', { fileId: randomUUID() }],
@@ -355,7 +412,7 @@ async function twoSilos() {
   const second = { silo: 'other', fileId: 'b'.repeat(64) };
   const results = await Promise.all([scanFile(settings, bytes, first),
     scanFile(other, Buffer.from('Other silo'), second)]);
-  expect(results[0]()).toBe('clean');
-  expect(results[1]()).toBe('clean');
+  expect(await results[0]()).toBe('clean');
+  expect(await results[1]()).toBe('clean');
 }
 test('interleaves two trusted silos through the real wrapper with hash file ids', twoSilos);

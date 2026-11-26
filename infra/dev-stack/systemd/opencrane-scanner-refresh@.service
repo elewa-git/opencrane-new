@@ -1,0 +1,7 @@
+[Unit]
+Description=Refresh the approved OpenCrane scanner in slot %i
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.config/opencrane/scanner-refresh/%i
+ExecStart=/bin/sh infra/dev-stack/run.sh package-refresh-scanner --id %i

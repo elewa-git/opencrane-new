@@ -47,7 +47,7 @@ process.exit(result.status ?? 1);
   await writeFile(`${bin}/flock`, script, { mode: 0o755 });
 }
 
-async function claimSkipsHeldPort(stackPort: number) {
+async function claimWithHeldPort(stackPort: number, requestedSlot?: string) {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-`);
   const bin = `${home}/bin`;
   await mkdir(bin);
@@ -61,9 +61,15 @@ async function claimSkipsHeldPort(stackPort: number) {
     await once(held, 'listening');
     const address = held.address();
     assert(address && typeof address !== 'string');
-    const { stdout } = await exec('infra/dev-stack/claim.sh', {
-      env: claimEnvironment(home, address.port, stackPort),
-    });
+    const args = requestedSlot === undefined ? [] : ['--id', requestedSlot];
+    const options = { env: claimEnvironment(home, address.port, stackPort) };
+    const claim = exec('infra/dev-stack/claim.sh', args, options);
+    if (requestedSlot !== undefined) {
+      await assert.rejects(claim);
+      await assert.rejects(stat(`${home}/stack-2.lock`), { code: 'ENOENT' });
+      return;
+    }
+    const { stdout } = await claim;
     assert.equal(stdout.trim(), '2');
     assert.ok((await stat(`${home}/stack-2.lock`)).isFile());
     await assert.rejects(stat(`${home}/.config/opencrane/dev-stack-1`), { code: 'ENOENT' });
@@ -74,10 +80,19 @@ async function claimSkipsHeldPort(stackPort: number) {
     await rm(home, { recursive: true, force: true });
   }
 }
-async function skipsModelPort() { await claimSkipsHeldPort(25110); }
-async function skipsCustodyPort() { await claimSkipsHeldPort(25114); }
+async function skipsModelPort() {
+  await claimWithHeldPort(25110);
+}
+async function skipsCustodyPort() {
+  await claimWithHeldPort(25114);
+}
 test('claim skips a slot with a held port and leaves it unclaimed', skipsModelPort);
 test('claim checks the custody proxy port before reserving a slot', skipsCustodyPort);
+
+async function busyRequestedSlotDoesNotFallBack() {
+  await claimWithHeldPort(25110, '1');
+}
+test('a requested slot refuses when busy without trying the other slot', busyRequestedSlotDoesNotFallBack);
 
 test('status leaves a free slot alone and claim reuses this worktree slot', async () => {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-repeat-`);
@@ -793,6 +808,44 @@ async function rollsBackWithUnusedRecoveryClaim() {
 
 test('pilot rollback waits for the server and leaves the unused recovery claim alone',
   rollsBackWithUnusedRecoveryClaim);
+
+async function refreshRefusesAnotherRelease() {
+  const fixture = await targetFixture();
+  try {
+    const namespace = 'opencrane-package-1';
+    const namespaceUid = 'owned-namespace';
+    const installId = 'original-install';
+    const owner = { worktree: process.cwd(), slot: '1', context: 'k3d-ocn', namespace, namespaceUid,
+      release: namespace, installId, releaseSecretUid: 'original-release' };
+    const annotations = { 'opencrane.dev/worktree': owner.worktree, 'opencrane.dev/slot': '1' };
+    const labels = { 'opencrane.dev/install-id': installId };
+    fixture.state.namespace = { metadata: { uid: namespaceUid, annotations } };
+    fixture.state.pilot = { release: { metadata: { uid: 'different-release', labels } } };
+    await fixture.saveState();
+    const ownerPath = `${fixture.slotDirectory}/package-owner.json`;
+    const ownerRecord = JSON.stringify(owner);
+    await writeFile(ownerPath, ownerRecord);
+    const marker = `${fixture.home}/approval-called`;
+    const github = '#!/bin/sh\ntouch "$HOME/approval-called"\nexit 1\n';
+    const executable = { mode: 0o755 };
+    await writeFile(`${fixture.home}/bin/gh`, github, executable);
+    const refusal = { stderr: /Package command refused/u };
+    await assert.rejects(fixture.run('package-refresh-scanner'), refusal);
+    const failure = await readFile(`${fixture.slotDirectory}/failure.log`, 'utf8');
+    assert.match(failure, /Helm release belongs to another install/u);
+    assert.equal(await readFile(ownerPath, 'utf8'), ownerRecord);
+    await assert.rejects(stat(marker), { code: 'ENOENT' });
+    await fixture.loadState();
+    function editsWorkload(call: string[]) {
+      return call.includes('patch') || call.includes('deployment/scanner');
+    }
+    assert.equal(fixture.state.calls.some(editsWorkload), false);
+  } finally {
+    await fixture.close();
+  }
+}
+test('scanner refresh refuses another Helm release before fetching or replacing anything',
+  refreshRefusesAnotherRelease);
 
 async function targetLifecycle() {
   const fixture = await targetFixture();

@@ -33,7 +33,6 @@ const secretKeys: Record<string, string[]> = {
     'PROJECTION_DATABASE_URL', 'HANDLER_DATABASE_URL', 'OWNER_BOOTSTRAP_READY',
     'MODEL_JWKS_FILE', 'MODEL_DECISION_URL', 'PACKAGE_OWNER_SUBJECT', 'DEV_OWNER_EMAIL',
     'MINIO_URL', 'MINIO_CREDENTIALS_FILE', 'SCANNER_URL', 'SCANNER_CA_FILE',
-    'SCANNER_MANIFEST_DIGEST',
   ],
   runtimeFiles: [
     'ca.crt', 'command.crt', 'command.key', 'command.seed',
@@ -227,7 +226,7 @@ export async function packageConnectionArgs(owner: PackageOwner, limits: Command
   return { args, environment };
 }
 
-async function ownedKubectl(owner: PackageOwner, args: string[], timeoutMs?: number,
+export async function ownedKubectl(owner: PackageOwner, args: string[], timeoutMs?: number,
   signal?: AbortSignal, deadline?: number) {
   // Keep dispatch delays and ownership checks inside the caller's original time limit.
   const limits: CommandLimits = { deadline: deadline ?? Date.now() + (timeoutMs ?? 120_000) };
@@ -480,7 +479,7 @@ function requireOwnedRelease(secret: ReleaseSecret | undefined, owner: PackageOw
   }
 }
 
-async function checkedRelease() {
+export async function checkedRelease() {
   const owner = await verifyPackageOwner();
   const uid = await ownedReleaseSecretUid(owner);
   if (!uid || uid !== owner.releaseSecretUid) {

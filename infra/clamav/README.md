@@ -22,7 +22,7 @@ scanner before saving them in [MinIO](../../GLOSSARY.md#minio-file-storage).
 flowchart LR
   packaging["GitHub packaging job<br/>github.com"] -->|approves current signature bytes and image| clamav["infra/clamav<br/>virus scanner"]
   stack["infra/dev-stack<br/>local OpenCrane"] -->|fetches the approved package| clamav
-  package["infra/package<br/>packaged installation"] -->|checks approved bytes and starts the private service| clamav
+  package["infra/package<br/>packaged installation"] -->|starts and refreshes the private service| clamav
   server["apps/server<br/>file uploads"] -->|sends file bytes over HTTPS| launcher
   worker["apps/ops<br/>image worker"] -->|checks bounded files through HTTPS| launcher
   worker -->|claims the scan, then sends proof and checks| models["libs/models<br/>image result writer"]
@@ -54,8 +54,8 @@ flowchart LR
    The running scanner keeps its current list until a reviewed image replaces it.
 4. **The scheduled packaging job checks an image.** It downloads and verifies virus
    definitions, checks the image and licences, then publishes approval in its output.
-   The package accepts approval only from a successful run on github.com for its source commit.
-   It refuses inherited settings that select another GitHub server.
+   The package checks the approval against the exact source commit of a successful
+   run on github.com. A running package uses the latest approval from `main`.
 5. **The separate launcher starts a scanner.** It checks the approved files again,
    starts only that set, and stops it 24 hours after its verified update check.
 6. **A trusted process requests a scan.** The launcher copies the bounded bytes, checks
@@ -116,8 +116,10 @@ A copied result grants nothing. Caller expiry and database expiry are checked ag
 before replying. Upload callers now check this response before storage. They keep
 the same file identity when retrying, with a new request each time. Deployed service
 startup and key rotation still need qualification.
-The upload server checks the approved virus list digest in each reply. A result
-from an earlier list cannot save a file after the reviewed list changes.
+The package trusts the successful GitHub run for the exact commit and checks the
+file hashes recorded by that run. There is no separate signature on the approval
+file. The upload server checks the approved virus list digest in each reply. It can
+accept both approved lists briefly while the package replaces the scanner.
 
 The upload fixture and its inputs are in
 [README.robot.md](README.robot.md#real-upload-consumer-fixture).

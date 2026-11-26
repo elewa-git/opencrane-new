@@ -15,6 +15,7 @@ saved data on a spare test stack. It is part of the work towards a customer inst
 - Groups the templates that start apps, services, workers and assistant computers.
 - Schedules one nightly pilot backup on a separate volume with a read-only catalogue.
 - Includes persistent file storage and a private virus scanner for chat attachments.
+- Lets the package replace that scanner while the other programs keep running.
 - Keeps the stand-in model by default or uses a provider connected through Settings.
 - Can use a restricted free stand-in in provider mode to check the same spending limits.
 
@@ -39,7 +40,7 @@ combines those settings with the templates.
 flowchart LR
   package["Local installation tools"] --> chart["chart<br/>installation, files, scanner, scheduled backups and database previews"]
   package --> prepare["Preparation and checks"]
-  chart --> templates["templates<br/>programs, settings and private provider storage"]
+  chart --> templates["templates<br/>programs, scanner updates and private provider storage"]
 ```
 
 ## Not done here

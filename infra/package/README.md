@@ -18,11 +18,11 @@ in the recorded Kubernetes cluster.
 
 ```mermaid
 flowchart LR
-  stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>Helm install and update"]
+  stack["infra/dev-stack<br/>slot ownership and host timer"] --> package["infra/package<br/>Helm install and update"]
   ci["GitHub packaging job<br/>approved images"] --> package
   package --> apps["Website, server and workers<br/>sign-in, chat, history and spending"]
   tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
-  package --> services["Private databases, event log,<br/>file store and scanner"]
+  package -->|starts services and refreshes the scanner| services["Private databases, event log,<br/>file store and scanner"]
   apps --> models["Model gateway"]
   package -->|verified backup| recovery["Empty recovery install"]
 ```
@@ -30,6 +30,7 @@ flowchart LR
 ## What it is responsible for
 
 - Install the apps, core services, file store and private upload scanner together.
+- Replace the scanner with a newer approved virus list while the install runs.
 - Require reviewed images, matching source and accepted runtime licences.
 - Refuse unsafe host swap and crash dumps before Helm runs on any target node.
 - Check production sign-in before installation. Only the server reads its credential.
@@ -79,17 +80,22 @@ Not built yet:
    A missing or changed cluster target stops forwarding.
 6. **A person uploads a file.** The server scans it before saving and sending it
    to the assistant. Infected files and files without a verified scan stay unavailable.
-7. **A backup runs.** The job stops writes, drains read tables and saves matching
+7. **A host timer refreshes the scanner each day.** The operator installs the
+   timer for the running package. It checks the latest scanner image approved on
+   `main` and starts it alongside the old one. The old
+   scanner stays available while the replacement gets ready. The command reports
+   which image is serving or why the refresh stopped. The 24-hour limit still applies.
+8. **A backup runs.** The job stops writes, drains read tables and saves matching
    events, databases and files. It waits for the read tables to catch up and checks
    that saved events account for every stored file. It checks that writers stayed
    stopped before services restart. It publishes the backup only after the stopped
    services are ready again; a failed restart keeps maintenance active.
-8. **A developer restores a pilot.** A separate empty installation checks the matching
+9. **A developer restores a pilot.** A separate empty installation checks the matching
    backup, rebuilds tables and permissions, and restores files. Reading opens only
    after verification. Workers and effects remain stopped.
-9. **An operator updates a pilot.** The new approved images replace the running
+10. **An operator updates a pilot.** The new approved images replace the running
    images. The pilot keeps the same storage and sign-in.
-10. **A developer checks or removes an install.** Fresh-install checks use new storage
+11. **A developer checks or removes an install.** Fresh-install checks use new storage
    and verify chat, its spending limit and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.
    Provider journey results name the failed step and its expected condition.
