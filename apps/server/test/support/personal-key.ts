@@ -96,7 +96,7 @@ export async function personalKeyFixture(runtime?: Runtime, accountSubject?: (ke
   const before = await readToolPolicy(nats.store, 'test', serverId);
   expect(before.accountMode).toBe('none');
 
-  async function review() {
+  async function review(accountMode: 'personal' | 'none' = 'personal') {
     const tools = [];
     for (const tool of before.catalogue?.tools ?? []) {
       tools.push({ name: tool.name, revision: tool.revision,
@@ -104,13 +104,14 @@ export async function personalKeyFixture(runtime?: Runtime, accountSubject?: (ke
     }
     const input = { commandId: 'review-personal', expectedSequence: before.sequence,
       catalogueDigest: before.catalogue!.schemaDigest, connectionId: before.connectionId,
-      accountMode: 'personal', identityTool: 'who_am_i', policyRevision: before.policyRevision, tools };
+      accountMode, ...(accountMode === 'personal' && { identityTool: 'who_am_i' }),
+      policyRevision: before.policyRevision, tools };
     const reviewed = await reviewToolPolicy(nats.store, binding, 'admin', serverId, input);
     expect(reviewed.status).toBe('appended');
     return readToolPolicy(nats.store, 'test', serverId);
   }
-  async function publish() {
-    const policy = await review();
+  async function publish(accountMode: 'personal' | 'none' = 'personal') {
+    const policy = await review(accountMode);
     const command = { commandId: 'publish-personal', expectedSequence: policy.sequence,
       reviewRevision: policy.reviewRevision };
     expect((await publishToolPolicy(nats.store, binding, 'admin', serverId, command)).status)
@@ -152,6 +153,7 @@ export async function personalKeyFixture(runtime?: Runtime, accountSubject?: (ke
     const rows = await history(nats.store, subject, 'test');
     for (const row of rows) await auth.handler.handle(row.event, db);
   }
-  return { nats, db, remote, accounts, binding, auth, serverId, before,
+  const databaseUrl = runtime?.databaseUrl ?? storage?.queue.options.connectionString;
+  return { nats, db, databaseUrl, remote, accounts, binding, auth, serverId, before,
     review, publish, project, grant };
 }

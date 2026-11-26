@@ -1,10 +1,9 @@
-import { recordIdSchema } from '@opencrane/protocol';
 import { KeyAssistants } from './key-assistants';
 import { PersonalKey } from './personal-key';
-import { personalProfileMetadataSchema,
+import { myToolsSchema, personalProfileMetadataSchema, recordIdSchema, type MyTool,
   type PersonalProfileMetadata } from '@opencrane/protocol';
 import {
-  ChangeDetectionStrategy, Component, ElementRef, input, signal, ViewChild,
+  ChangeDetectionStrategy, Component, ElementRef, input, output, signal, ViewChild,
   type OnDestroy, type OnInit,
 } from '@angular/core';
 import { z } from 'zod';
@@ -40,14 +39,18 @@ type Detail = z.infer<typeof profileSchema>;
 type LoadState = 'loading' | 'ready' | 'failed' | 'access';
 
 @Component({
-  selector: 'oc-my-tools',
+  selector: 'oc-tool-connections',
   imports: [PersonalKey, KeyAssistants],
   templateUrl: './my-tools.html',
   styleUrl: './my-tools.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MyTools implements OnInit, OnDestroy {
-  readonly serverId = input('');
+export class ToolConnections implements OnInit, OnDestroy {
+  readonly serverId = input.required<string>();
+  readonly name = input.required<string>();
+  readonly startConnecting = input(false);
+  readonly canConnect = input(true);
+  readonly changed = output();
   @ViewChild('review') private review?: ElementRef<HTMLDialogElement>;
   @ViewChild('reviewHeading') private reviewHeading?: ElementRef<HTMLHeadingElement>;
   protected readonly choicesVersion = signal(0);
@@ -69,16 +72,9 @@ export class MyTools implements OnInit, OnDestroy {
   private pendingProfileId: string | null = null;
 
   ngOnInit(): void {
-    if (this.validServerId()) {
-      this.restorePendingChange();
-      void this.load(false);
-    } else {
-      this.loadState.set('ready');
-    }
-  }
-
-  protected validServerId(): boolean {
-    return identifier.safeParse(this.serverId()).success;
+    this.showKeyForm.set(this.startConnecting());
+    this.restorePendingChange();
+    void this.load(false);
   }
 
   ngOnDestroy(): void {
@@ -103,7 +99,7 @@ export class MyTools implements OnInit, OnDestroy {
   }
 
   protected refresh(): void {
-    if (this.loadState() === 'loading' || !this.validServerId()) return;
+    if (this.loadState() === 'loading') return;
     void this.load(false);
   }
 
@@ -267,6 +263,7 @@ export class MyTools implements OnInit, OnDestroy {
       if (receipt.changeRef !== changeRef) throw new Error('Wrong change');
       this.outcome.set('Connection revoked here. Revoke the token at the provider too.');
       this.clearPendingChange();
+      this.changed.emit();
       await this.openDetailById(profile.profileId);
       void this.load(false);
     } catch {
@@ -307,6 +304,7 @@ export class MyTools implements OnInit, OnDestroy {
       if (change.changeRef !== changeRef) throw new Error('Wrong change');
       this.clearPendingChange();
       this.outcome.set('Connection revoked here. Revoke the token at the provider too.');
+      this.changed.emit();
       await this.openDetailById(profileId);
       void this.load(false);
     } catch {
@@ -314,6 +312,11 @@ export class MyTools implements OnInit, OnDestroy {
     } finally {
       if (current === this.generation) this.submitting.set(false);
     }
+  }
+
+  protected connectionChanged(): void {
+    this.refresh();
+    this.changed.emit();
   }
 
   protected connectionSaved(profile: PersonalProfileMetadata): void {
@@ -330,5 +333,73 @@ export class MyTools implements OnInit, OnDestroy {
     if (!row.serverAvailable) return 'Server unavailable';
     if (row.status === 'verified') return `Verified as ${row.accountLabel ?? 'your account'}`;
     return 'Saved, identity unverified';
+  }
+}
+
+@Component({
+  selector: 'oc-my-tools',
+  imports: [ToolConnections],
+  templateUrl: './my-tools-list.html',
+  styleUrl: './my-tools-list.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class MyTools implements OnInit, OnDestroy {
+  readonly serverId = input('');
+  protected readonly tools = signal<MyTool[]>([]);
+  protected readonly loadState = signal<LoadState>('loading');
+  protected readonly activeServerId = signal('');
+  protected readonly statusLabels: Record<MyTool['status'], string> = {
+    ready: 'Ready for you',
+    needs_account: 'Needs your account',
+    unavailable: 'Not available to you',
+  };
+  private request?: AbortController;
+
+  ngOnInit(): void {
+    this.activeServerId.set(this.serverId());
+    this.refresh();
+  }
+
+  ngOnDestroy(): void {
+    this.request?.abort();
+  }
+
+  protected refresh(): void {
+    this.request?.abort();
+    const request = new AbortController();
+    this.request = request;
+    void this.load(request.signal);
+  }
+
+  protected toggleConnection(serverId: string): void {
+    if (this.activeServerId() === serverId) {
+      this.activeServerId.set('');
+    } else {
+      this.activeServerId.set(serverId);
+    }
+  }
+
+  private async load(signal: AbortSignal): Promise<void> {
+    try {
+      const reply = await fetch('/api/my/tools', { cache: 'no-store', signal });
+      if (signal.aborted) return;
+      if (reply.status === 401 || reply.status === 403) {
+        this.tools.set([]);
+        this.activeServerId.set('');
+        this.loadState.set('access');
+        return;
+      }
+      if (!reply.ok) throw new Error('Tool list unavailable');
+      const body: unknown = await reply.json();
+      if (signal.aborted) return;
+      const { rows } = myToolsSchema.parse(body);
+      this.tools.set(rows);
+      this.loadState.set('ready');
+    } catch (error) {
+      if (signal.aborted) return;
+      const cause = error instanceof Error ? error.name : 'Unknown';
+      console.warn('My tools could not load', { cause });
+      this.loadState.set('failed');
+    }
   }
 }

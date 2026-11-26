@@ -86,3 +86,67 @@ describe('The My tools list', () => {
     expect(fetchTools.mock.calls.map(([url]) => url)).toEqual(['/api/my/tools']);
   });
 });
+
+it('refreshes the list when the member selects their verified key', async () => {
+  let selected = false;
+  function serve(url: RequestInfo | URL, request?: RequestInit) {
+    if (url === '/api/my/tools') {
+      const tool = { ...personal, status: selected ? 'ready' : 'needs_account' };
+      return response({ rows: [tool] });
+    }
+    if (typeof url !== 'string') return response({}, 404);
+    if (url.endsWith('/profiles?limit=20')) {
+      return response({ rows: [], next: null, complete: true });
+    }
+    if (url.endsWith('/connection')) {
+      return response({ serverId: 'personal-tool', connectionId: 'installed',
+        identityTool: 'who_am_i', selectionRevision: selected ? 1 : 0 });
+    }
+    if (request?.method === 'POST' && typeof request.body === 'string') {
+      const changeRef = /"changeRef":"([a-z0-9-]+)"/u.exec(request.body)?.[1];
+      if (url.endsWith('/selection')) {
+        selected = true;
+        return response({ status: 'selected', changeRef });
+      }
+      if (url.endsWith('/key')) {
+        return response({ status: 'verified', sequence: 1, changeRef });
+      }
+    }
+    const profileId = url.split('/').at(-1);
+    return response({ serverId: 'personal-tool', profileId, profileRevision: 1,
+      status: 'verified', generation: 1, adminBlocked: false, serverAvailable: true,
+      callsAvailable: false });
+  }
+  vi.spyOn(globalThis, 'fetch').mockImplementation(serve);
+  try {
+    const { fixture, element } = view('personal-tool');
+    function keyInput() {
+      fixture.detectChanges();
+      const input = element.querySelector<HTMLInputElement>('input[type="password"]');
+      if (!input) throw new Error('Missing key form');
+      return input;
+    }
+    const input = await vi.waitFor(keyInput);
+    input.value = 'synthetic-fixture-key';
+    input.form?.dispatchEvent(new Event('submit', { cancelable: true }));
+    function chooseKey() {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Needs your account');
+      for (const button of element.querySelectorAll('button')) {
+        if (button.textContent?.trim() === 'Use this key') return button;
+      }
+      throw new Error('Missing key choice');
+    }
+    const choice = await vi.waitFor(chooseKey);
+    choice.click();
+    function readyStatus() {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Ready for you');
+      expect(element.textContent).not.toContain('Needs your account');
+    }
+    await vi.waitFor(readyStatus);
+  } finally {
+    vi.restoreAllMocks();
+    TestBed.resetTestingModule();
+  }
+});

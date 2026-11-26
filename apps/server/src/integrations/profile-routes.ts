@@ -12,6 +12,8 @@ import { sessionFor } from '../members/routes.ts';
 import { registerConnectionProfileRevoke } from './profile-revoke-route.ts';
 import { registerConnectionSelection } from './selection-route.ts';
 import { registerConnectionProfileList } from './profile-list-route.ts';
+import { registerMyTools } from './my-tools.ts';
+import type { IntegrationOptions } from './routes.ts';
 
 const id = recordIdSchema;
 const parameters = z.strictObject({ serverId: id, profileId: id });
@@ -28,7 +30,8 @@ function hasGetBody(request: FastifyRequest) {
 }
 
 export function registerConnectionProfileRead(app: FastifyInstance, config: AuthConfig,
-  options?: GroupOptions) {
+  options?: GroupOptions, catalogue?: IntegrationOptions['catalogue']) {
+  registerMyTools(app, config, options, catalogue);
   registerPersonalKeyRoutes(app, config, options);
   registerPersonalConnectionNeeds(app, config, options);
   registerConnectionSelection(app, config, options);

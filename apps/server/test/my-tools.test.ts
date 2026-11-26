@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { changeConnectionSelection, savePersonalKey } from '@opencrane/models';
-import { fixture } from '@opencrane/models/testing';
-import { connectMcpCatalogue } from '@opencrane/projections';
+import { createLogger } from '@opencrane/observability';
+import { connectMcpCatalogue, connectionProfiles, ProjectionRunner } from '@opencrane/projections';
 import { expect, it, onTestFinished } from 'vitest';
 import { buildServer } from '../src/server.ts';
 import { integrationSessionHeaders } from './support/integration-session.ts';
@@ -11,17 +11,18 @@ import { testAuthConfig } from './support/test-auth-config.ts';
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
 const headers = integrationSessionHeaders(config);
 
-async function memberToolList() {
-  const runtime = await fixture();
-  onTestFinished(runtime.close.bind(runtime));
-  const setup = await personalKeyFixture(runtime);
-  const policy = await setup.publish();
+async function listFixture(mode: 'personal' | 'none') {
+  const setup = await personalKeyFixture();
+  const policy = await setup.publish(mode);
   await setup.project();
   await setup.grant('alice');
 
-  if (!runtime.databaseUrl) throw new Error('Missing fixture database URL');
-  const catalogue = connectMcpCatalogue(runtime.databaseUrl);
+  if (!setup.databaseUrl) throw new Error('Missing fixture database URL');
+  const catalogue = connectMcpCatalogue(setup.databaseUrl);
   onTestFinished(catalogue.close);
+  const logger = createLogger('my-tools-test', { level: 'silent' });
+  const profiles = new ProjectionRunner(setup.db, setup.nats.reader, logger);
+  await profiles.initialise(connectionProfiles);
   function memberId(_silo: string, _issuer: string, subject: string) {
     return Promise.resolve(subject);
   }
@@ -33,6 +34,20 @@ async function memberToolList() {
   }
   onTestFinished(closeApp);
 
+  async function status(member: string, state: string, canManageConnection: boolean) {
+    const reply = await app.inject({ url: '/api/my/tools', headers: headers(member) });
+    expect(reply.statusCode, reply.body).toBe(200);
+    expect(reply.headers['cache-control']).toBe('no-store');
+    expect(reply.json()).toEqual({ rows: [{
+      serverId: setup.serverId, name: 'OpenCrane demo', status: state, canManageConnection,
+    }] });
+  }
+
+  return { setup, policy, app, profiles, status };
+}
+
+async function memberToolList() {
+  const { setup, policy, app, profiles, status } = await listFixture('personal');
   const url = '/api/my/tools';
   const anonymous = await app.inject({ url });
   expect(anonymous.statusCode).toBe(401);
@@ -45,23 +60,15 @@ async function memberToolList() {
   const adminRead = await app.inject({ url: '/api/org/integrations', headers: headers('alice') });
   expect(adminRead.statusCode).toBe(403);
 
-  async function status(member: string, state: string, canManageConnection: boolean) {
-    const reply = await app.inject({ url, headers: headers(member) });
-    expect(reply.statusCode, reply.body).toBe(200);
-    expect(reply.headers['cache-control']).toBe('no-store');
-    expect(reply.json()).toEqual({ rows: [{
-      serverId: setup.serverId, name: 'OpenCrane demo', status: state, canManageConnection,
-    }] });
-  }
-
   await status('bob', 'unavailable', false);
   await status('alice', 'needs_account', true);
   await selectVerifiedKey(setup, policy.connectionId!);
+  await profiles.run(connectionProfiles);
   await status('alice', 'ready', true);
   await setup.grant('bob');
   await status('bob', 'needs_account', true);
   await setup.grant('alice', 'member', 'revoke');
-  await status('alice', 'unavailable', false);
+  await status('alice', 'unavailable', true);
 }
 
 async function selectVerifiedKey(setup: Awaited<ReturnType<typeof personalKeyFixture>>,
@@ -84,3 +91,11 @@ async function selectVerifiedKey(setup: Awaited<ReturnType<typeof personalKeyFix
 }
 
 it('lists only the signed-in member’s access and connection status', memberToolList, 120_000);
+
+async function noAccountNeeded() {
+  const { status } = await listFixture('none');
+  await status('alice', 'ready', false);
+  await status('bob', 'unavailable', false);
+}
+
+it('marks granted tools as ready when no account is needed', noAccountNeeded, 120_000);

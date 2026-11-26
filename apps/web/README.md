@@ -36,7 +36,8 @@ flowchart LR
 - Show tool approvals and the assistant's read-only desktop when permitted, including
   in the packaged website.
 - Show permitted memory facts and support personal saving, correction and forgetting.
-- Let members choose personal tool keys and which assistants may use them.
+- Show the organisation's tools and each member's access. Members can connect
+  their own keys and choose which assistants may use them.
 - Let admins manage people, groups, assistants, model providers and tool servers.
 - Connect, test and switch on a provider for member chats through Settings.
 - Show spending, budgets, held money and permitted organisation history.

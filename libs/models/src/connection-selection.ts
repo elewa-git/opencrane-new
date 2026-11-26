@@ -409,14 +409,15 @@ export async function readConnectionSelection(store: EventStore, binding: Bindin
     if (state.selected?.userId === userId && state.selected.serverId === serverId) {
       checked = await facts(store, binding.silo, state.selected, loadConfiguration, toolName);
     }
-    return { state, checked };
+    const checkToolGrant = options.requireGrant === true || checked !== undefined;
+    return { state, checked, checkToolGrant };
   }
   let prepared;
   try {
     prepared = await prepare();
   } finally {
     // Decide access once, including when selection or profile history could not be loaded.
-    if (prepared && !prepared.checked) {
+    if (prepared?.checkToolGrant === false) {
       await readActiveMember(store, binding, userId);
     } else {
       await access(store, binding, userId, serverId);
@@ -482,6 +483,7 @@ function preservedConsent(command: z.infer<typeof inputSchema>, rows: StoredEven
 }
 
 export interface PersonalSelectionRead {
+  requireGrant?: boolean;
   loadConfiguration?: OAuthConfigurationLoader | undefined;
   toolName?: string | undefined;
 }

@@ -98,7 +98,9 @@ selection stays unavailable without it. New choices require the current profile 
 `readConnectionSelection` takes the same loader and an optional tool name for internal
 eligibility checks. It checks that exact reviewed tool against the typed scope map and
 actual saved scopes. It returns verified status, selection sequence, profile id, current
-profile revision and generation only. It creates no permit or approval.
+profile revision and generation only. My tools sets `requireGrant` so an empty
+selection still checks the member's current tool grant. The read creates no
+permit or approval.
 
 The original selected revision pins the account. Valid same-account refresh preserves
 that choice, while returned generation and revision advance. Old approvals cannot gain

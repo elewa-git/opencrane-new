@@ -596,7 +596,8 @@ describe('personal settings shell', () => {
 
   async function checkSettingsDestination(pathname: string, expectedHeading: string): Promise<void> {
     globalThis.history.replaceState({}, '', pathname);
-    const fixture = await create(response({}));
+    const body = pathname === '/account/tools' ? { rows: [] } : {};
+    const fixture = await create(response(body));
     const element = root(fixture);
     expect(element.querySelector('h1')?.textContent).toBe(expectedHeading);
     expect(element.querySelectorAll('.sidebar nav a')).toHaveLength(4);
