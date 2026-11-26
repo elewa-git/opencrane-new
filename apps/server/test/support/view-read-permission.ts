@@ -4,7 +4,8 @@ import { z } from 'zod';
 
 const check = z.object({ tuple_key: z.object({ object: z.string(), relation: z.string() }) });
 
-export async function holdOpenFgaReply(apiUrl: string, object: string, relation: string) {
+export async function holdOpenFgaReply(apiUrl: string, object: string, relation: string,
+  replies = 2) {
   const observed = Promise.withResolvers<void>();
   const released = Promise.withResolvers<void>();
   let held = 0;
@@ -24,7 +25,7 @@ export async function holdOpenFgaReply(apiUrl: string, object: string, relation:
     async function relay(response: IncomingMessage) {
       if (hold && response.statusCode === 200) {
         held++;
-        if (held === 2) observed.resolve();
+        if (held === replies) observed.resolve();
         await released.promise;
       }
       outgoing.writeHead(response.statusCode ?? 502, response.headers);

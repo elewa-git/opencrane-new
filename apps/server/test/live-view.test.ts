@@ -5,6 +5,7 @@ import { teamViewChat, viewHeaders } from './support/view-requests.ts';
 import { once } from 'node:events';
 import { createServer, request as httpRequest } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
+import { queryObjects } from 'node:v8';
 import { PassThrough, Duplex } from 'node:stream';
 import { expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
@@ -13,6 +14,7 @@ import { until } from '@opencrane/authz/testing';
 import { conversations } from '@opencrane/projections';
 import { history } from '@opencrane/models';
 import { parseEventByType } from '@opencrane/events';
+import type { StoredEvent } from '@opencrane/event-store';
 import * as access from '../src/computers/view-access.ts';
 
 it('admits chat participants without a desktop grant and closes on removal', async () => {
@@ -363,6 +365,62 @@ it('checks new authority events without replaying an unchanged computer history'
   } finally { vi.restoreAllMocks(); await fixture.close(); }
 }, 30_000);
 
+class ComputerHistoryRecord implements StoredEvent {
+  readonly sequence: number;
+  readonly event: StoredEvent['event'];
+
+  constructor(row: StoredEvent) {
+    this.sequence = row.sequence;
+    this.event = row.event;
+  }
+}
+
+async function keepsOnlyCurrentComputerRecords() {
+  function openDesktop() {
+    return Promise.resolve(new PassThrough());
+  }
+  const fixture = await viewFixture(openDesktop);
+  const { app, append, nats, config } = fixture;
+  const subject = 'computer-assistant';
+  const store = nats.store;
+  const read = store.readStream.bind(store);
+  let readRecords = 0;
+  async function* tagComputerRecords(...args: Parameters<typeof read>) {
+    for await (const row of read(...args)) {
+      if (args[0] === subject) {
+        readRecords++;
+        yield new ComputerHistoryRecord(row);
+      } else {
+        yield row;
+      }
+    }
+  }
+  const readSpy = vi.spyOn(store, 'readStream');
+  try {
+    for (let index = 0; index < 12; index++) {
+      await append(subject, 'computer.turn_closed', {
+        assistantId: 'assistant', computerId: 'desktop', conversationId: 'chat',
+        turnId: `past-${index}`, threadId: 'thread', requesterId: 'alice',
+        task: 'chat_turn', status: 'completed',
+      });
+    }
+    readSpy.mockImplementation(tagComputerRecords);
+    const headers = viewHeaders(config);
+    const request = { method: 'POST' as const, url: '/api/conversations/chat/view', headers };
+    const response = await app.inject(request);
+    expect(response.statusCode).toBe(200);
+    expect(readRecords).toBeGreaterThan(3);
+    // Count the records still reachable after collection while the store is live.
+    const retained = queryObjects(ComputerHistoryRecord, { format: 'count' });
+    expect(retained).toBeLessThanOrEqual(3);
+  } finally {
+    readSpy.mockRestore();
+    await fixture.close();
+  }
+}
+it('keeps at most three event records for a computer after reading its history',
+  keepsOnlyCurrentComputerRecords, 30_000);
+
 it('refuses access when its previously checked authority history disappears', async () => {
   const fixture = await viewFixture(() => Promise.resolve(new PassThrough()));
   const { app, nats, config } = fixture;
@@ -480,7 +538,7 @@ it('does not renew the desktop lease from a delayed authority reply after revoca
 }, 30_000);
 
 
-async function closesWhileMemberReadStalls() {
+async function closesWhileMemberReadStalls(change: 'chat closes' | 'participant is removed') {
   function openDesktop() {
     const readable = new PassThrough();
     const writable = new PassThrough();
@@ -503,6 +561,18 @@ async function closesWhileMemberReadStalls() {
     return clock.sleep(milliseconds, signal);
   }
   Object.assign(nats.store, { clock: { ...clock, sleep } });
+  async function* stallChatRead(...args: Parameters<typeof read>) {
+    const [subject] = args;
+    if (subject === 'member-alice') {
+      blocked.resolve();
+      await release.promise;
+    }
+    // Keep the chat reader waiting for the creation event before it can check the join.
+    if (subject === 'conversation-chat') {
+      await release.promise;
+    }
+    yield* read(...args);
+  }
   let socket: WebSocket | undefined;
   try {
     const headers = viewHeaders(config);
@@ -514,22 +584,22 @@ async function closesWhileMemberReadStalls() {
     socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`,
       ['binary', ticket], { headers });
     expect(await nextBinaryMessage(socket)).toEqual(Buffer.from('RFB 003.008\n'));
-    readSpy.mockImplementation(async function* stallMember(...args) {
-      if (args[0] === 'member-alice') {
-        blocked.resolve();
-        await release.promise;
-      }
-      yield* read(...args);
-    });
+    readSpy.mockImplementation(stallChatRead);
     await blocked.promise;
     let closeCode: number | undefined;
     socket.once('close', function recordClose(code: number) {
       closeCode = code;
     });
     const started = performance.now();
-    await append('participation-chat', 'conversation.closed', {
-      conversationId: 'chat', closedBy: 'alice',
-    });
+    if (change === 'chat closes') {
+      await append('participation-chat', 'conversation.closed', {
+        conversationId: 'chat', closedBy: 'alice',
+      });
+    } else {
+      await append('participation-chat', 'participant.removed', {
+        conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
+      });
+    }
     function hasClosed() {
       return closeCode !== undefined;
     }
@@ -544,5 +614,7 @@ async function closesWhileMemberReadStalls() {
     await fixture.close();
   }
 }
-it('closes a viewer within two seconds when chat closes beside a stalled member read',
-  closesWhileMemberReadStalls, 30_000);
+it.each(['chat closes', 'participant is removed'] as const)(
+  'closes a viewer within two seconds when %s beside a stalled member read',
+  closesWhileMemberReadStalls, 30_000,
+);

@@ -49,13 +49,16 @@ async function unconfirmedTeamDoesNotMaskAnotherTeam() {
       .toBe(true);
 
     const { append } = fixture;
+    await append('team-applying', 'team.member_removed', {
+      teamId: 'applying', memberId: 'alice', removedBy: 'bob',
+    });
     await append('team-current', 'team.member_removed', {
       teamId: 'current', memberId: 'alice', removedBy: 'bob',
     });
     await expect(allowed.fresh()).rejects.toThrow('Paying group authority changed');
     // Keep the old OpenFGA tuple to prove that the saved removal decides access.
     expect((await auth.team('alice', 'current')).allowed).toBe(true);
-    await expect(access(fixture)).rejects.toThrow();
+    await expect(access(fixture)).rejects.toThrow(/^Desktop access required$/u);
   } finally {
     await fixture.close();
   }

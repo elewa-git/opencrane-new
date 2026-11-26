@@ -417,3 +417,53 @@ it.each(['member', 'participant'] as const)(
   'rechecks %s removal after the private assistant permission replies',
   refusesLatePrivatePermission, 30_000,
 );
+
+async function checksMembershipAfterSiloPermission(membership: 'active' | 'removed') {
+  const open = vi.fn(openDesktop);
+  const fixture = await viewFixture(open);
+  const { append, binding, config, nats } = fixture;
+  const silo = objectId('silo', binding.silo);
+  const proxy = await holdOpenFgaReply(binding.apiUrl, silo, 'member', 1);
+  const sampled = Promise.withResolvers<void>();
+  const store = nats.store;
+  const head = store.head.bind(store);
+  let memberPositions = 0;
+  async function sampleMemberPosition(...args: Parameters<typeof head>) {
+    const position = await head(...args);
+    // Let the chat check sample membership before releasing the silo permission reply.
+    if (args[0] === 'member-alice' && ++memberPositions === 2) {
+      sampled.resolve();
+    }
+    return position;
+  }
+  const headSpy = vi.spyOn(store, 'head');
+  try {
+    const headers = viewHeaders(config);
+    binding.apiUrl = proxy.apiUrl;
+    headSpy.mockImplementation(sampleMemberPosition);
+    const admission = view(fixture, 'chat', headers);
+    await Promise.all([proxy.observed, sampled.promise]);
+    if (membership === 'removed') {
+      await append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'bob' });
+    }
+    proxy.release();
+    const response = await admission;
+    if (membership === 'removed') {
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toHaveProperty('status', 'refused');
+      expect(response.json()).not.toHaveProperty('ticket');
+    } else {
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toHaveProperty('ticket');
+    }
+    expect(open).not.toHaveBeenCalled();
+  } finally {
+    headSpy.mockRestore();
+    await proxy.close();
+    await fixture.close();
+  }
+}
+it.each(['active', 'removed'] as const)(
+  'checks %s personal membership after the silo permission replies',
+  checksMembershipAfterSiloPermission, 30_000,
+);

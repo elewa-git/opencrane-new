@@ -52,7 +52,17 @@ function opensBothChatsAndTimesTheSecondReply() {
       return record.sessionId;
     }
     const admissions = views.filter(isAdmission);
-    assert.deepEqual(admissions.map(sessionId), ['first-session', 'second-session']);
+    const admittedSessions = admissions.map(sessionId);
+    assert.deepEqual(admittedSessions, ['first-session', 'second-session']);
+    function isSocketClose(record: (typeof views)[number]) {
+      return record.stage === 'browser_socket_closed';
+    }
+    function conversationId(record: (typeof views)[number]) {
+      return record.conversationId;
+    }
+    const closures = views.filter(isSocketClose);
+    const closedChats = closures.map(conversationId);
+    assert.deepEqual(closedChats, ['first-chat', 'second-chat']);
     const replies = stopReplies();
     const secondReply = replies.get('second-chat');
     assert(secondReply && typeof secondReply.firstDeltaMs === 'number');
@@ -61,5 +71,5 @@ function opensBothChatsAndTimesTheSecondReply() {
   return observe();
 }
 
-void test('repeat evidence includes both views and times the second chat reply',
+void test('repeat evidence records both admissions and closures and times the second reply',
   opensBothChatsAndTimesTheSecondReply);
