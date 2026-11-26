@@ -6,7 +6,6 @@ type ScannerRefreshResult = {
   sha: string;
   runId: number;
   databaseUpdatedAt: string;
-  cleanupPending?: boolean;
 };
 
 export function refreshScanner(

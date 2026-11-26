@@ -442,8 +442,8 @@ the engine image, its database copy, the hash and the matching release files
 together. The HTTPS wrapper image, TLS key, trust settings and other workloads
 stay in place. The server accepts both checked hashes during this change. After
 the replacement is ready, the command removes the previous hash and release files
-from the ConfigMap. If that cleanup fails, the previous approval still expires
-at its original time, and the command reports that cleanup is pending.
+from the ConfigMap. The command checks the Deployment's identity and generation
+before that removal. A different rollout stops it, leaving the approvals in place.
 
 The service log gives `PASS` with the active pin, manifest hash, last virus list check
 and the GitHub run considered. A refusal exits non-zero and names the failed step.
@@ -462,10 +462,14 @@ systemctl --user disable --now "opencrane-scanner-refresh@$DEV_STACK_ID.timer"
 systemctl --user stop "opencrane-scanner-refresh@$DEV_STACK_ID.service"
 ```
 
-An image that fails approval or publication never changes the running scanner. If the new
-Pod fails to become ready, the command restores the previous pins. If Kubernetes
-cannot confirm the restore, the report says so. An expired scanner refuses uploads
-even if a later refresh fails.
+A new image changes the scanner only after approval and publication. The ConfigMap
+keeps the old and new settings until the change finishes. After an interruption,
+the next run checks those settings and finishes the rollout or restores the old
+scanner. When the old scanner is ready again, the command restores exactly the
+previous approval list and reports the failed refresh. If Kubernetes cannot confirm
+the restore, the report says so and leaves the saved settings for the next run. A
+newer approved release can still replace an expired scanner. Uploads refuse while
+the scanner is unavailable or its virus list has expired.
 
 This command requires an install running the server and chart that mount the
 approval file. Older installs have one fixed manifest hash in the server's

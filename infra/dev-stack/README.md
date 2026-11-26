@@ -46,6 +46,7 @@ flowchart LR
 - Check package hosts and require the free stand-in for fleet tasks. Record any explicit
   local host-risk exception. Update and remove only owned releases.
 - Provide guarded demo checks and a daily fresh-stack check.
+- Schedule scanner updates for a running package on the host.
 
 Not built yet:
 
@@ -77,6 +78,10 @@ Not built yet:
 1. **The daily check runs.** A timer starts a fresh spare stack from a separate main
    checkout, runs browser checks and saves results. It removes its stack afterwards;
    if both slots are busy, it records that the run was skipped.
+
+1. **A package checks for a fresh virus list.** The host timer runs the same
+   scanner refresh as the operator. The command checks that the worktree still
+   owns the install before reading its settings or changing the scanner.
 
 ## How to run or test it
 

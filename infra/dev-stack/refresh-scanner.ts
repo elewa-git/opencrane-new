@@ -17,7 +17,4 @@ export async function refreshPackageScanner(expectedImage?: string) {
   console.log(`PASS ${outcomes[result.status]}. GitHub run ${result.runId}.`);
   console.log(`${result.image}. Manifest ${result.sha}.`);
   console.log(`The active virus list was checked at ${result.databaseUpdatedAt}.`);
-  if (result.cleanupPending) {
-    console.warn('The previous approval remains until cleanup or its original expiry.');
-  }
 }

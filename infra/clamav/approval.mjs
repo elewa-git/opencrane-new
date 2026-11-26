@@ -11,19 +11,23 @@ async function validateScanner(approval, directory) {
   return { ...releaseOptions, runId: approval.runId, databaseUpdatedAt: manifest.databaseUpdatedAt };
 }
 
-export async function fetchScannerApproval(destination, includeImage = false) {
-  const approvalOptions = { name: 'scanner', destination, includeImage, validate: validateScanner,
-    validationStage: 'release' };
-  const approval = await fetchCiApproval(approvalOptions);
-  if (destination !== undefined) {
+async function scannerApproval(options) {
+  const approval = await fetchCiApproval(options);
+  if (options.destination !== undefined) {
     return approval;
   }
   const { image, approvedSha, runId, databaseUpdatedAt } = approval;
   return { image, approvedSha, runId, databaseUpdatedAt };
 }
 
-export async function fetchLatestScannerApproval(destination) {
+export function fetchScannerApproval(destination, includeImage = false) {
+  const options = { name: 'scanner', destination, includeImage, validate: validateScanner,
+    validationStage: 'release' };
+  return scannerApproval(options);
+}
+
+export function fetchLatestScannerApproval(destination) {
   const options = { name: 'scanner', destination, includeImage: true, validate: validateScanner,
     validationStage: 'release', upstream: true };
-  return fetchCiApproval(options);
+  return scannerApproval(options);
 }

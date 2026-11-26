@@ -27,7 +27,8 @@ caller, an untrusted TLS connection and an outage before checking recovery.
 Run it with a process deadline of 20 minutes. The launcher has its own
 15-minute startup limit, and each upload scan has a 60-second limit.
 
-`scanner.ts` reads `SCANNER_APPROVED_MANIFEST_FILE` for each scan when configured.
+`scanner.ts` reads `SCANNER_APPROVED_MANIFEST_FILE` before sending bytes, when the
+scanner replies and again after the access check before it stores the upload.
 The package mounts it read-only. It holds one approved SHA-256 digest at rest and
 two during a scanner rollout. An absent or invalid file makes the scan unavailable.
 Other deployments use `SCANNER_MANIFEST_DIGEST`. The authenticated reply must match

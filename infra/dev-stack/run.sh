@@ -16,7 +16,14 @@ while [ "$#" -gt 0 ]; do
     --owner-run) [ "$action" = up ] || exit 2; owner_run=--owner-run; shift ;;
     --values) [ "$action" = package-up ] && [ "$#" -ge 2 ] || exit 2; values=$2; shift 2 ;;
     --revision) [ "$action" = package-rollback ] && [ "$#" -ge 2 ] || exit 2; revision=$2; shift 2 ;;
-    --image) [ "$action" = package-refresh-scanner ] && [ "$#" -ge 2 ] && [ -n "$2" ] && [ -z "$image" ] || exit 2; image=$2; shift 2 ;;
+    --image)
+      if [ "$action" != package-refresh-scanner ] || [ "$#" -lt 2 ] ||
+         [ -z "$2" ] || [ -n "$image" ]; then
+        exit 2
+      fi
+      image=$2
+      shift 2
+      ;;
     *) echo 'Unknown dev stack option' >&2; exit 2 ;;
   esac
 done

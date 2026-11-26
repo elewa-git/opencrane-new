@@ -177,6 +177,11 @@ function scannerRollout(fixture, args) {
   const { scanner, clusterState } = fixture;
   clusterState.onRollout?.(fixture);
   const image = scanner.spec.template.spec.containers[0].image;
+  if (clusterState.unreadyImage === image) {
+    scanner.status = { ...readyStatus(scanner.metadata.generation), readyReplicas: 0,
+      availableReplicas: 0 };
+    throw new Error('No scanner pod is ready');
+  }
   if (clusterState.failedImage === image || clusterState.failAllRollouts) {
     throw new Error('Scanner did not become ready');
   }
@@ -218,8 +223,16 @@ function cluster() {
       default: return projectApproval(fixture, args);
     }
   }
-  function approved(directory) {
-    return stageApprovedFixture(directory, clusterState.approvedImage);
+  async function approved(directory) {
+    const time = Date.now();
+    try {
+      if (clusterState.approvalTime !== undefined) {
+        vi.setSystemTime(clusterState.approvalTime);
+      }
+      return await stageApprovedFixture(directory, clusterState.approvedImage);
+    } finally {
+      vi.setSystemTime(time);
+    }
   }
   vi.mocked(fetchLatestScannerApproval).mockImplementation(approved);
   return { ...fixture, kubectl: vi.fn(command) };
@@ -493,10 +506,8 @@ test.each(busyScannerStates)('leaves an unrelated rollout with %s in place', ref
 
 async function leavesTheNewerReadyScanner() {
   const fixture = cluster();
-  vi.setSystemTime(Date.now() - 60_000);
-  const installedTime = Date.now();
-  vi.setSystemTime(installedTime + 60_000);
   fixture.runningRelease.databaseUpdatedAt = new Date(Date.now());
+  fixture.clusterState.approvalTime = Date.now() - 60_000;
   const previous = snapshotInstall(fixture);
   const result = await refreshScanner(fixture.kubectl);
   expect(result).toMatchObject({ status: 'newer-installed', image: runningImage, sha: runningSha });
@@ -563,3 +574,48 @@ async function refusedPatchKeepsExistingApproval() {
 }
 test('restores the exact approval when Kubernetes refuses the template patch',
   refusedPatchKeepsExistingApproval);
+
+async function requiresReadyReplicaAfterStatusReturns() {
+  const fixture = cluster();
+  await refreshScanner(fixture.kubectl);
+  function lostReadiness(current) {
+    current.scanner.status.readyReplicas = 0;
+  }
+  fixture.clusterState.afterRollout = lostReadiness;
+  const before = structuredClone(fixture.config.data);
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'readiness' });
+  expect(fixture.patches).toHaveLength(3);
+  expect(fixture.config.data).toEqual(before);
+}
+test('checks the replica is still ready after the rollout status command returns',
+  requiresReadyReplicaAfterStatusReturns);
+
+async function replacesUnavailableScannerAfterRollback() {
+  const fixture = cluster();
+  await interruptAfterPatch(fixture);
+  fixture.clusterState.failedImage = newRelease.image;
+  fixture.clusterState.unreadyImage = runningImage;
+  const laterImage = `${prefix}${'c'.repeat(64)}`;
+  fixture.clusterState.approvedImage = laterImage;
+  vi.setSystemTime(Date.now() + 86_400_000);
+  const result = await refreshScanner(fixture.kubectl);
+  expect(result).toMatchObject({ status: 'updated', image: laterImage });
+  expect(fixture.scanner.status).toEqual(readyStatus(fixture.scanner.metadata.generation));
+  expect(fixture.config.data['approved-manifests']).toBe(`sha256:${result.sha}\n`);
+}
+test('a fresh approval recovers after rollback converges with the old scanner expired',
+  replacesUnavailableScannerAfterRollback);
+
+async function restoresWhileApprovalSourceUnavailable() {
+  const fixture = cluster();
+  await interruptAfterPatch(fixture);
+  fixture.clusterState.failedImage = newRelease.image;
+  const outage = new Error('GitHub is unavailable');
+  vi.mocked(fetchLatestScannerApproval).mockRejectedValue(outage);
+  await expect(refreshScanner(fixture.kubectl)).rejects.toMatchObject({ reason: 'rollout' });
+  expect(fixture.scanner.spec.template).toEqual(fixture.initialTemplate);
+  expect(fixture.scanner.status).toEqual(readyStatus(fixture.scanner.metadata.generation));
+  expect(fixture.config.data).toEqual(fixture.initialApproval);
+}
+test('restores the last ready scanner during an approval source outage',
+  restoresWhileApprovalSourceUnavailable);
