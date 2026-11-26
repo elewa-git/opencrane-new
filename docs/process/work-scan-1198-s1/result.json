@@ -1,0 +1,131 @@
+{
+  "journey": "FAIL",
+  "source": "ac8f8861abf77d60602ecded19ba79ff145016c0",
+  "slot": 1,
+  "namespaceUid": "92c8ab0a-3e20-4aa9-915a-35c152a28cf5",
+  "installId": "c1777513-f910-4e38-a6f5-54a9cf4fed69",
+  "freshVolumeClaims": [
+    {
+      "name": "backups",
+      "uid": "a92aa70f-41ca-400f-943b-e570d54d0df3",
+      "createdAt": "2026-11-26T17:31:40Z"
+    },
+    {
+      "name": "data-nats-0",
+      "uid": "412c1848-95ac-48f1-9418-2ae0b503cbd3",
+      "createdAt": "2026-11-26T17:31:41Z"
+    },
+    {
+      "name": "data-objects-0",
+      "uid": "d74df8f7-340d-4429-8e89-c3850e4de152",
+      "createdAt": "2026-11-26T17:31:41Z"
+    },
+    {
+      "name": "data-postgres-0",
+      "uid": "54f8fb87-9ad4-4b74-9615-9a169a1398b8",
+      "createdAt": "2026-11-26T17:31:41Z"
+    },
+    {
+      "name": "home-computer-8758be48bf6edde9f441c77886319c13",
+      "uid": "b91a10fb-94e4-400f-a22b-7e33389bdf61",
+      "createdAt": "2026-11-26T17:32:36Z"
+    },
+    {
+      "name": "pilot-restore",
+      "uid": "dedfa2d6-40b4-4e6d-b1be-a6a39b3d8a1f",
+      "createdAt": "2026-11-26T17:31:40Z"
+    }
+  ],
+  "applicationApproval": {
+    "runId": 45807429814,
+    "imageDigest": "sha256:46f4aebf15daad734638445ba79a1faaafa9be733659620f1aece70990ebd1b4"
+  },
+  "initialScannerApproval": {
+    "runId": 45807430276,
+    "formatVersion": 1,
+    "imageDigest": "sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
+    "manifestDigest": "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627",
+    "databaseUpdatedAt": "2026-11-26T11:06:49.250Z",
+    "inspectedAt": "2026-11-26T11:07:32.564Z"
+  },
+  "newerScannerApproval": {
+    "runId": 45820515076,
+    "formatVersion": 1,
+    "imageDigest": "sha256:f2388c376c91a9d6996de249c8e937a2bf0b75ba3e6c40b2bf086cb257cea98d",
+    "manifestDigest": "sha256:f2a98e1425042d1d1ccc3cf5674e7297fb9a8a297b3cf3789d4fa2da02a14962",
+    "databaseUpdatedAt": "2026-11-26T12:32:48.787Z",
+    "inspectedAt": "2026-11-26T12:33:23.473Z"
+  },
+  "uploadsBeforeRefresh": [
+    {
+      "width": 1280,
+      "httpStatus": 201,
+      "attachment": "Ready",
+      "picture": "screenshots/upload-before-1280.png"
+    },
+    {
+      "width": 390,
+      "httpStatus": 201,
+      "attachment": "Ready",
+      "picture": "screenshots/upload-before-390.png"
+    }
+  ],
+  "beforeRefresh": {
+    "observedAt": "2026-11-26T17:33:29.069Z",
+    "enginePin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
+    "copyDatabasesPin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
+    "httpsWrapperPin": "k3d-ocn-registry:5000/opencrane/package@sha256:46f4aebf15daad734638445ba79a1faaafa9be733659620f1aece70990ebd1b4",
+    "manifest": "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627",
+    "approvedManifests": [
+      "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627"
+    ],
+    "deploymentUid": "5f5312bb-adf6-41fa-94a2-845f88b5e641",
+    "deploymentGeneration": 1,
+    "configMapResourceVersion": "5162315",
+    "readyScannerPodUid": "e93bccb2-835d-43fe-9e46-1369b8667886",
+    "readyServerPodUid": "dbdd0936-7f70-4837-b392-ebdd20f74ea6"
+  },
+  "afterRefreshRefusal": {
+    "observedAt": "2026-11-26T17:34:48.038Z",
+    "enginePin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
+    "copyDatabasesPin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
+    "httpsWrapperPin": "k3d-ocn-registry:5000/opencrane/package@sha256:46f4aebf15daad734638445ba79a1faaafa9be733659620f1aece70990ebd1b4",
+    "manifest": "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627",
+    "approvedManifests": [
+      "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627"
+    ],
+    "deploymentUid": "5f5312bb-adf6-41fa-94a2-845f88b5e641",
+    "deploymentGeneration": 1,
+    "configMapResourceVersion": "5162315",
+    "readyScannerPodUid": "e93bccb2-835d-43fe-9e46-1369b8667886",
+    "readyServerPodUid": "dbdd0936-7f70-4837-b392-ebdd20f74ea6"
+  },
+  "afterMismatchedImageRefusal": {
+    "observedAt": "2026-11-26T17:35:10.149Z",
+    "enginePin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
+    "copyDatabasesPin": "k3d-ocn-registry:5000/opencrane/scanner@sha256:92aa1b821ebfc94d320574a750a56312179bceff13bd5dd3679a102cfa5f8db1",
+    "httpsWrapperPin": "k3d-ocn-registry:5000/opencrane/package@sha256:46f4aebf15daad734638445ba79a1faaafa9be733659620f1aece70990ebd1b4",
+    "manifest": "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627",
+    "approvedManifests": [
+      "sha256:b3d29f0dd22328fb657770d5313aa7692a496837072cb4c1a72e3830540b8627"
+    ],
+    "deploymentUid": "5f5312bb-adf6-41fa-94a2-845f88b5e641",
+    "deploymentGeneration": 1,
+    "configMapResourceVersion": "5162315",
+    "readyScannerPodUid": "e93bccb2-835d-43fe-9e46-1369b8667886",
+    "readyServerPodUid": "dbdd0936-7f70-4837-b392-ebdd20f74ea6"
+  },
+  "approvedRefresh": {
+    "verdict": "FAIL",
+    "exit": 1,
+    "reason": "install",
+    "releaseLookupBytes": 0,
+    "escapedReleaseLookupDecodedBytes": 308
+  },
+  "uploadsAfterSwap": "NOT RUN",
+  "mismatchedImage": {
+    "verdict": "PASS",
+    "exit": 1,
+    "reason": "image"
+  }
+}
