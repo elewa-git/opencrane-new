@@ -1,6 +1,7 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ModelsScreen } from './model-registry';
+import { fixtureElement as screenElement, requiredButton } from './models-testing';
 import type { ProviderRow } from './provider-api';
 
 Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
@@ -68,16 +69,9 @@ async function mount(handler: RequestHandler): Promise<ComponentFixture<ModelsSc
   return fixture;
 }
 
-function screenElement(fixture: ComponentFixture<ModelsScreen>): HTMLElement {
-  const element: unknown = fixture.nativeElement;
-  if (!(element instanceof HTMLElement)) throw new Error('Expected a screen element');
-  return element;
-}
-
 function clickButton(fixture: ComponentFixture<ModelsScreen>, name: string): void {
-  const button = [...screenElement(fixture).querySelectorAll('button')]
-    .find((candidate: HTMLButtonElement) => candidate.textContent?.trim() === name);
-  if (!(button instanceof HTMLButtonElement)) throw new Error(`Missing button: ${name}`);
+  const button = requiredButton(screenElement(fixture), name);
+  expect(button.disabled).toBe(false);
   button.click();
   fixture.detectChanges();
 }
@@ -133,15 +127,24 @@ async function firstChatDefaultOnSecondConnection() {
   const drain = { revision: 2, sequence: 0, expectedProviderSequence: 13,
     draining: false, enabled: false };
   const posts: RequestSeen[] = [];
+  const receipt = { status: 'appended', revision: 2, sequence: 13 };
   function serve(request: RequestSeen): Response {
     if (request.method === 'POST') {
       posts.push(request);
-      return reply({ status: 'appended', revision: 2, sequence: 13 });
+      return reply(receipt);
     }
-    if (request.url === '/api/org/providers') return reply(providers);
-    if (request.url === '/api/org/models') return reply(registryRead);
-    if (request.url.endsWith('/bindings')) return reply(bindings);
-    if (request.url.endsWith('/drain')) return reply(drain);
+    if (request.url === '/api/org/providers') {
+      return reply(providers);
+    }
+    if (request.url === '/api/org/models') {
+      return reply(registryRead);
+    }
+    if (request.url.endsWith('/bindings')) {
+      return reply(bindings);
+    }
+    if (request.url.endsWith('/drain')) {
+      return reply(drain);
+    }
     throw new Error(`Unexpected request: ${request.url}`);
   }
   const fixture = await mount(serve);
@@ -150,11 +153,15 @@ async function firstChatDefaultOnSecondConnection() {
   await waitForText(fixture, 'Chat default saved.');
   expect(posts).toHaveLength(1);
   const post = posts[0];
-  if (!post) throw new Error('Expected a chat default command');
+  if (!post) {
+    throw new Error('Expected a chat default command');
+  }
   expect(post.url).toBe('/api/org/providers/second/bindings');
-  expect(readRecord(post.body)).toMatchObject({ action: 'select_chat_default',
+  const command = readRecord(post.body);
+  const firstChoice = { action: 'select_chat_default',
     model: 'gpt-6.1-sol', expectedRevision: 2, expectedProviderSequence: 12,
-    expectedBindingSequence: 0 });
+    expectedBindingSequence: 0 };
+  expect(command).toMatchObject(firstChoice);
 }
 it('creates the chat default on the second connection when only it has models',
   firstChatDefaultOnSecondConnection);
@@ -1241,3 +1248,165 @@ function replacesDialogMethodsForAnotherComponent() {
 }
 it('lets another component replace dialog methods on its own element',
   replacesDialogMethodsForAnotherComponent);
+
+function openConnectionRow(fixture: ComponentFixture<ModelsScreen>): void {
+  const row = screenElement(fixture).querySelector('.provider-row-main');
+  if (!(row instanceof HTMLButtonElement)) {
+    throw new Error('Missing connection row');
+  }
+  expect(row.disabled).toBe(false);
+  row.click();
+  fixture.detectChanges();
+}
+
+async function followPricedTest(fixture: ComponentFixture<ModelsScreen>) {
+  clickDialogButton(fixture, 'Read current price');
+  await settle(fixture);
+  giveConsent(fixture);
+  expect(runControl(fixture)?.disabled).toBe(false);
+  clickDialogButton(fixture, 'Run priced test');
+  await settle(fixture);
+}
+
+function verificationFact(outcome: string) {
+  return { changeId: 'check-one', attemptId: 'check-one',
+    time: '2026-10-07T09:00:00Z', revision: 2, outcome };
+}
+
+async function followModelTestAdvice(outcome: string) {
+  const state = scenario();
+  makeReachable(state);
+  state.row.enabledModels = ['gpt-6.1-sol'];
+  state.row.status = 'connected_not_tested';
+  if (outcome !== 'missing') {
+    state.row.modelAnswer = verificationFact(outcome);
+    if (outcome !== 'skipped') {
+      state.row.status = `model_test_${outcome}`;
+    }
+  }
+  const fixture = await mount(serveScenario(state));
+  const page = screenElement(fixture);
+  if (outcome === 'budget_refused') {
+    expect(page.querySelector('a[href="/org/spending"]')?.textContent).toContain('Spending');
+    expect(page.textContent).toContain('Review the budget in Spending');
+  }
+  if (outcome === 'missing') {
+    expect(page.textContent).toContain('Open this connection and run the priced test');
+  } else {
+    expect(page.textContent).toContain('Select Test again');
+  }
+  expect(page.textContent).toContain('Read current price');
+  openConnectionRow(fixture);
+  if (outcome !== 'missing') {
+    clickDialogButton(fixture, 'Test again');
+  }
+  await followPricedTest(fixture);
+  expect(state.posts).toHaveLength(1);
+  const command = readRecord(state.posts[0]!.body);
+  expect(command['action']).toBe('test');
+}
+it.each(['missing', 'fail', 'skipped', 'budget_refused'])(
+  'can follow the list instructions for a %s model answer', followModelTestAdvice);
+
+async function followsPendingCheckAdvice(kind: string) {
+  const state = scenario();
+  state.row.enabledModels = ['gpt-6.1-sol'];
+  const pending = verificationFact('outcome_unknown');
+  if (kind === 'model') {
+    makeReachable(state);
+    state.row.modelAnswer = pending;
+    state.row.status = 'model_test_outcome_unknown';
+  } else {
+    state.row.reachable = pending;
+  }
+  const serve = serveScenario(state);
+  function replyWithSettledFact(request: RequestSeen) {
+    if (request.url.includes('/changes/')) {
+      if (kind === 'model') {
+        state.row.modelAnswer = verificationFact('pass');
+        state.row.status = 'ready';
+      } else {
+        makeReachable(state);
+        state.row.status = 'connected_not_tested';
+      }
+    }
+    return serve(request);
+  }
+  const fixture = await mount(replyWithSettledFact);
+  const page = screenElement(fixture);
+  expect(page.textContent).toContain('Select Check status beside this connection');
+  expect(page.querySelector<HTMLButtonElement>('.provider-row-main')?.disabled).toBe(true);
+  clickButton(fixture, 'Check status');
+  await settle(fixture);
+  const changes = '/api/org/providers/one/changes/check-one';
+  const request = { method: 'GET', url: changes };
+  expect(state.reads).toContainEqual(expect.objectContaining(request));
+  expect(state.posts).toHaveLength(0);
+  expect(page.querySelector<HTMLButtonElement>('.provider-row-main')?.disabled).toBe(false);
+}
+it.each(['model', 'reachability'])('can follow the list instructions for a pending %s check',
+  followsPendingCheckAdvice);
+
+async function followsReachabilityAdvice() {
+  const state = scenario();
+  state.row.enabledModels = ['gpt-6.1-sol'];
+  const fixture = await mount(serveScenario(state));
+  const page = screenElement(fixture);
+  expect(page.textContent).toContain('Select Check provider reachability');
+  openConnectionRow(fixture);
+  clickDialogButton(fixture, 'Check provider reachability');
+  await settle(fixture);
+  expect(state.posts).toHaveLength(1);
+  const command = readRecord(state.posts[0]!.body);
+  expect(command['action']).toBe('reachability');
+}
+it('can start a reachability check from the list instructions', followsReachabilityAdvice);
+
+async function followsEnableModelAdvice() {
+  const state = scenario();
+  makeReachable(state);
+  state.row.status = 'connected_not_tested';
+  const fixture = await mount(serveScenario(state));
+  const page = screenElement(fixture);
+  expect(page.textContent).toContain('enable a model on the Models step');
+  openConnectionRow(fixture);
+  clickDialogButton(fixture, 'Next');
+  await settle(fixture);
+  expect(page.textContent).toContain('Step 4 of 6');
+  const model = page.querySelector('.model-options input');
+  expect(model).toBeInstanceOf(HTMLInputElement);
+  if (model instanceof HTMLInputElement) {
+    expect(model.disabled).toBe(false);
+    model.click();
+  }
+  clickDialogButton(fixture, 'Next');
+  await settle(fixture);
+  expect(state.posts).toHaveLength(1);
+  const command = readRecord(state.posts[0]!.body);
+  expect(command['models']).toEqual(['gpt-6.1-sol']);
+}
+it('can enable the first model from the list instructions', followsEnableModelAdvice);
+
+async function followsUnrecordedReachabilityAdvice() {
+  const state = scenario();
+  state.row.enabledModels = ['gpt-6.1-sol'];
+  state.row.reachable = verificationFact('outcome_unknown');
+  const serve = serveScenario(state);
+  function serveWithoutReceipt(request: RequestSeen) {
+    if (request.url.includes('/changes/')) {
+      return reply({ status: 'not_found' }, 404);
+    }
+    return serve(request);
+  }
+  const fixture = await mount(serveWithoutReceipt);
+  clickButton(fixture, 'Check status');
+  await settle(fixture);
+  expect(screenElement(fixture).textContent).toContain('Select Start over beside this connection');
+  clickButton(fixture, 'Start over');
+  openConnectionRow(fixture);
+  clickDialogButton(fixture, 'Check provider reachability');
+  await settle(fixture);
+  expect(state.posts).toHaveLength(1);
+}
+it('can start over from the provider list after an unrecorded free check',
+  followsUnrecordedReachabilityAdvice);

@@ -9,6 +9,7 @@ import type { EventEnvelope } from '@opencrane/events';
 import { providerDefaultHandler, providerSecretRef,
   providerTurnAdmission } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
+import { chatVerification } from './support/chat-default.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -161,6 +162,8 @@ async function seedsFirstVerified() {
 }
 it('records the first verified provider once, even when another provider triggers the reaction', seedsFirstVerified);
 async function savesAndReconciles() {
+  const verification = chatVerification('primary');
+  await appendAndAuthorise(verification);
   const dependency = (await request('GET')).json<{ rows: { position: number }[] }>();
   const command = await input({ kind: 'silo_default', dependantId: 'acme',
     expectedBindingSequence: dependency.rows[0]?.position ?? 0 });

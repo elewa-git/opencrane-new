@@ -11,6 +11,7 @@ import { applyProvider, pgDb, providers, routines, ProjectionRunner,
 import { createLogger } from '@opencrane/observability';
 import { providerDefaultHandler, providerHistory, providerSecretRef } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
+import { chatDefaultCommand, chatModel, chatVerification } from './support/chat-default.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 const configOptions = { expectedOrgId: 'org-acme' };
@@ -147,11 +148,12 @@ async function storedBindings(providerId: string) {
   }
   return rows;
 }
-async function refused(providerId: string, command: unknown, code = 403) {
+async function refused(providerId: string, command: unknown, code = 403, actor = 'owner') {
   const before = await nats.store.head();
-  const response = await request('POST', providerId, command);
+  const response = await request('POST', providerId, command, actor);
   expect(response.statusCode).toBe(code);
   expect(await nats.store.head()).toBe(before);
+  return response;
 }
 
 async function concurrentRetries(changed: boolean) {
@@ -307,6 +309,7 @@ async function explicitInitialDefault() {
   await providerDefaultHandler(nats.store, binding).handle(trigger, pgDb(dbs.queue));
   expect(await storedBindings('first')).toHaveLength(0);
   expect(await storedBindings('second')).toHaveLength(0);
+  await answerChatModel('second');
   const overrides = { kind: 'silo_default', dependantId: 'acme' };
   const command = await input(overrides);
   expect((await request('POST', 'second', command)).statusCode).toBe(200);
@@ -318,18 +321,55 @@ it('allows an explicit initial default on a later verified provider with the ena
   explicitInitialDefault);
 
 async function answerChatModel(providerId: string) {
-  const data = { providerId, changedBy: 'owner', revision: 3, kind: 'model',
-    attemptId: 'chat-test', outcome: 'pass', model: 'gpt-6.1-sol' };
-  return appendAndAuthorise({
-    subject: `provider-${providerId}`, type: 'provider.verification_recorded', data,
-  });
+  const verification = chatVerification(providerId);
+  return appendAndAuthorise(verification);
 }
 
-async function chatDefaultCommand(expectedBindingSequence = 0) {
-  return { action: 'select_chat_default', commandId: `chat-default-${++counter}`,
-    expectedProviderSequence: await nats.store.head('provider-*'), expectedRevision: 3,
-    expectedBindingSequence, model: 'gpt-6.1-sol' };
+function defaultCommand(overrides: Record<string, unknown> = {}) {
+  return chatDefaultCommand(nats.store, `chat-default-${++counter}`, overrides);
 }
+
+async function refusesUnansweredDefault(action: string) {
+  await connection('ready-except-answer');
+  const identity = { kind: 'silo_default', dependantId: 'acme', task: 'chat_turn' };
+  const command = action === 'select'
+    ? await defaultCommand({ action, ...identity })
+    : await defaultCommand();
+  const refusal = await refused('ready-except-answer', command);
+  expect(refusal.json()).toMatchObject({ reason: 'connection_not_ready' });
+  await answerChatModel('ready-except-answer');
+  const ready = action === 'select'
+    ? await defaultCommand({ action, ...identity })
+    : await defaultCommand();
+  const saved = await request('POST', 'ready-except-answer', ready);
+  expect(saved.statusCode).toBe(200);
+}
+it.each(['select', 'select_chat_default'])('requires a model answer for a human %s',
+  refusesUnansweredDefault);
+
+async function ignoresSourceForLocalChoice() {
+  await connection('primary');
+  await answerChatModel('primary');
+  const firstInput = { expectedSourceRevision: 45 };
+  const first = await defaultCommand(firstInput);
+  const firstResponse = await request('POST', 'primary', first);
+  expect(firstResponse.statusCode).toBe(200);
+  const firstReceipt = firstResponse.json<{ sequence: number }>();
+  const nextInput = { ...firstInput, expectedBindingSequence: firstReceipt.sequence };
+  const next = await defaultCommand(nextInput);
+  const nextResponse = await request('POST', 'primary', next);
+  expect(nextResponse.statusCode).toBe(200);
+  const retry = await request('POST', 'primary', first);
+  expect(retry.statusCode).toBe(200);
+  expect(retry.json()).toEqual(firstReceipt);
+  const saved = await storedBindings('primary');
+  expect(saved).toHaveLength(2);
+  for (const row of saved) {
+    expect(row.event.data).not.toHaveProperty('sourceRevision');
+  }
+}
+it('omits an irrelevant source revision from first and same-connection choices',
+  ignoresSourceForLocalChoice);
 
 async function createsFirstChatDefault(actor: string) {
   await connection('first', []);
@@ -340,17 +380,25 @@ async function createsFirstChatDefault(actor: string) {
   expect(await storedBindings('first')).toHaveLength(0);
   expect(await storedBindings('second')).toHaveLength(0);
 
-  const command = await chatDefaultCommand();
+  const command = await defaultCommand();
   const saved = await request('POST', 'second', command, actor);
   expect(saved.statusCode).toBe(200);
-  expect((await request('POST', 'second', command, actor)).json()).toEqual(saved.json());
-  const bindingSequence = saved.json<{ sequence: number }>().sequence;
+  const repeated = await request('POST', 'second', command, actor);
+  expect(repeated.statusCode).toBe(200);
+  const receipt = saved.json<{ sequence: number }>();
+  expect(repeated.json()).toEqual(receipt);
+  const bindingSequence = receipt.sequence;
   const read = await request('GET', 'first', undefined, actor);
-  expect(read.json()).toMatchObject({ rows: [], chatDefault: {
-    position: bindingSequence, sourceRevision: 3,
-  } });
+  const chatDefault = { position: bindingSequence, sourceRevision: 3 };
+  const dependencies = { rows: [], chatDefault };
+  expect(read.json()).toMatchObject(dependencies);
+  const models = { providerId: 'first', revision: 4, changedBy: 'owner', models: [chatModel] };
+  const enableFirst = { subject: 'provider-first', type: 'provider.models_selected', data: models };
+  const enabled = await appendAndAuthorise(enableFirst);
   const position = await nats.store.head();
+  await handler.handle(enabled, pgDb(dbs.queue));
   await handler.handle(trigger, pgDb(dbs.queue));
+  expect(await storedBindings('first')).toHaveLength(0);
   expect(await nats.store.head()).toBe(position);
   const savedBindings = await storedBindings('second');
   expect(savedBindings).toHaveLength(1);
@@ -360,15 +408,48 @@ async function createsFirstChatDefault(actor: string) {
 it.each(['owner', 'admin'])('lets the %s choose the second connection as the first chat default',
   createsFirstChatDefault);
 
-async function requiresAnAnswerAndEnabledModel() {
-  await connection('no-answer');
-  await refused('no-answer', await chatDefaultCommand());
-  await connection('no-models', []);
-  await answerChatModel('no-models');
-  await refused('no-models', await chatDefaultCommand());
+async function refusesDisabledChatModel() {
+  await connection('primary', ['gpt-6-luna']);
+  await answerChatModel('primary');
+  const command = await defaultCommand();
+  const response = await refused('primary', command);
+  expect(response.json()).toMatchObject({ reason: 'model_not_enabled' });
 }
-it('refuses a chat default without a model answer or an enabled chat model',
-  requiresAnAnswerAndEnabledModel);
+it('refuses an answered chat model when another model is enabled', refusesDisabledChatModel);
+
+async function competingFirstChoices() {
+  for (const providerId of ['first', 'second']) {
+    await connection(providerId);
+    await answerChatModel(providerId);
+  }
+  const first = await defaultCommand();
+  const second = await defaultCommand();
+  const appendOriginal = nats.store.append.bind(nats.store);
+  const bothReady = Promise.withResolvers<void>();
+  let arrivals = 0;
+  async function waitForBoth(command: AppendCommand) {
+    arrivals++;
+    if (arrivals === 2) {
+      bothReady.resolve();
+    }
+    await bothReady.promise;
+    return appendOriginal(command);
+  }
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementation(waitForBoth);
+  const requests = [request('POST', 'first', first), request('POST', 'second', second)];
+  const responses = await Promise.all(requests);
+  spy.mockRestore();
+  expect(responses.map(statusCode).sort()).toEqual([200, 409]);
+  const firstHistory = await storedBindings('first');
+  const secondHistory = await storedBindings('second');
+  expect([...firstHistory, ...secondHistory]).toHaveLength(1);
+}
+function statusCode(response: Awaited<ReturnType<typeof request>>) {
+  return response.statusCode;
+}
+it('saves just one default when two ready connections compete for the first choice',
+  competingFirstChoices);
 
 async function movesAutomaticChatDefault() {
   const { trigger } = await connection('first');
@@ -376,24 +457,27 @@ async function movesAutomaticChatDefault() {
   await handler.handle(trigger, pgDb(dbs.queue));
   const bindings = await storedBindings('first');
   const first = bindings[0];
-  if (!first) throw new Error('Expected the seeded default');
+  if (!first) {
+    throw new Error('Expected the seeded default');
+  }
   await connection('second');
   await answerChatModel('second');
 
-  const stale = await chatDefaultCommand();
+  const source = { expectedSourceRevision: 3 };
+  const stale = await defaultCommand(source);
   await refused('second', stale, 409);
-  const command = await chatDefaultCommand(first.sequence);
+  const overrides = { expectedBindingSequence: first.sequence, ...source };
+  const command = await defaultCommand(overrides);
   const wrongRevision = { ...command, expectedSourceRevision: 2 };
   await refused('second', wrongRevision, 409);
-  const move = { ...command, expectedSourceRevision: 3 };
-  const saved = await request('POST', 'second', move);
+  const saved = await request('POST', 'second', command);
   expect(saved.statusCode).toBe(200);
   const position = saved.json<{ sequence: number }>().sequence;
   const read = await request('GET', 'second');
-  expect(read.json()).toMatchObject({
-    chatDefault: { position },
-    rows: [{ kind: 'silo_default', providerId: 'second', previousBindingSequence: first.sequence }],
-  });
+  const row = { kind: 'silo_default', providerId: 'second',
+    previousBindingSequence: first.sequence, sourceRevision: 3 };
+  const dependencies = { chatDefault: { position }, rows: [row] };
+  expect(read.json()).toMatchObject(dependencies);
 }
 it('moves an already seeded default only with the current binding and source revision',
   movesAutomaticChatDefault);
@@ -454,6 +538,186 @@ async function targetManage() {
 }
 it('checks target management even when its creation receipt is applied', targetManage);
 
+async function defaultPermissionFault(fault: string) {
+  const source = await connection('source');
+  const target = await connection('target');
+  await answerChatModel('source');
+  await answerChatModel('target');
+  const initial = await defaultCommand();
+  const saved = await request('POST', 'source', initial);
+  expect(saved.statusCode).toBe(200);
+  const receipt = saved.json<{ sequence: number }>();
+  const subjects = fault.startsWith('source') ? source : target;
+  const providerId = fault.startsWith('source') ? 'source' : 'target';
+  if (fault.endsWith('manage')) {
+    await removeManage(providerId);
+    expect(await auth.applied(subjects.created.id)).toBe(true);
+  } else {
+    const silo = objectId('silo');
+    const creation = objectId('projection_event', subjects.created.id);
+    await removeTuple(silo, 'applied', creation);
+    expect(await auth.applied(subjects.created.id)).toBe(false);
+    const access = await auth.provider('owner', providerId, 'manage');
+    expect(access.allowed).toBe(true);
+  }
+  const positions = { expectedSourceRevision: 3, expectedBindingSequence: receipt.sequence };
+  const move = await defaultCommand(positions);
+  const response = await refused('target', move);
+  expect(response.json()).toMatchObject({ reason: 'permission_denied' });
+}
+it.each(['source manage', 'source receipt', 'target manage', 'target receipt'])(
+  'refuses a chat default move with only the %s missing', defaultPermissionFault);
+
+async function ownerRoleChange(next: 'member' | 'admin') {
+  const role = { memberId: 'owner', previousRole: 'owner', newRole: next, changedBy: 'admin' };
+  const change = { subject: 'member-owner', type: 'member.role_changed', data: role, apply: false };
+  await appendAndAuthorise(change);
+  const manage = await auth.provider('owner', 'primary', 'manage');
+  expect(manage.allowed).toBe(true);
+}
+
+async function refusesLostAdminRole() {
+  await connection('primary');
+  await answerChatModel('primary');
+  await ownerRoleChange('member');
+  const command = await defaultCommand();
+  const refusal = await refused('primary', command);
+  expect(refusal.json()).toMatchObject({ reason: 'permission_denied' });
+}
+it('refuses the chat default after role loss while IAM still grants provider management',
+  refusesLostAdminRole);
+
+async function refusesAuthorityStillApplying() {
+  await connection('primary');
+  await answerChatModel('primary');
+  await ownerRoleChange('admin');
+  const command = await defaultCommand();
+  const refusal = await refused('primary', command, 425);
+  expect(refusal.json()).toEqual({ status: 'access_applying' });
+}
+it('refuses a chat default before saving when membership is still applying',
+  refusesAuthorityStillApplying);
+
+async function refusesDefaultPosition(field: string) {
+  await connection('primary');
+  await answerChatModel('primary');
+  const command = await defaultCommand();
+  const stale = { ...command, [field]: 2 };
+  await refused('primary', stale, 409);
+  const saved = await request('POST', 'primary', command);
+  expect(saved.statusCode).toBe(200);
+}
+it.each(['expectedProviderSequence', 'expectedRevision'])(
+  'refuses the chat default with only %s stale', refusesDefaultPosition);
+
+async function refusesIdentityField(field: string, value: string) {
+  await connection('primary');
+  await answerChatModel('primary');
+  const command = await defaultCommand();
+  const supplied = { ...command, [field]: value };
+  await refused('primary', supplied, 400);
+  const saved = await request('POST', 'primary', command);
+  expect(saved.statusCode).toBe(200);
+}
+const suppliedIdentities = [['silo', 'acme'], ['dependantId', 'acme'], ['task', 'chat_turn']];
+it.each(suppliedIdentities)('refuses an explicit %s in a chat default command', refusesIdentityField);
+
+async function refusesFailedCurrentReachability() {
+  await connection('primary');
+  await answerChatModel('primary');
+  const latest = chatVerification('primary', { kind: 'reachability', outcome: 'fail' });
+  await appendAndAuthorise(latest);
+  const command = await defaultCommand();
+  const refusal = await refused('primary', command);
+  expect(refusal.json()).toMatchObject({ reason: 'connection_not_ready' });
+}
+it('refuses a chat default after a reachability failure even with an earlier reachability pass',
+  refusesFailedCurrentReachability);
+
+async function refusesLatestModelResult(outcome: 'fail' | 'pending') {
+  await connection('primary');
+  await answerChatModel('primary');
+  const latest = chatVerification('primary', { outcome });
+  await appendAndAuthorise(latest);
+  const command = await defaultCommand();
+  const refusal = await refused('primary', command);
+  expect(refusal.json()).toMatchObject({ reason: 'connection_not_ready' });
+}
+it.each(['fail', 'pending'] as const)('refuses a newer %s model test even after a passing answer',
+  refusesLatestModelResult);
+
+async function refusesRetiredDefault() {
+  await connection('primary');
+  await answerChatModel('primary');
+  const expectedProviderSequence = await nats.store.head('provider-*');
+  const data = { providerId: 'primary', revision: 3, changedBy: 'owner',
+    expectedProviderSequence, choices: [] };
+  const retirement = { subject: 'provider-primary', type: 'provider.retired', data };
+  await appendAndAuthorise(retirement);
+  const command = await defaultCommand();
+  const refusal = await refused('primary', command);
+  expect(refusal.json()).toMatchObject({ reason: 'connection_not_ready' });
+}
+it('refuses a retired chat connection with earlier passing checks', refusesRetiredDefault);
+
+async function refusesInvalidDefaultKey() {
+  await connection('primary');
+  const commandId = 'foreign-key';
+  const data = { providerId: 'primary', changedBy: 'owner', revision: 4,
+    secretRef: providerSecretRef('foreign', 'primary', commandId) };
+  const key = { subject: 'provider-primary', type: 'provider.key_saved', data, commandId };
+  await appendAndAuthorise(key);
+  const reachability = chatVerification('primary', { revision: 4, kind: 'reachability' });
+  await appendAndAuthorise(reachability);
+  const answer = chatVerification('primary', { revision: 4 });
+  await appendAndAuthorise(answer);
+  const command = await defaultCommand({ expectedRevision: 4 });
+  const refusal = await refused('primary', command);
+  expect(refusal.json()).toMatchObject({ reason: 'connection_not_ready' });
+}
+it('refuses a tested chat default using a key reference from another silo',
+  refusesInvalidDefaultKey);
+
+async function refusesUnsupportedDefaultModel(model: string) {
+  await connection('primary', [model]);
+  const answer = chatVerification('primary', { model });
+  await appendAndAuthorise(answer);
+  const command = await defaultCommand({ model });
+  const refusal = await refused('primary', command);
+  expect(refusal.json()).toMatchObject({ reason: 'model_not_enabled' });
+}
+it.each(['made-up', 'gpt-5-nano'])('refuses enabled but unsupported chat model %s',
+  refusesUnsupportedDefaultModel);
+
+async function refusesUnsupportedDefaultProvider() {
+  await connection('primary', [chatModel], 'anthropic');
+  await answerChatModel('primary');
+  const command = await defaultCommand();
+  const refusal = await refused('primary', command);
+  expect(refusal.json()).toMatchObject({ reason: 'connection_not_ready' });
+}
+it('refuses a tested provider kind that cannot serve member chats',
+  refusesUnsupportedDefaultProvider);
+
+async function refusesChangedDefaultRetry(field: string) {
+  await connection('primary', [chatModel, 'gpt-6-luna']);
+  await answerChatModel('primary');
+  const command = await defaultCommand();
+  const saved = await request('POST', 'primary', command);
+  expect(saved.statusCode).toBe(200);
+  if (field === 'actor') {
+    await refused('primary', command, 409, 'admin');
+  } else {
+    const changed = { ...command, model: 'gpt-6-luna' };
+    await refused('primary', changed, 409);
+  }
+  const repeated = await request('POST', 'primary', command);
+  expect(repeated.statusCode).toBe(200);
+  expect(repeated.json()).toEqual(saved.json());
+}
+it.each(['actor', 'model'])('refuses a chat default retry with only the %s changed',
+  refusesChangedDefaultRetry);
+
 async function wrongKey(commandMismatch: boolean) {
   await connection('primary');
   const commandId = 'replacement-key';
@@ -507,9 +771,10 @@ async function wrongPauseProvider() {
 }
 it('refuses a pause naming a different provider even with both revisions correct', wrongPauseProvider);
 
-async function finalAuthority(expired: boolean, retry = false) {
+async function finalAuthority(expired: boolean, retry = false, chooseDefault = false) {
   await connection('primary');
-  const command = await input();
+  await answerChatModel('primary');
+  const command = chooseDefault ? await defaultCommand() : await input();
   if (retry) {
     expect((await request('POST', 'primary', command)).statusCode).toBe(200);
   }
@@ -535,7 +800,10 @@ async function finalAuthority(expired: boolean, retry = false) {
   }
   const authoritySpy = vi.spyOn(authorisation, 'memberAuthorisation');
   authoritySpy.mockImplementation(interruptAfterManage);
-  expect((await request('POST', 'primary', command)).statusCode).toBe(503);
+  const before = await nats.store.head('provider-*');
+  const response = await request('POST', 'primary', command);
+  expect(response.statusCode).toBe(503);
+  expect(await nats.store.head('provider-*')).toBe(before);
   expect(await storedBindings('primary')).toHaveLength(retry ? 1 : 0);
   if (expired || retry) {
     function bindingAppend(call: [AppendCommand]) {
@@ -557,6 +825,13 @@ async function retryAuthority(expired: boolean) {
   await finalAuthority(expired, true);
 }
 it.each([false, true])('rechecks authority on an identical retry when expired: %s', retryAuthority);
+
+async function rechecksDefaultAuthority(expired: boolean, retry: boolean) {
+  await finalAuthority(expired, retry, true);
+}
+const authorityCases = [[true, false], [false, false], [true, true], [false, true]] as const;
+it.each(authorityCases)('rechecks chat default authority (expired: %s, retry: %s)',
+  rechecksDefaultAuthority);
 
 async function failedAppend(status: 'unavailable' | 'rejected') {
   await connection('primary');
@@ -699,6 +974,7 @@ async function reactionEnabled() {
 it('waits for the first verified provider to enable the chat model', reactionEnabled);
 async function pausedReplay() {
   const { trigger } = await connection('primary');
+  await answerChatModel('primary');
   const selectedOverrides = { kind: 'silo_default', dependantId: 'acme' };
   const selected = await input(selectedOverrides);
   const saved = await request('POST', 'primary', selected);

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { TestBed } from '@angular/core/testing';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ProviderChat } from './provider-chat';
+import { findButton, fixtureElement, requiredButton } from './models-testing';
 
 const provider = { providerId: 'primary', provider: 'openai' as const, name: 'Primary',
   revision: 2, position: 7, enabledModels: ['gpt-6.1-sol'], status: 'ready' };
@@ -55,9 +56,7 @@ async function switchesOnThroughCheckedCommands(historyChanges: boolean) {
   expect(requests[2]?.path).toBe('/api/org/providers/primary/switch-on');
   expect(requests).toHaveLength(3);
   fixture.detectChanges();
-  const element: unknown = fixture.nativeElement;
-  expect(element).toBeInstanceOf(HTMLElement);
-  if (!(element instanceof HTMLElement)) throw new Error('Expected a chat setup element');
+  const element = fixtureElement(fixture);
   expect(element.textContent).toContain('Member chats switched on');
 }
 
@@ -143,8 +142,7 @@ async function defaultCannotBeRead(statuses: number[], message: string): Promise
   fixture.detectChanges();
   await fixture.componentInstance.selectDefault();
   fixture.detectChanges();
-  const element: unknown = fixture.nativeElement;
-  if (!(element instanceof HTMLElement)) throw new Error('Expected a chat setup element');
+  const element = fixtureElement(fixture);
   expect(element.querySelector('[role=status]')?.textContent).toContain(message);
   expect(reads).toEqual(Array<string>(statuses.length).fill('/api/org/providers/primary/bindings'));
   expect(writes).toEqual([]);
@@ -168,18 +166,143 @@ async function explainsMissingModelAnswer(): Promise<void> {
   const untested = { ...provider, status: 'connected_not_tested' };
   fixture.componentRef.setInput('provider', untested);
   fixture.detectChanges();
-  const element: unknown = fixture.nativeElement;
-  if (!(element instanceof HTMLElement)) throw new Error('Expected a chat setup element');
-  function isSelect(button: HTMLButtonElement) {
-    return button.textContent?.trim() === 'Select chat default';
-  }
-  const buttons = Array.from(element.querySelectorAll('button'));
-  const select = buttons.find(isSelect);
-  if (!select) throw new Error('Expected a chat default button');
+  const element = fixtureElement(fixture);
+  const select = requiredButton(element, 'Select chat default');
   expect(select.disabled).toBe(true);
   expect(element.textContent).toContain('Open this connection and run the priced test');
-  select.click();
-  await fixture.whenStable();
+  expect(findButton(element, 'Pause new calls')).toBeUndefined();
+  await fixture.componentInstance.selectDefault();
+  await fixture.componentInstance.startDrain();
+  await fixture.componentInstance.switchOn();
   expect(fetchReply).not.toHaveBeenCalled();
 }
 it('shows how to finish verification before selecting a default', explainsMissingModelAnswer);
+
+function drainReply(draining = false, enabled = false): Response {
+  const status = { revision: 2, sequence: 8, expectedProviderSequence: 8, draining, enabled };
+  return new Response(JSON.stringify(status));
+}
+
+function bindingPositions(): Response {
+  const status = { expectedProviderSequence: 7, chatDefault: null };
+  return new Response(JSON.stringify(status));
+}
+
+function savedChoice(): Response {
+  const receipt = { status: 'appended', revision: 2, sequence: 8 };
+  return new Response(JSON.stringify(receipt));
+}
+
+async function recoversChatDefault(definite: boolean) {
+  const commands: string[] = [];
+  const statusReads: string[] = [];
+  let recorded = false;
+  async function fetchReply(input: RequestInfo | URL, options?: RequestInit) {
+    const path = requestPath(input);
+    if (options?.method === 'POST') {
+      const body = JSON.parse(String(options.body)) as { commandId: string };
+      commands.push(body.commandId);
+      if (commands.length > 1) {
+        return savedChoice();
+      }
+      if (definite) {
+        return new Response('{"status":"access_applying"}', { status: 425 });
+      }
+      throw new TypeError('Connection lost after sending the request');
+    }
+    if (path.includes('/changes/')) {
+      statusReads.push(path);
+      return recorded ? savedChoice() : new Response('{}', { status: 404 });
+    }
+    return path.endsWith('/bindings') ? bindingPositions() : drainReply();
+  }
+  vi.stubGlobal('fetch', fetchReply);
+  const fixture = TestBed.createComponent(ProviderChat);
+  fixture.componentRef.setInput('provider', provider);
+  fixture.detectChanges();
+  const chat = fixture.componentInstance;
+  const element = fixtureElement(fixture);
+  await chat.selectDefault();
+  fixture.detectChanges();
+  if (definite) {
+    expect(element.textContent).toContain('Your access is still being updated');
+    expect(requiredButton(element, 'Select chat default').disabled).toBe(false);
+    await chat.checkStatus();
+    expect(statusReads).toHaveLength(0);
+  } else {
+    expect(element.textContent).toContain('Outcome unknown.');
+    expect(requiredButton(element, 'Select chat default').disabled).toBe(true);
+    await chat.checkStatus();
+    await chat.selectDefault();
+    expect(commands).toHaveLength(1);
+    const original = '/api/org/providers/primary/changes/' + commands[0];
+    expect(statusReads).toEqual([original]);
+    recorded = true;
+    await chat.checkStatus();
+    expect(statusReads).toEqual([original, original]);
+  }
+  await chat.selectDefault();
+  expect(commands).toHaveLength(2);
+  expect(commands[0]).not.toEqual(commands[1]);
+  fixture.detectChanges();
+  expect(element.textContent).toContain('Chat default saved.');
+}
+it('unlocks a definite 425 without looking for a receipt', recoversChatDefault.bind(null, true));
+it('checks the original receipt after a lost default reply', recoversChatDefault.bind(null, false));
+
+async function explainsDefaultRefusal(reason: string, message: string) {
+  function fetchReply(_input: RequestInfo | URL, options?: RequestInit) {
+    const refusal = { status: 'refused', reason };
+    const response = options?.method === 'POST'
+      ? new Response(JSON.stringify(refusal), { status: 403 })
+      : bindingPositions();
+    return Promise.resolve(response);
+  }
+  vi.stubGlobal('fetch', fetchReply);
+  const fixture = TestBed.createComponent(ProviderChat);
+  fixture.componentRef.setInput('provider', provider);
+  fixture.detectChanges();
+  await fixture.componentInstance.selectDefault();
+  fixture.detectChanges();
+  expect(fixtureElement(fixture).textContent).toContain(message);
+}
+const refusals = [
+  ['permission_denied', 'You need permission to manage the connections for this choice.'],
+  ['connection_not_ready', 'This connection is not ready for member chats.'],
+  ['model_not_enabled', 'Choose a supported model enabled on this connection.'],
+];
+it.each(refusals)('explains the chat default refusal %s', explainsDefaultRefusal);
+
+async function readyActions(draining: boolean, enabled: boolean) {
+  let choices = 0;
+  function fetchReply(input: RequestInfo | URL, options?: RequestInit) {
+    const path = requestPath(input);
+    if (options?.method === 'POST') {
+      expect(path).toMatch(/\/backup\/bindings$/);
+      choices++;
+      return Promise.resolve(savedChoice());
+    }
+    const response = path.endsWith('/bindings') ? bindingPositions() : drainReply(draining, enabled);
+    return Promise.resolve(response);
+  }
+  vi.stubGlobal('fetch', fetchReply);
+  const fixture = TestBed.createComponent(ProviderChat);
+  const backup = { ...provider, providerId: 'backup', name: 'Backup' };
+  fixture.componentRef.setInput('provider', backup);
+  fixture.detectChanges();
+  await fixture.componentInstance.checkStatus();
+  fixture.detectChanges();
+  const element = fixtureElement(fixture);
+  expect(requiredButton(element, 'Select chat default').disabled).toBe(false);
+  if (enabled) {
+    expect(findButton(element, 'Pause new calls')).toBeUndefined();
+    expect(findButton(element, 'Switch on member chats')).toBeUndefined();
+  } else {
+    expect(requiredButton(element, 'Pause new calls').disabled).toBe(draining);
+    expect(requiredButton(element, 'Switch on member chats').disabled).toBe(!draining);
+  }
+  await fixture.componentInstance.selectDefault();
+  expect(choices).toBe(1);
+}
+const setupStages = [[false, false], [true, false], [false, true]] as const;
+it.each(setupStages)('offers ready actions when draining: %s, enabled: %s', readyActions);
