@@ -310,11 +310,35 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
     } else {
       assert.ok(result.stderr.includes(`Error: ${expected}\n`), result.stderr);
     }
+    if (fixture.failComputerPull) await checkComputerPullRefusal(directory, calls);
     if (renders) await checkRenderedDatabase(directory, fixture, callText);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+async function checkComputerPullRefusal(directory, calls) {
+  const installer = calls.find(installCall);
+  assert.ok(installer, 'Helm runs the pre-install Job');
+  assert.equal(installer.args.includes('--no-hooks'), false);
+  assert.equal(calls.some(patchesComputerGateway), false);
+  assert.equal(calls.some(usesBootstrapJob), false);
+  for (const call of calls) assert.equal(call.args.includes('rollout'), false);
+  const owner = JSON.parse(await readFile(`${directory}/package-owner.json`, 'utf8'));
+  assert.equal(owner.releaseSecretUid, 'installed', 'Cleanup can remove the failed release');
+}
+
+async function refusesFailedComputerPull() {
+  const fixture = validFixture();
+  fixture.values.postgres = { mode: 'standalone' };
+  fixture.install = true;
+  fixture.failComputerPull = true;
+  await runFixture(fixture, 'Computer image pre-pull failed. Check the Job and its Pod events.', true);
+}
+
+test('a failed computer image pull stops the install before it checks readiness',
+  refusesFailedComputerPull);
+
 const cases = [
   ['missing API', ['api'], {}],
   ['wrong API', ['api', 'groupVersion'], 'postgresql.cnpg.io/v2'],

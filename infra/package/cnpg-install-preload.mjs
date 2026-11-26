@@ -105,6 +105,14 @@ function execute(program, args, options, callback) {
       assert.deepEqual(JSON.parse(readFileSync(valuesPath, 'utf8')), fixture.values);
       if (args[0] === 'install') {
         installed = true;
+        if (fixture.failComputerPull) {
+          const failure = 'Error: INSTALLATION FAILED: failed pre-install: 1 error occurred:\n' +
+            '\t* job computer-image-prepull-0123456789ab failed: DeadlineExceeded\n';
+          const error = new Error(fixture.canary);
+          error.stderr = failure;
+          callback(error, '', failure);
+          return;
+        }
         callback(null, '', '');
         return;
       }

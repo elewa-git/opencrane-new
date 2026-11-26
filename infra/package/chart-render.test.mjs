@@ -119,6 +119,37 @@ function renderedResources(values, flags = []) {
   return resources;
 }
 
+function checkComputerImagePull(values, flags, hook) {
+  const resources = renderedResources(values, flags);
+  const computer = resources.get('SandboxTemplate/computer').spec.podTemplate.spec;
+  const job = resources.get('Job/computer-image-prepull');
+  assert.ok(job, 'Render a Job that pulls the computer image before applying workloads');
+  const hooks = job.metadata.annotations['helm.sh/hook'].split(',');
+  assert.ok(hooks.includes(hook), `Helm must wait for the Job during ${hook}`);
+  const puller = job.spec.template.spec;
+  assert.equal(puller.containers[0].image, values.images.computer);
+  assert.equal(puller.containers[0].image, computer.containers[0].image);
+  assert.equal(puller.containers[0].imagePullPolicy, computer.containers[0].imagePullPolicy);
+  assert.equal(puller.runtimeClassName, computer.runtimeClassName);
+  assert.equal(puller.automountServiceAccountToken, false);
+  assert.equal(puller.restartPolicy, 'Never');
+  assert.equal(job.spec.backoffLimit, 0);
+  assert.ok(job.spec.activeDeadlineSeconds > 0, 'An unavailable image must fail the Job');
+}
+
+function pullsOnInstall() {
+  checkComputerImagePull(chartValues(), [], 'pre-install');
+}
+
+function pullsOnUpgrade() {
+  const values = chartValues();
+  values.images.computer = `example.invalid/computer@sha256:${'b'.repeat(64)}`;
+  checkComputerImagePull(values, ['--is-upgrade'], 'pre-upgrade');
+}
+
+test('the chart pulls the pinned computer image before install', pullsOnInstall);
+test('the chart pulls the new pinned computer image before upgrade', pullsOnUpgrade);
+
 function dispatcherCpuBudget() {
   const resources = renderedResources(chartValues());
   const dispatcher = resources.get('Deployment/worker-dispatcher');
