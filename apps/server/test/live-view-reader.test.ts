@@ -51,6 +51,9 @@ async function expectUpgradeRefusal(socket: WebSocket) {
     refused.resolve(reply.statusCode);
     reply.resume();
   });
+  socket.once('open', function accepted() {
+    refused.resolve(101);
+  });
   socket.once('error', refused.reject);
   try {
     expect(await refused.promise).toBe(403);
