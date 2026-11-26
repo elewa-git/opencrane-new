@@ -4,8 +4,7 @@
 
 This package starts a full local copy of OpenCrane for development and testing.
 It brings the apps and services together and checks product journeys.
-The checks use a browser to sign in, skip setup for a fresh test member, chat and
-reload saved replies.
+The browser checks sign in, skip setup for a test member, chat and reload replies.
 Developers can also check files, spending and organisation settings.
 The focused tool approval driver asks the free model to use a reviewed demo tool
 in a long chat, through the published connection and guarded local TLS transport.
