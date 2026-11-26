@@ -79,6 +79,25 @@ async function skipsCustodyPort() { await claimSkipsHeldPort(25114); }
 test('claim skips a slot with a held port and leaves it unclaimed', skipsModelPort);
 test('claim checks the custody proxy port before reserving a slot', skipsCustodyPort);
 
+async function busyRequestedSlotDoesNotFallBack() {
+  const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-one-slot-`);
+  const bin = `${home}/bin`;
+  await mkdir(bin);
+  await mockKubectl(bin);
+  await mockFlock(bin);
+  const docker = `${bin}/docker`;
+  await writeFile(docker, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  try {
+    const env = claimEnvironment(home, 25110);
+    const result = exec('infra/dev-stack/claim.sh', ['--id', '1'], { env });
+    await assert.rejects(result);
+    await assert.rejects(stat(`${home}/stack-2.lock`), { code: 'ENOENT' });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}
+test('a requested slot refuses when busy without trying the other slot', busyRequestedSlotDoesNotFallBack);
+
 test('status leaves a free slot alone and claim reuses this worktree slot', async () => {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-repeat-`);
   const bin = `${home}/bin`;
