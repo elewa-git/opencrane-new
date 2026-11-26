@@ -336,7 +336,8 @@ changes grant no image approval; use only exact-source CI-approved images to ins
 
 ## Packaged upload services
 
-`files.yaml` runs one MinIO StatefulSet with a 5 GiB claim and one scanner Pod.
+`files.yaml` runs one MinIO StatefulSet with a 5 GiB claim and one scanner Deployment.
+The Deployment starts one replacement Pod before it takes the old one offline.
 The scanner Pod copies exactly three databases from its pinned engine image.
 Both production launch paths use the fixed settings in `chart/scanner.conf`.
 Both the engine and HTTPS wrapper mount that copy read-only. The engine listens
@@ -380,12 +381,13 @@ by this publisher; it transfers only the selected bytes. A missing or changed
 blob refuses before its manifest can be published.
 
 Preparation creates separate `objects` and `scanner` Secrets. The scanner Secret
-contains its TLS key/certificate, public issuer trust, manifest and release.
-An init container copies those projected Secret entries into regular files on a
-memory-backed volume. The wrapper keeps strict symlink rejection when it reads them.
-The server receives only the CA and approved manifest digest alongside its existing
-trusted ES256 issuer. It uses `https://scanner:8443/scan/upload`, with normal CA and
-hostname verification, request bindings and a fresh short-lived pass per scan.
+contains its TLS key and certificate, public issuer trust and initial release files.
+An init container copies the TLS and release files into regular files on a
+memory-backed volume. The wrapper still refuses symlinks when it reads them.
+The server receives the scanner CA and mounts `approved-manifests` from the
+`scanner-config` ConfigMap. It reads that file for each scan. It uses
+`https://scanner:8443/scan/upload`, with normal CA and hostname verification,
+request bindings and a fresh short-lived pass per scan.
 
 Only the storage credential sidecar mounts the object-store provisioning identity.
 It creates the private `files` bucket and issues a fresh 15-minute STS credential
@@ -399,6 +401,47 @@ server, and refuses after expiry. Restarting the sidecar can issue a new lease.
 Failures keep only a fixed message and structured cause classification; upstream
 messages, response bodies and cancellation reasons are discarded.
 The server receives no provisioning credential.
+
+### Daily scanner refresh
+
+The orchestrator runs this command from the worktree that owns the installed slot.
+Run it twice each day, for example at 00:00 and 12:00 UTC. The 24-hour limit starts
+when CI checks the virus list. A full day between refreshes can leave a gap.
+It uses the existing authenticated GitHub CLI and the recorded Kubernetes target.
+The scanner itself has no GitHub or Kubernetes credentials.
+
+```sh
+infra/dev-stack/run.sh package-refresh-scanner --id "$DEV_STACK_ID"
+```
+
+GitHub runs scanner packaging every six hours. The command uses the newest
+successful scanner run on this repository's `main` branch. The exact commit,
+image digest and manifest hash must all match the approved run. A build older
+than the active scanner is skipped. If the operator has an expected digest pin,
+`--image IMAGE@sha256:DIGEST` requires it to match the selected approval.
+
+The command checks the owning slot and Helm release. It verifies and publishes
+the exact image bytes before changing anything in Kubernetes. It adds the
+checked release files to the scanner ConfigMap and waits for the server to see
+both manifest hashes in its read-only file. The scanner Deployment then changes
+the engine image, its database copy, the hash and the matching release files
+together. The HTTPS wrapper image, TLS key, trust settings and other workloads
+stay in place. The server accepts both checked hashes during this change. After
+the replacement is ready, the command removes the previous hash and release files
+from the ConfigMap. If that cleanup fails, the previous approval still expires
+at its original time, and the command reports that cleanup is pending.
+
+The task log gives `PASS` with the active pin, manifest hash, last virus list check
+and the GitHub run considered. A refusal exits non-zero and names the failed step. An image
+that fails approval or publication never changes the running scanner. If the new
+Pod fails to become ready, the command restores the previous pins. If Kubernetes
+cannot confirm the restore, the report says so. An expired scanner refuses uploads
+even if a later refresh fails.
+
+This command requires an install running the server and chart that mount the
+approval file. Older installs have one fixed manifest hash in the server's
+environment and need a one-time server and chart update before scanner-only
+refreshes can work.
 The installer waits for the object store and scanner as well as the existing apps.
 
 `Objects.Dockerfile` copies only the static MinIO binary and reviewed source notices;

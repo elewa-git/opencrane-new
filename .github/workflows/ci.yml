@@ -181,7 +181,8 @@ jobs:
           infra/package/company-qualification.test.ts
           infra/package/nats-placement.test.ts
           infra/package/nats-placement-collect.test.ts
-          infra/package/chart-render.test.mjs infra/package/provider-secrets.test.mjs
+          infra/package/chart-render.test.mjs infra/package/file-services.test.mjs
+          infra/package/provider-secrets.test.mjs
           infra/package/model-settings.test.ts infra/package/runtime-context.test.mjs
           infra/package/web-page.test.mjs infra/package/web-proxy.test.mjs
           infra/package/prepare-nats-routes.test.mjs infra/package/cnpg-install.test.mjs
@@ -192,8 +193,10 @@ jobs:
           infra/package/pilot-route.test.ts infra/package/pilot-archive-import.test.ts
           infra/vm/bootstrap.test.mjs
 
-      - name: Check application approval and signed-index refusals
-        run: nice -n 10 python3 infra/package/check-application.test.py
+      - name: Check image approvals and digest publication
+        run: |
+          nice -n 10 python3 infra/package/check-application.test.py
+          nice -n 10 python3 infra/package/publish-image.test.py
 
       - name: Check the budget editor and ownership controls in Chromium
         if: needs.select.outputs.mode != 'docs'

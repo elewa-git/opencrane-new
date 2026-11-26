@@ -86,6 +86,13 @@ record the Helm revision to return to. After the update, check that a member
 can sign in and open a saved chat and upload. Check that the next scheduled
 backup uses the new image and can be restored into an empty installation.
 
+## Refresh the upload scanner
+
+The orchestrator runs the [scanner refresh command](README.robot.md#daily-scanner-refresh)
+twice a day from the worktree that owns the package. The task log shows the latest
+result and the active scanner pin. The checked virus list expires after 24 hours.
+The command needs a package installed with the server's read-only approval file.
+
 ## Roll back to the demo
 
 If sign-in, access or a reply fails, stop sending invitations and follow the

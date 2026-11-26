@@ -227,7 +227,7 @@ export async function packageConnectionArgs(owner: PackageOwner, limits: Command
   return { args, environment };
 }
 
-async function ownedKubectl(owner: PackageOwner, args: string[], timeoutMs?: number,
+export async function ownedKubectl(owner: PackageOwner, args: string[], timeoutMs?: number,
   signal?: AbortSignal, deadline?: number) {
   // Keep dispatch delays and ownership checks inside the caller's original time limit.
   const limits: CommandLimits = { deadline: deadline ?? Date.now() + (timeoutMs ?? 120_000) };
@@ -480,7 +480,7 @@ function requireOwnedRelease(secret: ReleaseSecret | undefined, owner: PackageOw
   }
 }
 
-async function checkedRelease() {
+export async function checkedRelease() {
   const owner = await verifyPackageOwner();
   const uid = await ownedReleaseSecretUid(owner);
   if (!uid || uid !== owner.releaseSecretUid) {

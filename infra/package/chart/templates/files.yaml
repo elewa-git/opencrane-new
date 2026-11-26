@@ -3,6 +3,7 @@ kind: ConfigMap
 metadata:
   name: scanner-config
 data:
+  approved-manifests: {{ printf "sha256:%s\n" .Values.scanner.approvedSha | quote }}
   package.conf: |
 {{ .Files.Get "scanner.conf" | indent 4 }}
 ---
@@ -66,6 +67,9 @@ metadata:
   name: scanner
 spec:
   replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
   selector:
     matchLabels: { app: scanner }
   template:
@@ -155,7 +159,19 @@ spec:
         - name: evidence
           emptyDir: { medium: Memory }
         - name: evidence-source
-          secret: { secretName: {{ .Values.secrets.scanner | quote }} }
+          projected:
+            sources:
+              - secret:
+                  name: {{ .Values.secrets.scanner | quote }}
+                  items:
+                    - { key: server.key, path: server.key }
+                    - { key: server.crt, path: server.crt }
+                    - { key: trust.json, path: trust.json }
+              - secret:
+                  name: {{ .Values.secrets.scanner | quote }}
+                  items:
+                    - { key: signatures.json, path: signatures.json }
+                    - { key: release.json, path: release.json }
         - name: temporary
           emptyDir: { medium: Memory, sizeLimit: 64Mi }
 ---

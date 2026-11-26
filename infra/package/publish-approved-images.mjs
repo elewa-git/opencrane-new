@@ -1,27 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { isIP } from 'node:net';
 import { join } from 'node:path';
 import { fetchApplicationApproval } from './application-approval.mjs';
 import { fetchScannerApproval } from '../clamav/approval.mjs';
 
-const commandOptions = { encoding: 'utf8', timeout: 120_000,
-  stdio: ['ignore', 'pipe', 'pipe'] };
-
-function developmentRegistryAddress() {
-  const inspection = execFileSync('docker', ['inspect', 'k3d-ocn-registry'], commandOptions);
-  const registry = JSON.parse(inspection)[0];
-  const address = registry.NetworkSettings.Networks['k3d-ocn'].IPAddress;
-  if (isIP(address) !== 4) throw new Error('Development registry address is absent');
-  return address;
-}
-
-function publishImage(source, filename, image) {
-  const address = developmentRegistryAddress();
-  const args = [join(import.meta.dirname, 'publish-image.py'),
-    join(source, filename), `http://${address}:5000`, image];
-  execFileSync('python3', args, commandOptions);
-}
+import { publishPackageImage } from './publish-package-image.mjs';
 
 async function publishApproval(directory, name, fetchApproval) {
   const parent = join(directory, `${name}-approval`);
@@ -31,7 +14,7 @@ async function publishApproval(directory, name, fetchApproval) {
   const archive = `${name}.tar`;
   try {
     const approval = await fetchApproval(destination, true);
-    publishImage(destination, archive, approval.image);
+    publishPackageImage(join(destination, archive), approval.image);
     return { ...approval, destination };
   } finally {
     await rm(join(destination, archive), { force: true });

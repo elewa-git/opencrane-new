@@ -32,20 +32,30 @@ function approvedRun(revision, branch, name) {
   const workflow = `.github/workflows/${name}-package.yml`;
   // GitHub can omit a successful run when the listing uses status=success.
   // Check each returned run's status and exact source below instead.
+  const exactRevision = revision === undefined ? '' : `&head_sha=${revision}`;
   const query = `repos/${repository}/actions/workflows/${name}-package.yml/runs` +
-    `?head_sha=${revision}&branch=${encodeURIComponent(branch)}&per_page=20`;
+    `?branch=${encodeURIComponent(branch)}&per_page=20${exactRevision}`;
   const result = JSON.parse(run('gh', ['api', '--hostname=github.com', query]));
   for (const candidate of result.workflow_runs) {
     if (candidate.status !== 'completed' || candidate.conclusion !== 'success') continue;
     if (!['push', 'schedule', 'workflow_dispatch'].includes(candidate.event)) continue;
-    if (candidate.path !== workflow || candidate.head_sha !== revision ||
-        candidate.head_branch !== branch) continue;
+    if (candidate.path !== workflow || candidate.head_branch !== branch) continue;
+    if (!/^[a-f0-9]{40}$/.test(candidate.head_sha) ||
+        (revision !== undefined && candidate.head_sha !== revision)) continue;
     if (candidate.repository?.full_name !== repository ||
         candidate.head_repository?.full_name !== repository) continue;
     requireApproval(Number.isSafeInteger(candidate.id) && candidate.id > 0);
     return candidate;
   }
   throw new Error(refusal);
+}
+
+function approvalSource(upstream) {
+  if (upstream) return { branch: 'main' };
+  const revision = run('git', ['rev-parse', 'HEAD']);
+  const branch = run('git', ['branch', '--show-current']);
+  requireApproval(/^[a-f0-9]{40}$/.test(revision) && branch.length > 0);
+  return { revision, branch };
 }
 
 function download(runId, name, directory) {
@@ -64,9 +74,7 @@ export async function fetchCiApproval(options) {
     // Refuse inherited enterprise routing before any credential leaves this process.
     for (const setting of enterpriseSettings) requireApproval(process.env[setting] === undefined);
     stage = 'checkout';
-    const revision = run('git', ['rev-parse', 'HEAD']);
-    const branch = run('git', ['branch', '--show-current']);
-    requireApproval(/^[a-f0-9]{40}$/.test(revision) && branch.length > 0);
+    const { revision, branch } = approvalSource(options.upstream);
     stage = 'metadata';
     const job = approvedRun(revision, branch, name);
     stage = 'approval_download';
@@ -74,7 +82,7 @@ export async function fetchCiApproval(options) {
     stage = 'approval';
     const bytes = await readBoundedBytes(join(directory, 'approval.json'), 1024);
     const approval = JSON.parse(bytes.toString('utf8'));
-    requireApproval(approval.runId === job.id && approval.revision === revision);
+    requireApproval(approval.runId === job.id && approval.revision === job.head_sha);
     stage = options.validationStage ?? 'approval';
     const result = await validate(approval, directory);
     stage = 'image_download';

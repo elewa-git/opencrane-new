@@ -39,14 +39,14 @@ async function approvalFixture() {
   return { directory, image, ...fixture };
 }
 
-function setup(run, files, checkout = {}) {
+function setup(run, files, checkout = {}, candidates = [run]) {
   function execute(program, args) {
     if (program === 'git') {
       if (args.includes('HEAD')) return (checkout.revision ?? revision) + '\n';
       return (checkout.branch ?? 'work/pilot-15-s1') + '\n';
     }
     expect(program).toBe('gh');
-    if (args[0] === 'api') return JSON.stringify({ workflow_runs: [run] });
+    if (args[0] === 'api') return JSON.stringify({ workflow_runs: candidates });
     expect(args.slice(0, 3)).toEqual(['run', 'download', String(run.id)]);
     const directory = args[args.indexOf('--dir') + 1];
     for (const [name, bytes] of Object.entries(files)) {
@@ -61,6 +61,34 @@ async function loadApproval(includeImage = false) {
   const module = await import('../infra/clamav/approval.mjs');
   return module.fetchScannerApproval(undefined, includeImage);
 }
+
+async function readNewestMainApproval() {
+  const fixture = await approvalFixture();
+  try {
+    const { fetchLatestScannerApproval } = await import('../infra/clamav/approval.mjs');
+    const main = { ...fixture.run, head_branch: 'main', head_sha: 'c'.repeat(40) };
+    const foreign = { ...main, id: 43, head_repository: { full_name: 'elsewhere/opencrane' } };
+    const failed = { ...main, id: 44, conclusion: 'failure' };
+    const candidates = [foreign, failed, fixture.run, main];
+    setup(main, fixture.files, {}, candidates);
+    await expect(fetchLatestScannerApproval(fixture.directory)).rejects.toThrow(
+      'Scanner CI approval refused',
+    );
+    fixture.approval.revision = main.head_sha;
+    fixture.files['approval.json'] = JSON.stringify(fixture.approval);
+    setup(main, fixture.files, {}, candidates);
+    const result = await fetchLatestScannerApproval(fixture.directory);
+    expect(result).toMatchObject({ image: fixture.image, runId: main.id });
+    const calls = vi.mocked(execFileSync).mock.calls;
+    for (const [program] of calls) expect(program).toBe('gh');
+    expect(calls[0][1][2]).toContain('branch=main');
+    expect(calls.at(-1)[1]).toContain('scanner-image');
+  } finally {
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+}
+test('daily refresh selects the newest successful upstream run and checks its exact source',
+  readNewestMainApproval);
 
 for (const field of ['status', 'conclusion', 'event', 'path', 'head_branch', 'head_sha',
   'repository', 'head_repository']) {

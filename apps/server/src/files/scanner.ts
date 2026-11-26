@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { FileUnavailable } from './refusals.ts';
 
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/u);
+const approvedDigests = z.array(digest).min(1).max(2);
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/u);
 const date = z.iso.datetime();
 const database = z.strictObject({
@@ -25,6 +26,7 @@ interface ScannerSettings {
   privateKeyPath: string | undefined;
   issuer: string | undefined;
   manifestDigest?: string | undefined;
+  approvedManifestFile?: string | undefined;
   silo: string;
 }
 interface UploadBinding { silo: string; fileId: string }
@@ -40,6 +42,15 @@ function requireFreshDatabase(now: number, updated: number, expires: number) {
   requireScan(now < databaseExpiry && expires <= databaseExpiry);
 }
 
+async function approvedManifests(settings: ScannerSettings) {
+  if (settings.approvedManifestFile === undefined) {
+    return [digest.parse(settings.manifestDigest)];
+  }
+  const contents = await readFile(settings.approvedManifestFile, 'utf8');
+  const text = contents.trimEnd();
+  return approvedDigests.parse(text.split('\n'));
+}
+
 export async function scanFile(settings: ScannerSettings, bytes: Buffer, binding: UploadBinding) {
   const controller = new AbortController();
   function expire() {
@@ -51,8 +62,8 @@ export async function scanFile(settings: ScannerSettings, bytes: Buffer, binding
   const input = { ...binding, purpose: 'upload' as const, requestId: randomUUID(),
     sha256: hash(bytes), byteCount: bytes.length };
   async function prepare() {
-    requireScan(settings.url && settings.caFile && settings.privateKeyPath && settings.issuer &&
-      settings.manifestDigest && digest.safeParse(settings.manifestDigest).success);
+    requireScan(settings.url && settings.caFile && settings.privateKeyPath && settings.issuer);
+    const manifests = await approvedManifests(settings);
     requireScan(binding.silo === settings.silo && bytes.length <= 20 * 1024 * 1024);
     const url = new URL(settings.url);
     requireScan(url.protocol === 'https:' && !url.username && !url.password &&
@@ -92,7 +103,7 @@ export async function scanFile(settings: ScannerSettings, bytes: Buffer, binding
         requireScan(Date.parse(database.builtAt) <= updated);
       }
       requireScan(names.size === 3);
-      requireScan(result.manifestDigest === settings.manifestDigest);
+      requireScan(manifests.includes(result.manifestDigest));
       requireScan(result.silo === input.silo &&
         result.requestId === input.requestId && result.fileId === input.fileId &&
         result.sha256 === input.sha256 && result.byteCount === input.byteCount &&

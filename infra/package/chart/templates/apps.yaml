@@ -148,6 +148,7 @@ spec:
 {{- end }}
             - { name: HOST, value: "0.0.0.0" }
             - { name: PORT, value: "8080" }
+            - { name: SCANNER_APPROVED_MANIFEST_FILE, value: /run/scanner-approval/approved-manifests }
             {{- if .Values.exposure.public.enabled }}
             - { name: BOOTSTRAP_TOKEN_FILE, value: /var/lib/opencrane/bootstrap/token.json }
             - { name: OIDC_CLIENT_SECRET_ENV_VAR, value: DEV_OIDC_CLIENT_SECRET }
@@ -164,6 +165,7 @@ spec:
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
+            - { name: scanner-approval, mountPath: /run/scanner-approval, readOnly: true }
             {{- if .Values.exposure.public.enabled }}
             - { name: bootstrap-token, mountPath: /var/lib/opencrane/bootstrap, readOnly: true }
             {{- end }}
@@ -245,6 +247,10 @@ spec:
         {{- end }}
         - name: runtime
           secret: { secretName: {{ .Values.secrets.runtime | quote }} }
+        - name: scanner-approval
+          configMap:
+            name: scanner-config
+            items: [{ key: approved-manifests, path: approved-manifests }]
         - name: storage-lease
           emptyDir: { medium: Memory }
         - name: object-owner

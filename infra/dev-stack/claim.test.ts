@@ -47,7 +47,7 @@ process.exit(result.status ?? 1);
   await writeFile(`${bin}/flock`, script, { mode: 0o755 });
 }
 
-async function claimSkipsHeldPort(stackPort: number) {
+async function claimWithHeldPort(stackPort: number, requestedSlot?: string) {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-`);
   const bin = `${home}/bin`;
   await mkdir(bin);
@@ -61,9 +61,16 @@ async function claimSkipsHeldPort(stackPort: number) {
     await once(held, 'listening');
     const address = held.address();
     assert(address && typeof address !== 'string');
-    const { stdout } = await exec('infra/dev-stack/claim.sh', {
+    const args = requestedSlot === undefined ? [] : ['--id', requestedSlot];
+    const claim = exec('infra/dev-stack/claim.sh', args, {
       env: claimEnvironment(home, address.port, stackPort),
     });
+    if (requestedSlot !== undefined) {
+      await assert.rejects(claim);
+      await assert.rejects(stat(`${home}/stack-2.lock`), { code: 'ENOENT' });
+      return;
+    }
+    const { stdout } = await claim;
     assert.equal(stdout.trim(), '2');
     assert.ok((await stat(`${home}/stack-2.lock`)).isFile());
     await assert.rejects(stat(`${home}/.config/opencrane/dev-stack-1`), { code: 'ENOENT' });
@@ -74,27 +81,13 @@ async function claimSkipsHeldPort(stackPort: number) {
     await rm(home, { recursive: true, force: true });
   }
 }
-async function skipsModelPort() { await claimSkipsHeldPort(25110); }
-async function skipsCustodyPort() { await claimSkipsHeldPort(25114); }
+async function skipsModelPort() { await claimWithHeldPort(25110); }
+async function skipsCustodyPort() { await claimWithHeldPort(25114); }
 test('claim skips a slot with a held port and leaves it unclaimed', skipsModelPort);
 test('claim checks the custody proxy port before reserving a slot', skipsCustodyPort);
 
 async function busyRequestedSlotDoesNotFallBack() {
-  const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-one-slot-`);
-  const bin = `${home}/bin`;
-  await mkdir(bin);
-  await mockKubectl(bin);
-  await mockFlock(bin);
-  const docker = `${bin}/docker`;
-  await writeFile(docker, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
-  try {
-    const env = claimEnvironment(home, 25110);
-    const result = exec('infra/dev-stack/claim.sh', ['--id', '1'], { env });
-    await assert.rejects(result);
-    await assert.rejects(stat(`${home}/stack-2.lock`), { code: 'ENOENT' });
-  } finally {
-    await rm(home, { recursive: true, force: true });
-  }
+  await claimWithHeldPort(25110, '1');
 }
 test('a requested slot refuses when busy without trying the other slot', busyRequestedSlotDoesNotFallBack);
 
