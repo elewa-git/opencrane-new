@@ -9,7 +9,7 @@ import { history } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { viewFixture } from './support/view-fixture.ts';
 import { uploadServices } from './support/upload-services.ts';
-import { teamViewChat, viewHeaders } from './support/view-requests.ts';
+import { sharedChildChat, teamViewChat, viewHeaders } from './support/view-requests.ts';
 
 // Record desktop traffic through the authenticated connection and use known red pixels.
 function desktop(width = 2, height = 2) {
@@ -197,7 +197,7 @@ async function savesTeamScreenshot() {
 }
 it('lets a current team-chat reader save and reopen a screenshot', savesTeamScreenshot, 120_000);
 
-async function refusesPublicationAfterRemoval() {
+async function refusesPublicationAfterRemoval(removal: 'before recheck' | 'after recheck') {
   const fixture = await viewFixture(desktop);
   const services = await uploadServices();
   const { config, nats, binding, feed, db, append } = fixture;
@@ -208,15 +208,27 @@ async function refusesPublicationAfterRemoval() {
   const publish = nats.store.append.bind(nats.store);
   let reachedPublication = false;
   const publication = vi.spyOn(nats.store, 'append');
+  async function removeParticipant() {
+    await append('participation-chat', 'participant.removed', {
+      conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
+    });
+  }
   publication.mockImplementation(async function removeBeforePublication(input) {
     const parsed = parseEventByType(input.event);
-    if (parsed.success && parsed.event.type === 'file.uploaded') {
-      reachedPublication = true;
-      await append('participation-chat', 'participant.removed', {
-        conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
-      });
+    if (!parsed.success || parsed.event.type !== 'file.uploaded') {
+      return publish(input);
     }
-    return publish(input);
+    reachedPublication = true;
+    const checkAccess = input.checkAccess;
+    if (removal === 'before recheck' || !checkAccess) {
+      await removeParticipant();
+      return publish(input);
+    }
+    async function removeAfterRecheck() {
+      await checkAccess!();
+      await removeParticipant();
+    }
+    return publish({ ...input, checkAccess: removeAfterRecheck });
   });
   try {
     const headers = { ...viewHeaders(config), 'idempotency-key': 'publication' };
@@ -237,8 +249,97 @@ async function refusesPublicationAfterRemoval() {
     await services.close();
   }
 }
-it('publishes no screenshot file event when participation ends at append',
-  refusesPublicationAfterRemoval, 120_000);
+it.each(['before recheck', 'after recheck'] as const)(
+  'publishes no screenshot file event when participation ends at append (%s)',
+  refusesPublicationAfterRemoval, 120_000,
+);
+
+type CaptureBinding = 'silo' | 'store' | 'file binding';
+
+async function refusesMismatchedCaptureResources(mismatch: CaptureBinding) {
+  const open = vi.fn(function open() {
+    return desktop();
+  });
+  const fixture = await viewFixture(open);
+  const services = await uploadServices();
+  const { config, nats, binding, feed, db } = fixture;
+  const chat = { silo: 'test', store: nats.store, binding, feed, db };
+  const fileOptions = { ...chat, ...services };
+  const view = { ...chat, open };
+  if (mismatch === 'silo') {
+    view.silo = 'another';
+    view.binding = { ...binding, silo: 'another' };
+  } else if (mismatch === 'store') {
+    fileOptions.store = nats.reader;
+  } else {
+    fileOptions.binding = { ...binding, silo: 'another' };
+  }
+  const app = buildServer(config, { chat, files: fileOptions, liveView: view });
+  try {
+    const headers = { ...viewHeaders(config), 'idempotency-key': 'capture-binding' };
+    const chatRead = await app.inject({ url: '/api/conversations/chat/messages', headers });
+    expect(chatRead.statusCode).toBe(200);
+    const url = '/api/conversations/chat/screenshots';
+    const refused = await app.inject({ method: 'POST', url, headers });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toMatchObject({ reason: 'access_changed' });
+    expect(open).not.toHaveBeenCalled();
+  } finally {
+    await app.close();
+    await fixture.close();
+    await services.close();
+  }
+}
+it.each(['silo', 'store', 'file binding'] as const)(
+  'refuses capture before opening the desktop when file and view resources differ by %s',
+  refusesMismatchedCaptureResources, 120_000,
+);
+
+async function savesInheritedScreenshot() {
+  const open = vi.fn(function open() {
+    return desktop();
+  });
+  const fixture = await viewFixture(open);
+  const services = await uploadServices();
+  const { config, nats, binding, feed, db, runner, append } = fixture;
+  const chat = { silo: 'test', store: nats.store, binding, feed, db };
+  const options = { chat, files: { ...chat, ...services }, liveView: { ...chat, open } };
+  const app = buildServer(config, options);
+  try {
+    await sharedChildChat(fixture);
+    await runner.run(conversations);
+    const headers = { ...viewHeaders(config, 'bob'), 'idempotency-key': 'child-shot' };
+    const path = '/api/conversations/child';
+    const readable = await app.inject({ url: `${path}/messages`, headers });
+    expect(readable.statusCode).toBe(200);
+    const capture = await app.inject({ method: 'POST', url: `${path}/screenshots`, headers });
+    expect(capture.statusCode, capture.body).toBe(201);
+    await runner.initialise(files);
+    await runner.run(files);
+    await runner.run(conversations);
+    const list = await app.inject({ url: `${path}/files`, headers });
+    const saved = list.json<{ rows: { path: string }[] }>().rows;
+    expect(saved).toHaveLength(1);
+    const file = encodeURIComponent(saved[0]!.path);
+    const reopen = { url: `${path}/files/view?path=${file}&preview=true`, headers };
+    expect((await app.inject(reopen)).statusCode).toBe(200);
+    await append('participation-parent', 'participant.removed', {
+      conversationId: 'parent', participantId: 'bob', removedBy: 'alice',
+    });
+    expect((await app.inject({ url: `${path}/messages`, headers })).statusCode).toBe(403);
+    const refused = await app.inject({ method: 'POST', url: `${path}/screenshots`, headers });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toMatchObject({ reason: 'access_changed' });
+    expect((await app.inject(reopen)).statusCode).toBe(403);
+    expect(open).toHaveBeenCalledTimes(1);
+  } finally {
+    await app.close();
+    await fixture.close();
+    await services.close();
+  }
+}
+it('lets an inherited child-chat reader save a screenshot until their parent join ends',
+  savesInheritedScreenshot, 120_000);
 
 function cleanVerdict() {
   return 'clean' as const;
