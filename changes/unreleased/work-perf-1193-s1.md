@@ -1,3 +1,3 @@
-The package downloads the approved assistant computer image before an install or
-update finishes, so the first member does not wait for the download. A failed
-download stops the install or update.
+On a fresh install, the package downloads the approved assistant computer image
+before the apps start, so the first member can use the copy already on the node.
+If the Job fails, the installer reports the Job name and stops.

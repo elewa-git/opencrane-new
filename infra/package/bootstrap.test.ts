@@ -304,8 +304,14 @@ function setupSubject(request: { subject: string }) {
 }
 
 async function waitsUntilMetadataLeaderHasEnoughCurrentPeers() {
-  const cluster = await bootstrapClusterFixture();
+  const cluster = await clusterFixture();
   try {
+    // Keep the readiness test independent of Raft placing a newly created stream.
+    const connection = await cluster.client(cluster.peers[0]!);
+    const store = await createEventStore(connection);
+    await waitForClusterStream(store);
+    const before = await streamInfo(connection);
+    expect(before.state.consumer_count).toBe(0);
     const noLeader = metadataReport('', true);
     const missingPeer = metadataReport('peer-1', true);
     missingPeer.data.meta_cluster.replicas.pop();
@@ -322,8 +328,8 @@ async function waitsUntilMetadataLeaderHasEnoughCurrentPeers() {
     await bootstrap.provisionEvents();
     const setupSubjects = bootstrap.requests.map(setupSubject);
     expect(setupSubjects).not.toContain('$JS.API.STREAM.CREATE.EVENTS');
-    const connection = await cluster.client(cluster.peers[0]!);
     const stream = await streamInfo(connection);
+    expect(stream.created).toBe(before.created);
     expect(stream.config.num_replicas).toBe(3);
     expect(stream.state.consumer_count).toBe(1);
     expect(readiness.replies).toEqual([]);

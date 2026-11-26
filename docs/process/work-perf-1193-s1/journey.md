@@ -82,10 +82,7 @@ steps to the nearest second.
 
 The node already had the reviewed image during the install and again when
 the member's computer needed it. The package used the free stand-in, with zero
-paid calls. The live run of an in-place update to a different approved image
-is **NOT RUN**. Helm render tests exercise the upgrade with a different
-digest. The approved packages available for these runs share the same
-computer digest.
+paid calls. This receipt covers fresh installation.
 
 ## Installer refusal and cleanup
 

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { execFile, spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -155,7 +154,11 @@ function pullsOnInstall() {
   const computer = resources.get('SandboxTemplate/computer').spec.podTemplate.spec;
   assert.equal(computer.runtimeClassName, 'gvisor');
   assert.equal(computer.containers[0].image, values.images.computer);
-  assert.equal(computer.containers[0].imagePullPolicy, 'IfNotPresent');
+  const container = computer.containers[0];
+  assert.match(container.image, /@sha256:[a-f0-9]{64}$/u);
+  // Kubernetes defaults a digest-pinned container to IfNotPresent.
+  const policy = container.imagePullPolicy ?? 'IfNotPresent';
+  assert.equal(policy, 'IfNotPresent');
   const job = resources.get('Job/computer-image-prepull');
   assert.ok(job, 'Offline approval checks must see the Job image');
   checkPullJob(job, values.images.computer);
@@ -165,108 +168,53 @@ function skipsPullOnUpgrade() {
   const values = chartValues();
   const flags = ['--is-upgrade'];
   const resources = renderedResources(values, flags);
-  for (const [name, resource] of resources) {
-    if (name.startsWith('Job/computer-image-prepull')) {
-      assert.notEqual(resource.metadata.annotations['helm.sh/hook'], 'pre-install,pre-upgrade');
-      assert.fail('The install-only image pull Job must be absent on upgrade');
-    }
+  for (const name of resources.keys()) {
+    assert.ok(!name.startsWith('Job/computer-image-prepull'),
+      'The install-only image pull Jobs must be absent on upgrade');
   }
 }
 
 test('the chart pulls the pinned computer image before install', pullsOnInstall);
 test('the chart omits the install-only pull Jobs on upgrade', skipsPullOnUpgrade);
 
-function nodeApi(nodes) {
-  const resources = [{ name: 'nodes', kind: 'Node', namespaced: false, verbs: ['list'] }];
-  const discovery = { kind: 'APIResourceList', groupVersion: 'v1', resources };
-  const nodeList = { apiVersion: 'v1', kind: 'NodeList', items: nodes };
-  const responses = {
-    '/version': { gitVersion: 'v1.32.0' },
-    '/api': { kind: 'APIVersions', versions: ['v1'] },
-    '/apis': { kind: 'APIGroupList', groups: [] },
-    '/api/v1': discovery,
-    '/api/v1/nodes': nodeList,
-  };
-  function respond(request, response) {
-    const { pathname } = new URL(request.url, 'http://localhost');
-    const body = responses[pathname];
-    const missing = { kind: 'Status', code: 404, reason: 'NotFound' };
-    response.writeHead(body ? 200 : 404, { 'content-type': 'application/json' });
-    response.end(JSON.stringify(body ?? missing));
-  }
-  return createServer(respond);
+function checkJobPlacement(job, pulledNodes) {
+  const affinity = job.spec.template.spec.affinity.nodeAffinity;
+  const selector = affinity.requiredDuringSchedulingIgnoredDuringExecution;
+  const [term] = selector.nodeSelectorTerms;
+  const [field] = term.matchFields;
+  assert.equal(field.key, 'metadata.name');
+  assert.equal(field.operator, 'In');
+  assert.equal(field.values.length, 1);
+  pulledNodes.push(field.values[0]);
 }
 
-async function copyImagePullChart(chart) {
-  const source = 'infra/package/chart';
-  await mkdir(join(chart, 'templates'), { recursive: true });
-  const files = ['Chart.yaml', 'values.yaml', 'templates/_computer.tpl',
-    'templates/computer-image-pull.yaml'];
-  for (const file of files) await copyFile(join(source, file), join(chart, file));
-}
-
-async function renderForNodes(nodes) {
+function pullsOnAllComputerNodes() {
   const values = chartValues();
-  const temporary = await mkdtemp(join(tmpdir(), 'chart-node-render-'));
-  const input = join(temporary, 'values.json');
-  const chart = join(temporary, 'chart');
-  const server = nodeApi(nodes);
-  try {
-    await copyImagePullChart(chart);
-    await writeFile(input, JSON.stringify(values));
-    function listen(resolve) {
-      server.listen(0, '127.0.0.1', resolve);
-    }
-    await new Promise(listen);
-    const address = `http://127.0.0.1:${server.address().port}`;
-    const args = ['template', 'chart-test', chart, '--dry-run=server',
-      '--kube-apiserver', address, '--values', input];
-    const env = { ...process.env, KUBECONFIG: join(temporary, 'unused-kubeconfig') };
-    const result = await execute('helm', args, { env });
-    return result.stdout;
-  } finally {
-    server.close();
-    await rm(temporary, { recursive: true, force: true });
-  }
-}
-
-async function pullsOnAllComputerNodes() {
-  const taint = { key: 'dedicated', effect: 'NoSchedule' };
-  const nodes = [
-    { metadata: { name: 'node-a' }, spec: {} },
-    { metadata: { name: 'node-b' }, spec: {} },
-    { metadata: { name: 'cordoned' }, spec: { unschedulable: true } },
-    { metadata: { name: 'dedicated' }, spec: { taints: [taint] } },
-    { metadata: { name: 'evicted' }, spec: { taints: [{ ...taint, effect: 'NoExecute' }] } },
-  ];
-  const rendered = await renderForNodes(nodes);
+  const plannedNodes = ['node-a', 'node-b'];
+  const flags = ['--set-json', `computerImagePullNodes=${JSON.stringify(plannedNodes)}`];
+  const resources = renderedResources(values, flags);
   const pulledNodes = [];
-  for (const document of parseAllDocuments(rendered)) {
-    assert.deepEqual(document.errors, []);
-    const resource = document.toJS();
-    if (resource?.kind !== 'Job' || !resource.metadata.name.startsWith('computer-image-prepull')) {
+  for (const [name, job] of resources) {
+    if (!name.startsWith('Job/computer-image-prepull')) {
       continue;
     }
-    const values = chartValues();
-    checkPullJob(resource, values.images.computer);
-    const affinity = resource.spec.template.spec.affinity.nodeAffinity;
-    const [term] = affinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms;
-    const [field] = term.matchFields;
-    assert.equal(field.key, 'metadata.name');
-    assert.equal(field.operator, 'In');
-    assert.equal(field.values.length, 1);
-    pulledNodes.push(field.values[0]);
+    assert.match(job.metadata.name, /^computer-image-prepull-[a-f0-9]{12}$/u);
+    checkPullJob(job, values.images.computer);
+    checkJobPlacement(job, pulledNodes);
   }
-  assert.deepEqual(pulledNodes.sort(), ['node-a', 'node-b']);
+  assert.deepEqual(pulledNodes.sort(), plannedNodes);
 }
 
-async function refusesWhenThereAreNoComputerNodes() {
-  const nodes = [{ metadata: { name: 'cordoned' }, spec: { unschedulable: true } }];
-  await assert.rejects(renderForNodes(nodes), /Computer image pre-pull needs a node/u);
+function refusesWhenThereAreNoComputerNodes() {
+  const values = chartValues();
+  const flags = ['--set-json', 'computerImagePullNodes=[]'];
+  const result = renderChart(values, 'infra/package/chart', flags);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Computer image pre-pull needs a node that accepts computer Pods/u);
 }
 
-test('the pull Job runs once on each node that can run computers', pullsOnAllComputerNodes);
-test('a live render refuses when every node is cordoned', refusesWhenThereAreNoComputerNodes);
+test('the install chart renders a hardened Job on each planned node', pullsOnAllComputerNodes);
+test('the install chart refuses an empty node list', refusesWhenThereAreNoComputerNodes);
 
 function dispatcherCpuBudget() {
   const resources = renderedResources(chartValues());
@@ -1085,6 +1033,7 @@ async function defaultModelBytesStayTheSame() {
   const original = renderChart(values);
   assert.equal(original.status, 0, original.stderr);
   // Compare the original resources byte for byte and check the new Job separately.
+  // Use the installed Helm for both charts because Helm 3 and 4 serialise YAML differently.
   const baseline = await originalChartRender(values);
   const manifests = original.stdout.split(/(?=^---\n)/mu);
   function wasInOriginalChart(manifest) {

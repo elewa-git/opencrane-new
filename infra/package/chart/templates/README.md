@@ -42,7 +42,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 | `services.yaml` | Gives the programs private network addresses. |
 | `bootstrap.yaml` | Sets up initial data and the access needed by setup and workers. |
 | `computer.yaml` | Describes assistant computers, their settings and network limits. |
-| `computer-image-pull.yaml` | Pulls the approved computer image onto the nodes before Helm applies the release. |
+| `computer-image-pull.yaml` | Pulls the approved computer image onto the planned nodes before Helm installs the apps. |
 | `guard.yaml` | Rejects unsafe or incomplete installation settings. |
 
 ## How it connects

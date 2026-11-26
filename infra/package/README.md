@@ -59,9 +59,9 @@ Not built yet:
    local services. Preparation records ownership and creates private settings for
    the package in the chosen cluster.
 2. **The package starts.** Host, image and settings checks run before Helm installs anything.
-   Helm pulls the approved assistant computer image onto the nodes before it installs
-   or updates the apps. A failed pull stops the operation. A setup job prepares the
-   databases and event log. Private development installs
+   On a fresh install, Helm pulls the approved assistant computer image onto each
+   node that can run computers before it installs the apps. A failed pull stops the
+   install. A setup job prepares the databases and event log. Private development installs
    create the test owner; public-address mode waits for a signed-in person to claim
    ownership with a one-time token. Workers start an assistant's computer when needed.
    The worker that sends saved events to reactions can use a full CPU when work arrives together.

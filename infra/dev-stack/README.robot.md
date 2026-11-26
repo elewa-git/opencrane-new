@@ -29,6 +29,8 @@ over explicit HTTP. It saves approvals under `scanner-approval` and `application
 and writes `$DEV_STACK_DIR/package-values.json`. Do not replace those files with a
 local candidate. Preflight fetches both outputs again before installation. The rendered
 image check uses those checked pins and retains the fixed review for every other role.
+On a fresh install, Helm pulls the reviewed computer image onto each node that
+can run computers. The installer checks the nodes again before reporting readiness.
 See [packaging evidence](../clamav/README.robot.md#packaging-evidence) for the schedule,
 manual run, authentication and refusal rules. Use that private values file with
 `prepare.ts` and `package-up`; private scanner paths no longer come from environment

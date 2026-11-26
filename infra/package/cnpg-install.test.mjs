@@ -210,8 +210,9 @@ async function checkModelFleetMarker(directory, calls) {
   const render = calls.find(renderCall);
   const install = calls.find(installCall);
   const renderSettings = render.args.slice(render.args.indexOf('--values') + 2);
-  const installSettings = install.args.slice(install.args.indexOf('--wait=false') + 1);
-  assert.deepEqual(renderSettings, installSettings, 'Check the same Helm settings that are applied');
+  const setting = install.args.indexOf('--set');
+  const installSettings = install.args.slice(setting, setting + renderSettings.length);
+  assert.deepEqual(renderSettings, installSettings, 'Check the same model settings that are applied');
   const rendered = await readFile(`${directory}/rendered.yaml`, 'utf8');
   for (const document of parseAllDocuments(rendered)) {
     const resource = document.toJS();
@@ -318,7 +319,7 @@ async function runFixture(fixture, expected, renders = false, environmentValues 
     } else {
       assert.ok(result.stderr.includes(`Error: ${expected}\n`), result.stderr);
     }
-    if (fixture.helmStderr) {
+    if (fixture.helmStderr || fixture.renderInstall) {
       await checkComputerPullRefusal(directory, calls);
     }
     if (fixture.pullNodes) {
@@ -387,16 +388,15 @@ for (const [name, output, reason] of pullFailures) {
   test(`${name} stops installation and shows only checked details`, refusesPull);
 }
 
-for (const version of ['Helm 3', 'Helm 4']) {
-  async function showsNoComputerNodes() {
-    const fixture = computerPullFixture();
-    const location = 'opencrane-local/templates/computer-image-pull.yaml:17:8';
-    const prefix = 'Error: INSTALLATION FAILED: execution error at';
-    fixture.helmStderr = `${prefix} (${location}): ${noComputerNodes}\n`;
-    await runFixture(fixture, noComputerNodes, true);
-  }
-  test(`${version} shows the all-cordoned chart refusal`, showsNoComputerNodes);
+async function showsNoComputerNodes() {
+  const fixture = computerPullFixture();
+  fixture.nodes = { items: [computerNode('node-a', { unschedulable: true })] };
+  fixture.renderInstall = true;
+  await runFixture(fixture, noComputerNodes, true);
 }
+
+test('the installer shows the real chart refusal when every node is cordoned',
+  showsNoComputerNodes);
 
 function computerNode(name, spec = {}) {
   return { metadata: { name, uid: `${name}-uid` }, spec };

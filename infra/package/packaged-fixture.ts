@@ -17,6 +17,7 @@ const files = [
   'infra/package/model-settings.ts',
   'infra/dev-stack/bounded-input.ts',
   'infra/dev-stack/command-limits.ts',
+  'infra/dev-stack/computer-image-pull.ts',
   'infra/dev-stack/cnpg.ts',
   'infra/dev-stack/cnpg-backup.ts',
   'infra/dev-stack/cnpg-backup-identity.ts',

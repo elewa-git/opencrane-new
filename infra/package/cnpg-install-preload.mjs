@@ -94,6 +94,22 @@ function failHelmInstall(callback) {
   callback(error, '', error.stderr);
 }
 
+function renderInstallHooks(args, options, callback) {
+  // Use the real template error for an empty node list without creating a live namespace.
+  const chart = args[2];
+  const setting = args.indexOf('--set-json');
+  const values = args.indexOf('--values');
+  const render = ['template', args[1], chart, '--set-json', args[setting + 1],
+    '--values', args[values + 1]];
+  function rendered(error, stdout, stderr) {
+    if (error) {
+      error.stderr = stderr;
+    }
+    callback(error, stdout, stderr);
+  }
+  return original('helm', render, options, rendered);
+}
+
 function execute(program, args, options, callback) {
   appendFileSync('calls.jsonl', JSON.stringify({ program, args }) + '\n');
   if (program === 'node' || program === process.execPath || program === 'openssl') return original(program, args, options, callback);
@@ -124,6 +140,9 @@ function execute(program, args, options, callback) {
         if (fixture.pullElapsedMs > options.timeout) {
           callback(new Error('The installer stopped before all pull Jobs could finish'), '', '');
           return;
+        }
+        if (fixture.renderInstall) {
+          return renderInstallHooks(args, options, callback);
         }
         if (fixture.helmStderr) {
           failHelmInstall(callback);

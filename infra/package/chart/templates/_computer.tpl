@@ -8,10 +8,11 @@ kind: Job
 metadata:
   name: {{ .name }}
   annotations:
-    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook: pre-install
     helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
 spec:
   activeDeadlineSeconds: 120
+  ttlSecondsAfterFinished: 120
   backoffLimit: 0
   template:
     spec:
@@ -31,6 +32,7 @@ spec:
       containers:
         - name: pull
           image: {{ .chart.Values.images.computer | quote }}
+          imagePullPolicy: IfNotPresent
           command: [/bin/true]
           securityContext:
             runAsUser: 65534
@@ -41,14 +43,4 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 16Mi }
             limits: { cpu: 50m, memory: 64Mi }
-{{- end -}}
-
-{{- define "opencrane.computerNodeAcceptsPods" -}}
-{{- $acceptsPods := not .spec.unschedulable -}}
-{{- range .spec.taints -}}
-  {{- if has .effect (list "NoSchedule" "NoExecute") -}}
-    {{- $acceptsPods = false -}}
-  {{- end -}}
-{{- end -}}
-{{- if $acceptsPods -}}true{{- end -}}
 {{- end -}}

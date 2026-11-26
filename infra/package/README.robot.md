@@ -133,6 +133,24 @@ infra/dev-stack/run.sh package-down --id "$DEV_STACK_ID"
 infra/dev-stack/down.sh --id "$DEV_STACK_ID"
 ```
 
+On a fresh install, the operator command checks the computer image against the
+review for that role. Helm then runs one short Job on each node that accepts
+computer Pods. It skips nodes closed for scheduling and nodes with a
+`NoSchedule` or `NoExecute` taint, a Kubernetes setting that keeps ordinary
+Pods off the node. The Jobs use the same digest and gVisor runtime as computers.
+They reuse an image already on the node. Each Job has two minutes to finish.
+The installer allows for Helm to run the Jobs one at a time, then checks that
+every node that can run computers had a Job. If a new node became available,
+the installer reports a failure so the operator can remove the failed install
+and start again.
+
+A failed Job and its Pod stay available for two minutes after the failure.
+Kubernetes then removes them. The installer reports the checked Job name and
+reason. Helm 4 reports only that the Job failed. The Pod events give more
+detail. This image download happens during fresh installation. The pilot
+application update uses its own approval check and retains the installed
+computer image.
+
 The forwarder binds only `127.0.0.1`, on port 25106 or 25206. No Tailscale
 Funnel or public listener is created. A package namespace keeps its slot busy
 after the launcher exits, including past the 15 minute claim grace period.
