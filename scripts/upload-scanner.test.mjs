@@ -235,7 +235,8 @@ async function infected() {
   mode = infect;
   expect((await upload()).status).toBe('infected');
   expect(options.objects.putObject).not.toHaveBeenCalled();
-  expect(fileCommand.mock.calls[0][4]).toBe('file.rejected');
+  const [, saved] = fileCommand.mock.calls[0];
+  expect(saved.type).toBe('file.rejected');
 }
 test('preserves a verified infected rejection', infected);
 async function retry() {

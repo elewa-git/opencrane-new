@@ -299,7 +299,9 @@ async function refusesDifferentComputer(change: ComputerChange) {
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
     const subject = 'computer-assistant';
     if (change === 'state') {
-      await append(subject, 'computer.suspended', { assistantId: 'assistant', computerId: 'desktop' });
+      await append(subject, 'computer.resumed', {
+        assistantId: 'assistant', computerId: 'desktop', generation: 1, tokenId: 'token:resumed',
+      });
     } else {
       const assistantId = change === 'assistant' ? 'different' : 'assistant';
       const computerId = change === 'computer' ? 'different' : 'desktop';
@@ -351,15 +353,22 @@ async function refusesForeignViewerBinding() {
   const chat = { silo: 'test', binding, store, db, feed };
   const liveView = { ...chat, binding: { ...binding, silo: 'another' }, open };
   const mismatched = buildServer(config, { chat, liveView });
+  const read = vi.spyOn(store, 'readStream');
   try {
     const headers = viewHeaders(config);
     const response = await mismatched.inject({ url: '/api/conversations/chat/messages', headers });
     expect(response.statusCode).toBe(200);
+    read.mockClear();
     const admission = await mismatched.inject({ method: 'POST',
       url: '/api/conversations/chat/view', headers });
     expect(admission.statusCode).toBe(403);
+    function checksChat([subject]: Parameters<typeof store.readStream>) {
+      return subject === 'participation-chat' || subject === 'conversation-chat';
+    }
+    expect(read.mock.calls.some(checksChat)).toBe(false);
     expect(open).not.toHaveBeenCalled();
   } finally {
+    read.mockRestore();
     await mismatched.close();
     await fixture.close();
   }
