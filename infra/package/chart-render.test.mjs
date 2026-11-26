@@ -1041,6 +1041,11 @@ const changedResources = [
   'ServiceAccount/package-server', 'Role/package-server', 'RoleBinding/package-server',
   'ServiceAccount/package-dispatcher', 'Role/package-dispatcher', 'RoleBinding/package-dispatcher',
   'ServiceAccount/package-projection',
+  'Role/package-computer-exec', 'RoleBinding/package-computer-exec',
+  'ValidatingAdmissionPolicy/cluster-test-computer-exec',
+  'ValidatingAdmissionPolicyBinding/cluster-test-computer-exec',
+  'ValidatingAdmissionPolicy/cluster-test-computer-pod-name',
+  'ValidatingAdmissionPolicyBinding/cluster-test-computer-pod-name',
 ];
 
 function entriesWithout(entries, names) {
@@ -1409,11 +1414,15 @@ function ordinaryWorkerCannotReachOtherPods() {
   const identity = worker.serviceAccountName ?? 'default';
   const grantedRules = [];
   for (const binding of resources.values()) {
-    if (binding.kind !== 'RoleBinding') continue;
+    if (binding.kind !== 'RoleBinding') {
+      continue;
+    }
     function workerSubject(subject) {
       return subject.kind === 'ServiceAccount' && subject.name === identity;
     }
-    if (!binding.subjects.some(workerSubject)) continue;
+    if (!binding.subjects.some(workerSubject)) {
+      continue;
+    }
     const role = resources.get(binding.roleRef.kind + '/' + binding.roleRef.name);
     grantedRules.push(...role.rules);
   }
@@ -1464,8 +1473,8 @@ function checksComputerExecPolicy(resources, identity) {
   const podPolicy = resources.get(`ValidatingAdmissionPolicy/${namespace}-computer-pod-name`);
   assert.deepEqual(execPolicy.spec.matchConstraints.resourceRules, [{ apiGroups: [''],
     apiVersions: ['v1'], operations: ['CONNECT'], resources: ['pods/exec'] }]);
-  assert.match(execPolicy.spec.matchConditions[0].expression,
-    new RegExp(`system:serviceaccount:${namespace}:${identity}$|${identity}'$`, 'u'));
+  assert.equal(execPolicy.spec.matchConditions[0].expression,
+    `request.userInfo.username == 'system:serviceaccount:${namespace}:${identity}'`);
   assert.match(execPolicy.spec.validations[0].expression, /request\.name\.matches/u);
   assert.match(execPolicy.spec.validations[0].expression, /object\.container == 'computer'/u);
   assert.deepEqual(podPolicy.spec.matchConstraints.resourceRules, [{ apiGroups: [''],

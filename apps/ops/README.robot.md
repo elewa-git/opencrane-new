@@ -257,8 +257,9 @@ single conditional appends made by reactions. `KUBECONFIG`, `KUBE_NAMESPACE`,
 `TOKEN_SIGNING_KEY_FILE` and `TOKEN_ISSUER` are required; the signing key is read by
 path and token values never enter events. `COMPUTER_IDLE_MS` defaults to 15 minutes.
 A new member's personal computer stays awake for up to an hour from joining.
-Survey and persona saves do not move that deadline. The first ordinary chat message
-from that member ends the extra time, and the ordinary idle rule applies to the turn.
+Survey and persona saves do not move that deadline. The member's first ordinary chat message
+ends the extra time on their personal computer. Personal, shared assistant and people-only
+conversations all count. The ordinary idle rule still applies to the computer handling a turn.
 Run one active lifecycle reconciler per silo. Commands append intent before any
 Kubernetes effect; restart retries claims, modes and credential delivery from events.
 The Kubernetes identity can create/get claims, get/patch/update Sandboxes, get

@@ -313,8 +313,12 @@ async function workspaceLogoutForm(page: Page, origin: string) {
   await page.goto(`${origin}/workspace`);
   const form = page.locator('form[action="/auth/logout"]:visible');
   const openNavigation = page.getByRole('button', { name: 'Open session navigation' });
-  await form.or(openNavigation).first().waitFor();
-  if (await openNavigation.isVisible()) await openNavigation.click();
+  const visibleControl = form.or(openNavigation);
+  const firstControl = visibleControl.first();
+  await firstControl.waitFor();
+  if (await openNavigation.isVisible()) {
+    await openNavigation.click();
+  }
   return form;
 }
 

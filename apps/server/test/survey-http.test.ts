@@ -17,6 +17,7 @@ import { chatListWithWelcomeSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { welcomeCompletionHandler } from '@opencrane/models';
 import { DEFAULT_MOCK_USER, startMockOidcProvider } from './support/mock-oidc-provider.ts';
+import { loginWithReturnPath } from './support/onboarding-login.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -1453,21 +1454,6 @@ async function remembersSkip() {
 }
 it('keeps the member in the workspace after a saved skip, even after replay', remembersSkip);
 
-async function loginWithReturnPath(auth: AuthConfig, returnTo: string) {
-  const loginQuery = new URLSearchParams({ returnTo });
-  const login = await app.inject({ url: `/auth/login?${loginQuery}` });
-  expect(login.statusCode).toBe(302);
-  const flow = login.cookies.find(function isFlow(cookie) {
-    return cookie.name === auth.flowCookieName;
-  });
-  const authorisation = await fetch(String(login.headers.location), { redirect: 'manual' });
-  const callback = new URL(authorisation.headers.get('location')!);
-  const response = await app.inject({ url: callback.pathname + callback.search,
-    cookies: { [auth.flowCookieName]: flow!.value } });
-  expect(response.statusCode).toBe(302);
-  return response.headers.location;
-}
-
 async function workspaceLoginUsesSavedProgress(finish: 'completed' | 'skipped') {
   const user = { ...DEFAULT_MOCK_USER, sub: 'alice', orgId: 'org-test' };
   const provider = await startMockOidcProvider({ user });
@@ -1479,9 +1465,9 @@ async function workspaceLoginUsesSavedProgress(finish: 'completed' | 'skipped') 
     await restartServer(auth);
     headers.cookie = `${auth.cookieName}=${encodeSession(auth, session)}`;
     const invitation = '/join/alice/invitation';
-    expect(await loginWithReturnPath(auth, invitation)).toBe(invitation);
+    expect(await loginWithReturnPath(app, auth, invitation)).toBe(invitation);
     const neighbouringPath = '/workspace-example';
-    expect(await loginWithReturnPath(auth, neighbouringPath)).toBe(neighbouringPath);
+    expect(await loginWithReturnPath(app, auth, neighbouringPath)).toBe(neighbouringPath);
     await checksWorkspaceReturnPaths(auth, workspacePaths, '/welcome/survey');
     expect((await save(1, 0)).statusCode).toBe(200);
     await checksWorkspaceReturnPaths(auth, workspacePaths, '/welcome/survey');
@@ -1501,7 +1487,7 @@ async function workspaceLoginUsesSavedProgress(finish: 'completed' | 'skipped') 
 
 async function checksWorkspaceReturnPaths(auth: AuthConfig, paths: string[], destination?: string) {
   for (const path of paths) {
-    expect(await loginWithReturnPath(auth, path), path).toBe(destination ?? path);
+    expect(await loginWithReturnPath(app, auth, path), path).toBe(destination ?? path);
   }
 }
 it.each(['skipped', 'completed'] as const)(

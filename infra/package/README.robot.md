@@ -254,7 +254,12 @@ key files are regular files owned by uid 1000 with mode 0600. Memory can briefly
 give a key two names while saving it.
 `fsGroupChangePolicy: OnRootMismatch` preserves private permissions on remount.
 The server Deployment stops the old Pod before starting the new one. The server
-and dispatcher have separate Kubernetes accounts for computer operations.
+and dispatcher have separate Kubernetes accounts for computer operations. The dispatcher
+gets `pods/exec` from a separate role. Kubernetes checks the account, pod name and
+container on each exec request, using a policy for the release namespace. A second
+policy reserves those pod names for the computer controller and checks the pod's
+Sandbox ownership, container and storage. Installing these policies needs Kubernetes
+1.30 or later and permission to create admission policies and their bindings.
 Projection workers have no Kubernetes role or mounted account token.
 The Memory worker builds its read tables and checkpoint in `opencrane_memory`.
 The server and dispatcher use that schema for Memory and keep their ordinary
@@ -270,8 +275,8 @@ unmounted and the Memory worker stopped.
 
 `chart-render.test.mjs` extracts the original chart from commit
 `3bf5b9c1639b9bd3c56b3edf417210f3625864ba` with `git archive` and tar. It compares
-rendered bytes with that chart outside the claims and Deployments used for member
-keys. Separate checks cover those claims and their mounts. The explicit stub
+rendered resources with that chart outside member key storage and worker permissions.
+Separate checks cover the claims, mounts, roles and policies. The explicit stub
 render matches the current default byte for byte. Keep the original commit
 available when running the package tests.
 

@@ -404,7 +404,8 @@ export class SurveyScreen implements OnDestroy {
       function unavailableReason() {
         return null;
       }
-      const refusal: unknown = await response.json().catch(unavailableReason);
+      const body = response.json();
+      const refusal: unknown = await body.catch(unavailableReason);
       if (request.signal.aborted || request !== this.request) return;
       this.handleWriteRefusal(response.status, refusal);
     } catch {

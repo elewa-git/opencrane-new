@@ -58,7 +58,7 @@ Not built yet:
    after checking saved outcomes and applied permissions.
 4. **A computer sits idle.** The worker pauses it after the idle period. A new
    member's computer stays awake while they set up, for up to an hour after joining.
-   Their first ordinary chat ends that extra time.
+   Their first chat message ends that extra time, wherever they send it.
    A later message wakes the same computer with its saved files; image changes take
    effect when a paused computer starts again.
 5. **Private data needs cleanup.** Saved corrections, forgetting and connection

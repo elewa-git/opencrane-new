@@ -181,7 +181,8 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig,
     let destination = flow.returnTo;
     // Keep invitation acceptance and approval step-up on their own return paths.
     const path = new URL(flow.returnTo, config.redirectUri).pathname;
-    if (onboarding && !flow.stepUp && path === '/workspace') {
+    const workspace = path === '/workspace' || path.startsWith('/workspace/');
+    if (onboarding && !flow.stepUp && workspace) {
       destination = await workspaceEntry(onboarding, config, result.session, flow.returnTo,
         request.log);
     }

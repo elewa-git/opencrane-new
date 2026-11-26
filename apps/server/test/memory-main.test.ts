@@ -423,8 +423,11 @@ async function checksNotesPermissionsAcrossSchemas() {
   expect((await fetch(path, { headers })).status).toBe(404);
   const written = await postFact(path, headers, 'notes-write');
   expect(written.status).toBe(200);
-  const saved = await written.json();
-  expect(saved.memoryId).toEqual(expect.any(String));
+  const saved: unknown = await written.json();
+  if (!saved || typeof saved !== 'object' || !('memoryId' in saved) ||
+      typeof saved.memoryId !== 'string') {
+    throw new Error('Expected the saved fact id');
+  }
   await until(isolatedMemoryIsCurrent);
   const detail = `${path}/${saved.memoryId}`;
   expect((await fetch(detail, { headers })).status).toBe(404);

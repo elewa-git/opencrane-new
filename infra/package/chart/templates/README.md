@@ -44,6 +44,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 | `bootstrap.yaml` | Sets up initial data and the access needed by setup and workers. |
 | `computer.yaml` | Describes assistant computers, their settings and network limits. |
 | `computer-image-pull.yaml` | Pulls the approved computer image onto the planned nodes before Helm installs the apps. |
+| `computer-exec.yaml` | Lets the dispatcher run commands only in assistant computer pods. |
 | `guard.yaml` | Rejects unsafe or incomplete installation settings. |
 
 ## How it connects

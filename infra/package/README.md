@@ -66,6 +66,7 @@ Not built yet:
    create the test owner; public-address mode waits for a signed-in person to claim
    ownership with a one-time token. Workers start an assistant's computer when needed.
    The worker that sends saved events to reactions can use a full CPU when work arrives together.
+   Kubernetes lets that worker run commands in assistant computers only.
    The server keeps survey, persona and Memory keys across restarts. The Memory
    worker reads its keys to build the list of saved facts.
 3. **An owner connects a model provider.** With `models.mode: provider`, they save

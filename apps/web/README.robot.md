@@ -106,6 +106,8 @@ This Angular app provides the organisation settings shell, MCP register and Memo
 confirmed invitation. It returns only a destination. An invitation can finish
 before its membership read is ready, so the page waits for the workers without
 resending acceptance. It gives the membership worker up to ten seconds to apply the change.
+Sign-in started from a workspace link uses the same saved progress. Once setup is
+done or skipped, the link opens its original workspace page.
 If the session expires, sign-in is offered again. If membership is refused, the page
 explains the lost access. `/welcome/survey` is a separate page without a chat composer. It reads
 `/api/onboarding` and opens the first unsaved step. The name and optional pronouns

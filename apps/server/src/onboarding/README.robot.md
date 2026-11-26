@@ -8,8 +8,9 @@ surveys send the member to `survey`. A completed survey without approval sends
 them to `persona`. Approval or a started welcome sends them to `welcome`. A saved
 skip or welcome completion sends them to `workspace`. An unconfigured service
 returns 204. An expired session returns 401. Membership refusal returns 403.
-The sign-in callback uses the same progress for a workspace return path. It
-honours an invitation return path so the person can accept it first.
+The sign-in callback uses the same progress for `/workspace` and every path under it.
+It keeps the original workspace link after the member completes or skips welcome.
+It honours an invitation return path so the person can accept it first.
 
 `POST /api/onboarding/survey` accepts `operation: skip` with the same command id,
 generation and expected position as other survey changes. It saves one

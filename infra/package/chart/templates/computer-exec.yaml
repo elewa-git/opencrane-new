@@ -1,0 +1,108 @@
+{{- $computerName := "^computer-[a-f0-9]{32}$" }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: package-computer-exec
+rules:
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create, get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: package-computer-exec
+subjects:
+  - { kind: ServiceAccount, name: package-dispatcher }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: package-computer-exec
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ .Release.Namespace }}-computer-exec
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CONNECT]
+        resources: [pods/exec]
+  matchConditions:
+    - name: dispatcher
+      expression: >-
+        request.userInfo.username == 'system:serviceaccount:{{ .Release.Namespace }}:package-dispatcher'
+  # Check the reserved pod name and container on both forms of an exec request.
+  validations:
+    - expression: >-
+        request.name.matches('{{ $computerName }}') && object.container == 'computer'
+      message: The dispatcher can run commands only on computer pods
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ .Release.Namespace }}-computer-exec
+spec:
+  policyName: {{ .Release.Namespace }}-computer-exec
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ .Release.Namespace }}-computer-pod-name
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods, pods/ephemeralcontainers]
+  matchConditions:
+    - name: reserved-computer-name
+      expression: object.metadata.name.matches('{{ $computerName }}')
+  # Keep other workloads out of the names the dispatcher can reach.
+  validations:
+    - expression: >-
+        request.operation != 'CREATE' || request.userInfo.username ==
+        'system:serviceaccount:agent-sandbox-system:agent-sandbox-controller'
+      message: Only the computer controller can create a pod with this name
+    - expression: >-
+        has(object.metadata.ownerReferences) && object.metadata.ownerReferences.exists(owner,
+          owner.apiVersion == 'agents.x-k8s.io/v1beta1' && owner.kind == 'Sandbox' &&
+          owner.name == object.metadata.name && has(owner.controller) && owner.controller) &&
+        object.metadata.labels['app'] == 'computer' &&
+        object.metadata.labels['sandbox.users.io/computer'] == object.metadata.name
+      message: A pod with this name must belong to its computer Sandbox
+    - expression: >-
+        has(object.spec.runtimeClassName) && object.spec.runtimeClassName == 'gvisor' &&
+        has(object.spec.automountServiceAccountToken) && !object.spec.automountServiceAccountToken &&
+        (!has(object.spec.initContainers) || size(object.spec.initContainers) == 0) &&
+        (!has(object.spec.ephemeralContainers) || size(object.spec.ephemeralContainers) == 0) &&
+        size(object.spec.containers) == 1 && object.spec.containers[0].name == 'computer' &&
+        object.spec.containers.all(container, !has(container.envFrom) &&
+          (!has(container.env) || container.env.all(setting,
+            !has(setting.valueFrom) || !has(setting.valueFrom.secretKeyRef)))) &&
+        object.spec.volumes.all(volume, has(volume.emptyDir) ||
+          (volume.name == 'home' && has(volume.persistentVolumeClaim) &&
+            volume.persistentVolumeClaim.claimName == 'home-' + object.metadata.name))
+      message: A pod with this name must use computer isolation and storage
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ .Release.Namespace }}-computer-pod-name
+spec:
+  policyName: {{ .Release.Namespace }}-computer-pod-name
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}

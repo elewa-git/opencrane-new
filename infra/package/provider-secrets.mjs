@@ -35,7 +35,10 @@ async function verifyMemberKey(directory, entry, refusal) {
     throw new Error(refusal, { cause: error });
   }
   const owner = process.getuid() === 0 ? 1000 : process.getuid();
-  if (!details.isFile() || details.uid !== owner || (details.mode & 0o7777) !== 0o600) {
+  if (!details.isFile()) {
+    throw new Error('Key custody requires regular key files');
+  }
+  if (details.uid !== owner || (details.mode & 0o7777) !== 0o600) {
     throw new Error(refusal);
   }
 }

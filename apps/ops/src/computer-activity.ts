@@ -8,6 +8,17 @@ import { personalAssistantId } from '@opencrane/models';
 type Activity = { time: number; openTurns: Set<string> };
 const onboardingAwakeMs = 60 * 60_000;
 
+function humanMessageAuthor(event: EventEnvelope) {
+  if (event.type !== 'message.posted') {
+    return undefined;
+  }
+  const message = messagePostedDataSchema.parse(event.data);
+  if (message.authorKind === 'human') {
+    return message.authorId;
+  }
+  return undefined;
+}
+
 export function computerActivity() {
   const assistants = new Map<string, string>();
   const activity = new Map<string, Activity>();
@@ -37,16 +48,9 @@ export function computerActivity() {
     }
   }
 
-  function updateTurns(event: EventEnvelope, assistantId: string, current: Activity) {
-    if (event.type === 'message.posted') {
-      const message = messagePostedDataSchema.parse(event.data);
-      if (message.authorKind === 'human') {
-        current.openTurns.add(event.id);
-        if (onboardingUntil.has(assistantId) &&
-            assistantId === personalAssistantId(event.silo, message.authorId)) {
-          onboardingUntil.delete(assistantId);
-        }
-      }
+  function updateTurns(event: EventEnvelope, current: Activity, humanMessage: boolean) {
+    if (humanMessage) {
+      current.openTurns.add(event.id);
     } else if (event.type === 'agent.turn_completed' || event.type === 'agent.turn_failed') {
       const schema = event.type === 'agent.turn_completed' ? agentTurnCompletedDataSchema
         : agentTurnFailedDataSchema;
@@ -57,6 +61,11 @@ export function computerActivity() {
 
   function record(event: EventEnvelope) {
     recordMembership(event);
+    const authorId = humanMessageAuthor(event);
+    if (authorId !== undefined) {
+      // End the author's extra time even if their chat uses another computer or none.
+      onboardingUntil.delete(personalAssistantId(event.silo, authorId));
+    }
     if (event.type === 'conversation.created') {
       const conversation = conversationCreatedDataSchema.parse(event.data);
       if (conversation.mode === 'agent_session') {
@@ -68,7 +77,7 @@ export function computerActivity() {
       return;
     }
     const current = activity.get(assistantId) ?? { time: 0, openTurns: new Set<string>() };
-    updateTurns(event, assistantId, current);
+    updateTurns(event, current, authorId !== undefined);
     current.time = Math.max(current.time, Date.parse(event.time));
     activity.set(assistantId, current);
   }
