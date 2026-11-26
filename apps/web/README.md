@@ -17,7 +17,7 @@ The browser uses the website's own address for server connections.
 ```mermaid
 flowchart LR
   browser["Person's browser<br/>pages and controls"] -->|opens pages| web["apps/web<br/>the website"]
-  web -->|checks welcome progress, accepts invitations, changes settings and sends messages| server["apps/server<br/>back end"]
+  web -->|checks welcome progress and sends invitation replies, settings and messages| server["apps/server<br/>back end"]
   server -->|returns saved and live results and personal assignment updates| web
   web -.-> protocol["libs/protocol<br/>shared messages"]
 ```
@@ -55,7 +55,7 @@ Not built yet:
    their link with the account it was sent to. Sign-in and workspace links open
    the welcome survey or the step they last reached. Once they finish or skip
    setup, people can open the workspace page they asked for.
-   The server still checks access to tools and groups.
+   The server checks access to tools and groups.
 2. **A person chats.** They press Enter or Send to send their current text and watch the assistant's reply
    arrive.
    Stop requests an end to the reply; a spending stop explains the relevant limit.
