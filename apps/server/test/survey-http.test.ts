@@ -1473,15 +1473,18 @@ async function workspaceLoginUsesSavedProgress(finish: 'completed' | 'skipped') 
   const provider = await startMockOidcProvider({ user });
   const auth = { ...config, issuerUrl: provider.url, clientId: provider.clientId,
     allowInsecureRequests: true };
-  const workspace = '/workspace?tab=chat';
+  const workspacePaths = ['/workspace?tab=chat', '/workspace/', '/workspace/conversations',
+    '/workspace/direct?conversation=example', '/workspace/shared', '/workspace/future-page'];
   try {
     await restartServer(auth);
     headers.cookie = `${auth.cookieName}=${encodeSession(auth, session)}`;
     const invitation = '/join/alice/invitation';
     expect(await loginWithReturnPath(auth, invitation)).toBe(invitation);
-    expect(await loginWithReturnPath(auth, workspace)).toBe('/welcome/survey');
+    const neighbouringPath = '/workspace-example';
+    expect(await loginWithReturnPath(auth, neighbouringPath)).toBe(neighbouringPath);
+    await checksWorkspaceReturnPaths(auth, workspacePaths, '/welcome/survey');
     expect((await save(1, 0)).statusCode).toBe(200);
-    expect(await loginWithReturnPath(auth, workspace)).toBe('/welcome/survey');
+    await checksWorkspaceReturnPaths(auth, workspacePaths, '/welcome/survey');
     if (finish === 'skipped') {
       const before = await progress();
       const skip = { operation: 'skip', commandId: 'skip-before-login',
@@ -1490,9 +1493,15 @@ async function workspaceLoginUsesSavedProgress(finish: 'completed' | 'skipped') 
     } else {
       await completedWelcomeForArchive(2);
     }
-    expect(await loginWithReturnPath(auth, workspace)).toBe(workspace);
+    await checksWorkspaceReturnPaths(auth, workspacePaths);
   } finally {
     await provider.close();
+  }
+}
+
+async function checksWorkspaceReturnPaths(auth: AuthConfig, paths: string[], destination?: string) {
+  for (const path of paths) {
+    expect(await loginWithReturnPath(auth, path), path).toBe(destination ?? path);
   }
 }
 it.each(['skipped', 'completed'] as const)(

@@ -441,12 +441,12 @@ it('keeps an outdated running computer until its next committed suspend',
 
 const minute = 60_000;
 
-async function onboardingIdleLimit(firstChat: boolean) {
+async function onboardingIdleLimit(firstChat?: 'personal' | 'shared' | 'direct') {
   const assistantId = personalAssistantId('test', 'alice');
   const fixture = await computerFixture({ suspended: false, assistantId });
   const { nats, directory, stop, tokens, subject } = fixture;
   const joinedAt = Date.now();
-  let now = joinedAt;
+  let now = joinedAt + 10 * minute;
   function clock() {
     return now;
   }
@@ -458,7 +458,6 @@ async function onboardingIdleLimit(firstChat: boolean) {
   vi.spyOn(kube, 'state').mockResolvedValue(sandbox);
   vi.spyOn(kube, 'mode').mockResolvedValue();
   const sink = vi.fn().mockResolvedValue(undefined);
-  const conversation = 'conversation-onboarding-chat';
   const work = watchComputers(nats.store, kube, tokens, sink,
     { silo: 'test', idleMs: 15 * minute, signal: stop.signal });
   function checkedOnce() {
@@ -480,20 +479,8 @@ async function onboardingIdleLimit(firstChat: boolean) {
     await until(checkedAgain);
     expect(await isSuspended()).toBe(false);
     if (firstChat) {
-      const created = envelope('test', conversation, 'conversation.created', {
-        conversationId: 'onboarding-chat', assistantId, createdBy: 'alice', mode: 'agent_session',
-      });
-      const posted = envelope('test', conversation, 'message.posted', {
-        conversationId: 'onboarding-chat', authorId: 'alice', authorKind: 'human',
-        utterance: 'My first ordinary message', contentType: 'text',
-      });
-      const finished = envelope('test', conversation, 'agent.turn_completed', {
-        conversationId: 'onboarding-chat', turnId: posted.id,
-      });
       const time = new Date(now).toISOString();
-      await nats.seed([{ ...created, time }]);
-      await nats.seed([{ ...posted, time }]);
-      await nats.seed([{ ...finished, time }]);
+      await sendFirstChat(nats, firstChat, assistantId, time);
       now = joinedAt + 32 * minute;
     } else {
       now = joinedAt + 59 * minute;
@@ -511,6 +498,30 @@ async function onboardingIdleLimit(firstChat: boolean) {
   }
 }
 
+async function sendFirstChat(nats: Awaited<ReturnType<typeof computerFixture>>['nats'],
+  firstChat: 'personal' | 'shared' | 'direct', personalId: string, time: string) {
+  const conversationId = 'onboarding-chat';
+  const conversation = `conversation-${conversationId}`;
+  const assistantId = firstChat === 'shared' ? 'shared-assistant' : personalId;
+  const common = { conversationId, createdBy: 'alice' };
+  const direct = { ...common, mode: 'direct' as const, participantIds: ['alice', 'bob'] };
+  const session = { ...common, mode: 'agent_session' as const, assistantId };
+  const created = envelope('test', conversation, 'conversation.created',
+    firstChat === 'direct' ? direct : session);
+  const posted = envelope('test', conversation, 'message.posted', {
+    conversationId, authorId: 'alice', authorKind: 'human',
+    utterance: 'My first ordinary message', contentType: 'text',
+  });
+  await nats.seed([{ ...created, time }]);
+  await nats.seed([{ ...posted, time }]);
+  if (firstChat !== 'direct') {
+    const finished = envelope('test', conversation, 'agent.turn_completed', {
+      conversationId, turnId: posted.id,
+    });
+    await nats.seed([{ ...finished, time }]);
+  }
+}
+
 async function saveOnboardingActivity(nats: Awaited<ReturnType<typeof computerFixture>>['nats'],
   time: string) {
   const subject = 'personal-alice';
@@ -525,12 +536,10 @@ async function saveOnboardingActivity(nats: Awaited<ReturnType<typeof computerFi
 }
 
 function expiresAfterAnHour() {
-  return onboardingIdleLimit(false);
-}
-function firstChatEndsExtraTime() {
-  return onboardingIdleLimit(true);
+  return onboardingIdleLimit();
 }
 it('keeps a new member’s computer awake for up to an hour even with repeated onboarding saves',
   expiresAfterAnHour);
-it('returns to the ordinary idle rule after the new member sends their first chat',
-  firstChatEndsExtraTime);
+const firstChatKinds = ['personal', 'shared', 'direct'] as const;
+it.each(firstChatKinds)('returns to the ordinary idle rule after the first %s chat',
+  onboardingIdleLimit);

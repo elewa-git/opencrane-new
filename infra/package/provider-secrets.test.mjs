@@ -96,7 +96,12 @@ async function refusesUnsafeMemberKey(kind) {
   try {
     await mkdir(keys, { mode: 0o700 });
     if (kind === 'symlink') {
-      await symlink('missing-key', file);
+      const target = join(root, 'regular-key');
+      await writeFile(target, 'synthetic-member-key', { mode: 0o600 });
+      if (process.getuid() === 0) {
+        await chown(target, 1000, 1000);
+      }
+      await symlink(target, file);
     } else {
       const mode = kind === 'wrong-owner' ? 0o600 : 0o640;
       await writeFile(file, 'synthetic-member-key', { mode });
@@ -112,7 +117,8 @@ async function refusesUnsafeMemberKey(kind) {
     }
     const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
     assert.equal(result.status, 1, `Accepted an unsafe ${kind} key`);
-    assert.match(result.stderr, /Key custody/u);
+    const refusal = kind === 'symlink' ? /Key custody requires regular key files/u : /Key custody/u;
+    assert.match(result.stderr, refusal);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

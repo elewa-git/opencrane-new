@@ -1440,6 +1440,49 @@ function ordinaryWorkerCannotReachOtherPods() {
 test('an unrelated projection worker cannot create pods or run commands in another pod',
   ordinaryWorkerCannotReachOtherPods);
 
+function dispatcherUsesSeparateComputerExecRole() {
+  const resources = renderedResources(chartValues());
+  const identity = resources.get('Deployment/worker-dispatcher').spec.template.spec.serviceAccountName;
+  const lifecycle = resources.get('Role/' + identity);
+  function grantsExec(rule) {
+    return rule.resources.includes('pods/exec');
+  }
+  assert.equal(lifecycle.rules.some(grantsExec), false,
+    'The dispatcher lifecycle role must not grant exec');
+  const execRole = resources.get('Role/package-computer-exec');
+  assert.deepEqual(execRole.rules, [{ apiGroups: [''], resources: ['pods/exec'],
+    verbs: ['create', 'get'] }]);
+  const execBinding = resources.get('RoleBinding/package-computer-exec');
+  assert.deepEqual(execBinding.subjects, [{ kind: 'ServiceAccount', name: identity }]);
+  assert.equal(execBinding.roleRef.name, execRole.metadata.name);
+  checksComputerExecPolicy(resources, identity);
+}
+
+function checksComputerExecPolicy(resources, identity) {
+  const namespace = 'cluster-test';
+  const execPolicy = resources.get(`ValidatingAdmissionPolicy/${namespace}-computer-exec`);
+  const podPolicy = resources.get(`ValidatingAdmissionPolicy/${namespace}-computer-pod-name`);
+  assert.deepEqual(execPolicy.spec.matchConstraints.resourceRules, [{ apiGroups: [''],
+    apiVersions: ['v1'], operations: ['CONNECT'], resources: ['pods/exec'] }]);
+  assert.match(execPolicy.spec.matchConditions[0].expression,
+    new RegExp(`system:serviceaccount:${namespace}:${identity}$|${identity}'$`, 'u'));
+  assert.match(execPolicy.spec.validations[0].expression, /request\.name\.matches/u);
+  assert.match(execPolicy.spec.validations[0].expression, /object\.container == 'computer'/u);
+  assert.deepEqual(podPolicy.spec.matchConstraints.resourceRules, [{ apiGroups: [''],
+    apiVersions: ['v1'], operations: ['CREATE', 'UPDATE'],
+    resources: ['pods', 'pods/ephemeralcontainers'] }]);
+  for (const policy of [execPolicy, podPolicy]) {
+    const binding = resources.get(`ValidatingAdmissionPolicyBinding/${policy.metadata.name}`);
+    assert.equal(policy.spec.failurePolicy, 'Fail');
+    assert.equal(binding.spec.policyName, policy.metadata.name);
+    assert.deepEqual(binding.spec.validationActions, ['Deny']);
+    assert.deepEqual(binding.spec.matchResources.namespaceSelector.matchLabels,
+      { 'kubernetes.io/metadata.name': namespace });
+  }
+}
+test('the dispatcher exec role is separate and admission restricts it to computer pods',
+  dispatcherUsesSeparateComputerExecRole);
+
 function comparesOtherPartsOfTheKeyDeployments() {
   const original = renderChart(chartValues()).stdout;
   const comparison = unchangedResources(original);

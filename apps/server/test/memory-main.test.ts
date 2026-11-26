@@ -2,7 +2,7 @@ import { bridgeProcessSettings } from './support/bridge-process.ts';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, mkdir, rm, stat } from 'node:fs/promises';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { Pool, type PoolClient } from 'pg';
 import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -14,6 +14,8 @@ import { members, memoryScopeId, pgDb, ProjectionRunner, groups, computers, conv
 import { objectId, TupleClient } from '../../../libs/authz/src/client.ts';
 import { grantPackageReads } from '../../../infra/package/package-database.ts';
 import { lockPackageTestRoles } from '../../../infra/package/pilot-restore-postgres-fixture.ts';
+import * as memoryAccess from '../src/memory/access.ts';
+import { remember } from '../src/memory/commands.ts';
 import { startServer, TEST_OIDC_ENV, type RunningServer } from './support/process.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -419,7 +421,13 @@ async function checksNotesPermissionsAcrossSchemas() {
   const allowWrite = { ...scopeGrant, grantedBy: 'bootstrap-owner' };
   await saveFixtureEvent(fixture, { subject: writeSubject, type: 'grant.given', data: allowWrite });
   expect((await fetch(path, { headers })).status).toBe(404);
-  expect((await postFact(path, headers, 'notes-write')).status).toBe(200);
+  const written = await postFact(path, headers, 'notes-write');
+  expect(written.status).toBe(200);
+  const saved = await written.json();
+  expect(saved.memoryId).toEqual(expect.any(String));
+  await until(isolatedMemoryIsCurrent);
+  const detail = `${path}/${saved.memoryId}`;
+  expect((await fetch(detail, { headers })).status).toBe(404);
   const revokeWrite = { ...scopeGrant, revokedBy: 'bootstrap-owner' };
   await saveFixtureEvent(fixture, { subject: writeSubject, type: 'grant.revoked', data: revokeWrite });
   for (const granteeId of ['bootstrap-owner', 'bob']) {
@@ -430,6 +438,7 @@ async function checksNotesPermissionsAcrossSchemas() {
   }
   await until(isolatedMemoryIsCurrent);
   expect((await fetch(path, { headers })).status).toBe(200);
+  expect((await fetch(detail, { headers })).status).toBe(200);
   expect((await postFact(path, headers, 'read-only-grant')).status).toBe(404);
   // Make the permission service report access so this checks the saved assistant owner.
   const client = new TupleClient(fixture.binding);
@@ -441,3 +450,46 @@ async function checksNotesPermissionsAcrossSchemas() {
 }
 it('requires the personal assistant owner and independent note grants with packaged database roles',
   checksNotesPermissionsAcrossSchemas, 60_000);
+
+async function memoryCommandOptions() {
+  const { binding, db } = await setup();
+  function memberId() {
+    return Promise.resolve('bootstrap-owner');
+  }
+  return { silo: 'acme', store: nats.store, binding, db, feed: { memberId },
+    keyDirectory: `${directory}/memory-keys` };
+}
+
+async function refusesAnotherMembersPersonalScope() {
+  const options = await memoryCommandOptions();
+  const scope = memoryAccess.scopeFor(options.silo, 'person', 'bootstrap-owner');
+  await expect(memoryAccess.scopeAccess(options, 'bob', scope))
+    .rejects.toBeInstanceOf(memoryAccess.MemoryRefused);
+}
+it('refuses a valid personal scope when the requester is someone else',
+  refusesAnotherMembersPersonalScope, 60_000);
+
+async function refusesWriteWithReadOnlyAccess(check: 'initial' | 'final') {
+  const options = await memoryCommandOptions();
+  const requester = 'bootstrap-owner';
+  const scope = memoryAccess.scopeFor(options.silo, 'person', requester);
+  const fullAccess = await memoryAccess.scopeAccess(options, requester, scope);
+  const readOnly = { ...fullAccess, canWrite: false };
+  // Return one denied result to check each write guard independently.
+  const scopeAccess = vi.spyOn(memoryAccess, 'scopeAccess');
+  if (check === 'final') {
+    scopeAccess.mockResolvedValueOnce(fullAccess);
+  }
+  scopeAccess.mockResolvedValueOnce(readOnly);
+  const fact = { commandId: `denied-${check}`, text: 'Synthetic note', kind: 'fact',
+    pinned: false, expiresAt: null, sources: [], dependsOn: [] };
+  try {
+    await expect(remember(options, requester, scope, fact))
+      .rejects.toBeInstanceOf(memoryAccess.MemoryRefused);
+  } finally {
+    scopeAccess.mockRestore();
+  }
+}
+const writeChecks = ['initial', 'final'] as const;
+it.each(writeChecks)('stops a write when its %s permission check returns read-only access',
+  refusesWriteWithReadOnlyAccess, 60_000);
