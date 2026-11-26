@@ -179,9 +179,12 @@ async function savesTeamScreenshot() {
     const request = { method: 'POST' as const, url: `${chat}/screenshots`, headers };
     const response = await app.inject(request);
     expect(response.statusCode, response.body).toBe(201);
-    expect(response.json()).toEqual({
-      status: 'appended', fileId: expect.any(String), sequence: expect.any(Number),
-    });
+    const result = response.json<{ status: string; fileId: string; sequence: number }>();
+    const fields = Object.keys(result).sort();
+    expect(fields).toEqual(['fileId', 'sequence', 'status']);
+    expect(result.status).toBe('appended');
+    expect(result.fileId).toMatch(/^[a-f0-9]{64}$/u);
+    expect(result.sequence).toBeGreaterThan(0);
     const repeated = await app.inject(request);
     expect(repeated.statusCode).toBe(201);
     expect(repeated.json()).toEqual(response.json());

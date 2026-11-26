@@ -371,14 +371,12 @@ it('refuses access when its previously checked authority history disappears', as
       cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
     const request = { method: 'POST' as const, url: '/api/conversations/chat/view', headers };
     expect((await app.inject(request)).statusCode).toBe(200);
-    const readySequence = await nats.store.head('computer-assistant');
-    const read = nats.store.readEvent.bind(nats.store);
-    const checkpoint = vi.spyOn(nats.store, 'readEvent');
-    checkpoint.mockImplementation(function readMissingReady(sequence, deadline) {
-      if (sequence === readySequence) {
-        return Promise.reject(new Error('Event position missing'));
+    const read = nats.store.readStream.bind(nats.store);
+    const state = vi.spyOn(nats.store, 'readStream');
+    state.mockImplementation(async function* readMissingComputer(...args) {
+      if (args[0] !== 'computer-assistant') {
+        yield* read(...args);
       }
-      return read(sequence, deadline);
     });
     expect((await app.inject(request)).statusCode).toBe(403);
   } finally { vi.restoreAllMocks(); await fixture.close(); }
