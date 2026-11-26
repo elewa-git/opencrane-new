@@ -5,7 +5,7 @@ import { PassThrough, Duplex } from 'node:stream';
 import { expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { files, conversations } from '@opencrane/projections';
-import { Client } from 'minio';
+import { Client } from 'minio/dist/esm/minio.mjs';
 import { history } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { viewFixture } from './support/view-fixture.ts';
