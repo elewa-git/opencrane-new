@@ -53,8 +53,8 @@ intersection, receipts and the other resource-specific checks. The projection
 can lag and is not a permission cache. Show an applying change until both
 projection statuses become current.
 
-Conversation history requires explicit participation. Desktop access needs both
-participation and a separate desktop grant. Shared work binds one group id as
+Conversation history and desktop viewing require explicit participation and
+current read access to the chat. Shared work binds one group id as
 payer at admission and validates membership; personal work continues using the
 existing installation default. Budget ceilings/spending stay on the existing
 [models interface](../../libs/models/README.md).

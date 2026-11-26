@@ -7,14 +7,15 @@ import { execFile } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
-import type { APIResponse } from 'playwright';
+import type { Page } from 'playwright';
 import { z } from 'zod';
 import { loadAuthConfig } from '@opencrane/auth';
-import { grantStream, memberAuthorisation } from '@opencrane/authz';
+import { memberAuthorisation } from '@opencrane/authz';
 import { connectEventStore } from '@opencrane/event-store';
 import { fileUploadedDataSchema } from '@opencrane/events';
-import { envelope, history } from '@opencrane/models';
+import { history } from '@opencrane/models';
 import { browserSessions } from './browser-signin.ts';
+import { assertNoDesktopGrant } from './browser-live-view.ts';
 import { authEnv, directory, readEnv } from './config.ts';
 import { namespace, secondary, stackId } from './identity.ts';
 
@@ -22,7 +23,7 @@ assert(secondary, 'Screenshot qualification requires a claimed secondary stack')
 const settings = await readEnv('settings');
 requireFleetStandInProvider(settings['DEV_REAL_PROVIDER'] === '1');
 const run = z.enum(['fresh', 'repeat']).parse(process.argv[2]);
-const output = 'docs/process/p3-18-live';
+const output = `${directory}/screenshot-journey`;
 await mkdir(output, { recursive: true });
 function hasVisibleDesktopPixels(dialog: Element): boolean {
   const canvas = dialog.querySelector<HTMLCanvasElement>('canvas');
@@ -46,7 +47,8 @@ async function until(check: () => Promise<boolean>) {
 }
 try {
   browser = await browserSessions(loadAuthConfig(await authEnv()), origin);
-  const owner = z.object({ memberId: z.string() }).parse(await (await browser.ownerPage.request.get(`${origin}/api/chat`)).json());
+  const nonParticipant = await browser.ownerPage.request.get(`${origin}/api/chat`);
+  assert.equal(nonParticipant.status(), 200, 'The second signed-in person is also a member');
   for (const page of browser.memberPages) {
     const width = page.viewportSize()!.width;
     const member = z.object({ memberId: z.string(), assistantId: z.string() }).parse(await (await page.request.get(`${origin}/api/chat`)).json());
@@ -54,15 +56,6 @@ try {
     let retainedFreshScreenshot = 'NOT RUN';
     const kube = ['--kubeconfig', `${directory}/computer-kubeconfig.json`, '-n', namespace];
     const image = (await exec('kubectl', [...kube, 'get', 'pod', computer.computerId, '-o', 'jsonpath={.status.containerStatuses[?(@.name=="computer")].imageID}'])).stdout;
-    // Normal fixtures grant desktop access through events, including to the non-participant.
-    const subject = grantStream('shared_desktop', computer.computerId);
-    for (const granteeId of [member.memberId, owner.memberId]) {
-      const rows = await history(events.store, subject, silo);
-      const event = envelope(silo, subject, 'grant.given', { resourceType: 'shared_desktop', resourceId: computer.computerId, granteeId, granteeKind: 'member', grantedBy: owner.memberId });
-      event.source = 'dev-stack-screenshot-fixture'; event.principal = { kind: 'system', id: 'dev-only-bootstrap' };
-      assert.equal((await events.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 })).status, 'appended');
-      await until(async () => (await authz.desktop(granteeId, computer.computerId)).allowed);
-    }
     if (run === 'repeat') {
       const receipt = await readFile(`${output}/fresh-${width}.json`, 'utf8').catch((error: unknown) => {
         if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return undefined;
@@ -132,14 +125,11 @@ try {
     const path = `uploads/${conversationId}/${file.fileId}/${file.name}`;
     const bytes = await page.request.get(`${origin}/api/conversations/${conversationId}/files/view`, { params: { path } });
     assert.equal(bytes.status(), 200); assert.equal(createHash('sha256').update(await bytes.body()).digest('hex'), file.sha256);
-    const headers = { origin, 'x-opencrane-view': '1', 'idempotency-key': randomUUID() };
-    const refused: APIResponse = await browser.ownerPage.request.post(`${origin}/api/conversations/${conversationId}/screenshots`, { headers });
-    const refusedView: APIResponse = await browser.ownerPage.request.post(`${origin}/api/conversations/${conversationId}/view`, { headers });
-    const refusedFile: APIResponse = await browser.ownerPage.request.get(`${origin}/api/conversations/${conversationId}/files/view`, { params: { path } });
-    assert.equal(refused.status(), 403); assert.equal(refusedView.status(), 403); assert.equal(refusedFile.status(), 403);
+    await checkNonParticipant(browser.ownerPage, conversationId, path, width);
+    await assertNoDesktopGrant(events.store, silo, computer.computerId);
     assert.equal((await history(events.store, `conversation-${conversationId}`, silo)).filter(row => row.event.type === 'file.uploaded').length, 1);
-    await writeFile(`${output}/${run}-${width}.json`, JSON.stringify({ date: new Date().toISOString(), source: (await exec('git', ['rev-parse', 'HEAD'])).stdout.trim(), journeySha256: createHash('sha256').update(await readFile(import.meta.filename)).digest('hex'), run, stackId, namespace, origin, width, image, conversationId, memberId: member.memberId, computer, file, captureMs, participant: 'PASS', conversationAndPanel: 'PASS', reload: 'PASS', retainedFreshScreenshot, nonParticipant: { memberId: owner.memberId, desktopGranted: true, capture: refused.status(), view: refusedView.status(), file: refusedFile.status() }, status: 'PASS' }, null, 2));
-    console.log(`PASS ${run} screenshot ${width}px: participant capture (${captureMs} ms), conversation + panel, both previews + reload, matching SHA-256; non-participant with desktop grant refused capture/view/file (403)`);
+    await writeFile(`${output}/${run}-${width}.json`, JSON.stringify({ date: new Date().toISOString(), source: (await exec('git', ['rev-parse', 'HEAD'])).stdout.trim(), journeySha256: createHash('sha256').update(await readFile(import.meta.filename)).digest('hex'), run, stackId, namespace, origin, width, image, conversationId, memberId: member.memberId, computer, file, captureMs, participant: 'PASS', conversationAndPanel: 'PASS', reload: 'PASS', retainedFreshScreenshot, nonParticipant: { capture: 403, view: 403, file: 403 }, desktopGrantEvents: 0, status: 'PASS' }, null, 2));
+    console.log(`PASS ${run} screenshot ${width}px: participant capture (${captureMs} ms), conversation + panel, both previews + reload, matching SHA-256; non-participant refused capture/view/file (403), no desktop grants`);
   }
 } catch (error) {
   for (const page of browser?.memberPages ?? []) {
@@ -147,3 +137,21 @@ try {
   }
   throw error;
 } finally { await events.close(); await browser?.close(); }
+
+async function checkNonParticipant(page: Page, conversationId: string, path: string, width: number) {
+  await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+  await page.goto(`${origin}/workspace?conversation=${conversationId}`);
+  await page.getByRole('heading', { name: "This conversation isn't available" }).waitFor();
+  const watch = page.getByRole('button', { name: 'Watch your computer', exact: true });
+  assert.equal(await watch.count(), 0, 'A member outside the chat has no viewer entry');
+  await page.screenshot({ path: `${output}/${run}-refused-${width}.png` });
+
+  const url = `${origin}/api/conversations/${conversationId}`;
+  const headers = { origin, 'x-opencrane-view': '1', 'idempotency-key': randomUUID() };
+  const capture = await page.request.post(`${url}/screenshots`, { headers });
+  const view = await page.request.post(`${url}/view`, { headers });
+  const file = await page.request.get(`${url}/files/view`, { params: { path } });
+  assert.equal(capture.status(), 403);
+  assert.equal(view.status(), 403);
+  assert.equal(file.status(), 403);
+}

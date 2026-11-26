@@ -1913,8 +1913,8 @@ Read-only desktop sessions use `POST /api/conversations/:id/view` and
 event, including WebSocket capacity refusals. They save exactly one
 `computer.view_refused` for a valid session, including missing or hostile Origins. Redeem the ticket
 once as WebSocket subprotocols
-`binary, <ticket>`, with the same session and Origin. Both conversation participation
-and an explicit shared-desktop grant are required. The server uses `KUBECONFIG`
+`binary, <ticket>`, with the same session and Origin. The member must be active in the installation, participate in the open assistant
+chat and have OpenFGA read access. The computer must be ready. The server uses `KUBECONFIG`
 and `KUBE_NAMESPACE` for its private Pod stream. See the
 [live-view contract and evidence](../../docs/process/live-view-evidence.md).
 
@@ -1936,14 +1936,11 @@ without waiting for sibling reads. These denials close the viewer with 4003 and
 An unavailable read or a timeout still grants no new lease. An existing lease
 allows desktop bytes for at most 1,500 ms from its successful check's start.
 Ten seconds without a valid lease closes the viewer with 4503.
-The exact `Authority changed` error means a watched stream changed during a check;
-it leaves access unconfirmed. The next check closes the viewer if access really ended.
 
 The `live-view-activity`, `live-view-unavailable`, `live-view`, `live-view-delays`
 and `view-lease` tests cover these decisions. They include a held desktop read
-during member removal, continued frame delivery attempts, and a conversation denial
-beside a slow unavailable desktop read. Fresh-install qualification is NOT RUN
-for this change.
+during member removal, continued frame delivery attempts, and a chat read denial
+beside a slow computer read. Losing chat access closes a view within two seconds.
 
 ## Remote MCP registration (P3-3)
 
@@ -2068,8 +2065,8 @@ cover real-service tests and the pending fresh-install journey.
 
 `POST /api/conversations/:conversationId/screenshots` takes no body. Supply the
 session cookie, exact configured Origin, `x-opencrane-view: 1` and a stable
-`idempotency-key`. Current participation and the shared-desktop audience grant are
-checked against events and OpenFGA, before capture and again before saving. The
+`idempotency-key`. The server checks the same chat access and computer as the
+live viewer before capture and again before saving. The
 existing namespace-scoped authenticated desktop proxy supplies one framebuffer;
 there is no caller-selected URL, path or encoding. Dimensions are at most 4096
 per axis and at most 4 MiB of raw pixels, with a ten-second framebuffer deadline
@@ -2833,8 +2830,7 @@ participation position reads. A changed position reloads those facts before retu
 content, so an old OpenFGA answer cannot hide a newly saved removal.
 Fresh-install browser qualification remains NOT RUN.
 
-Personal agent sessions retain screenshot capture for current participants who have a
-desktop grant. A late participant can list and download screenshots saved after their
+Current participants with read access can capture screenshots in personal agent sessions. A late participant can list and download screenshots saved after their
 latest join. Older previews and downloads are refused, including after projection replay.
 Private team sessions still refuse participant capture.
 
@@ -3164,11 +3160,10 @@ membership after building the tool list and before sending. File delivery checks
 `ownConversation` before sending bytes; `fileCommand` checks again before saving
 the acknowledgement. Terminal reports can still record the outcome of earlier work.
 
-Desktop freshness subjects are the member, `participation-<conversationId>` and
-shared-desktop grant streams. Team grants also check the member and team streams.
-No conversation stream is watched or scanned during the 1,200 ms access check.
-Chat activity does not invalidate a lease. A confirmed refusal stops the check
-while other reads are still waiting.
+The desktop viewer reads the member and participation streams, the chat creation
+record and the computer status within its 1,200 ms access check. Chat activity
+does not invalidate a lease. A confirmed refusal stops the check while other
+reads are still waiting.
 
 The [entry-point record](../../docs/process/p4-3-row7-access.md) lists the routes,
 event checks, failing-first results and remaining live qualification.

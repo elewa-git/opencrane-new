@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
 import { expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
-import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
+import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { wireSubject, type AppendCommand, type AppendResult } from '@opencrane/event-store';
@@ -1455,10 +1455,6 @@ async function removedParticipantReaders() {
     await context.append('computer-assistant', 'computer.ready', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
     }, false);
-    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-      granteeKind: 'member', grantedBy: 'alice',
-    });
     await expect(viewAccess(context.options, 'alice', 'agent')).resolves.toMatchObject({
       computerId: 'desktop',
     });
@@ -1509,10 +1505,6 @@ async function participationVolume(sharedChild = false) {
     await context.append('computer-assistant', 'computer.ready', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
     }, false);
-    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-      granteeKind: 'member', grantedBy: 'alice',
-    });
     await context.append('conversation-volume', 'agent.native_request_refused', {
       conversationId: 'volume', turnId: 'busy-turn', nativeRequestId: '19',
       requestKind: 'shell', outcome: 'declined',
@@ -1617,10 +1609,6 @@ async function retainsFilesAfterCloseBeforeBufferedReport() {
     await context.append('computer-assistant', 'computer.ready', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
     }, false);
-    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-      granteeKind: 'member', grantedBy: 'alice',
-    });
     await context.runner.run(conversations);
     await context.append('participation-agent', 'conversation.closed', {
       conversationId: 'agent', closedBy: 'alice',
@@ -2092,10 +2080,6 @@ async function desktopWithColdFactsAndDelayedProjection() {
     await context.append('computer-assistant', 'computer.ready', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
     }, false);
-    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-      granteeKind: 'member', grantedBy: 'alice',
-    });
     const events = [];
     const encrypted = ({ utterance: 'Long saved chat' });
     for (let index = 0; index < 1000; index++) {

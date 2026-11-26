@@ -113,8 +113,19 @@ function captureFailure(request: FastifyRequest, reply: FastifyReply, error: unk
     return reply.code(error.statusCode).send({ status: 'refused', error: error.message });
   }
   const reason = error instanceof Error ? error.message : '';
-  const access = ['Access changed', 'Desktop access required', 'Conversation refused', 'Wrong silo'].includes(reason);
-  request.log.warn({ operation: 'screenshot.capture', reason: access ? 'access_changed' : 'capture_failed' }, 'Screenshot refused');
-  return reply.code(error instanceof z.ZodError ? 400 : reason === 'Id reused' ? 409 : access ? 403 : 503)
-    .send({ status: 'refused', error: access ? 'Screenshot access is not available. Ask the desktop owner for access.' : 'Screenshot could not be saved. Retry.' });
+  const access = ['Access changed', 'Conversation refused', 'Wrong silo'].includes(reason);
+  const logReason = access ? 'access_changed' : 'capture_failed';
+  request.log.warn({ operation: 'screenshot.capture', reason: logReason, err: error },
+    'Screenshot refused');
+  const message = access ? 'You need access to this chat to take a screenshot.'
+    : 'Screenshot could not be saved. Retry.';
+  let status = 503;
+  if (error instanceof z.ZodError) {
+    status = 400;
+  } else if (reason === 'Id reused') {
+    status = 409;
+  } else if (access) {
+    status = 403;
+  }
+  return reply.code(status).send({ status: 'refused', error: message });
 }

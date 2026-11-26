@@ -2,7 +2,6 @@ import { PassThrough, type Duplex } from 'node:stream';
 import type { AppendCommand } from '@opencrane/event-store';
 import { parseEventByType } from '@opencrane/events';
 import { WebSocket } from 'ws';
-import { grantStream } from '@opencrane/authz';
 import { request as httpRequest } from 'node:http';
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 
@@ -137,13 +136,6 @@ function refusedUpgrade(address: string, headers: IncomingHttpHeaders): Promise<
 
 type BaseViewFixture = Awaited<ReturnType<typeof viewFixture>>;
 
-async function grantDesktopToAlice(fixture: BaseViewFixture) {
-  const grant = {
-    resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-    granteeKind: 'member', grantedBy: 'owner',
-  };
-  await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
-}
 
 function aliceViewHeaders(config: BaseViewFixture['config']) {
   const sessionArguments = {
@@ -167,7 +159,6 @@ async function issueTicket(fixture: BaseViewFixture, headers: IncomingHttpHeader
 }
 
 async function capacityTickets(fixture: BaseViewFixture) {
-  await grantDesktopToAlice(fixture);
   const headers = aliceViewHeaders(fixture.config);
   const tickets: string[] = [];
   for (let index = 0; index < 16; index++) {
@@ -324,7 +315,6 @@ async function checkOriginDecisions(route: ViewRoute, atCapacity = false) {
   const open = atCapacity ? openDesktop : openAvailableDesktop;
   const fixture = await upgradeFixture(atCapacity, open);
   try {
-    if (!atCapacity) await grantDesktopToAlice(fixture);
     const aliceHeaders = aliceViewHeaders(fixture.config);
     const origins = ['https://hostile.example.test', undefined];
     const sessions = [

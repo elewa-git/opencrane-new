@@ -573,8 +573,8 @@ journeyChecks: try {
         secondary ? auditPrompt : undefined,
       );
       memberChatUrls.push(auditConversationUrl);
-      await browserLiveViewJourney(page, origin, computer!, { member, admin, silo, store: events.store, append, until,
-        desktopAllowed: async () => (await authz.desktop(member, computer!.computer_id)).allowed });
+      const view = { member, admin, silo, store: events.store, append, until };
+      await browserLiveViewJourney(page, origin, computer!, view);
       await page.goto(origin);
     }
     catch (error) {

@@ -367,7 +367,7 @@ author (`uploadedBy`), PNG MIME type, size, object key and SHA-256. Ordinary upl
 omit this metadata. Only the authenticated capture path supplies it. Capture uses
 one bounded framebuffer request on an explicit member command; replay never captures
 pixels or scans bytes again. Screenshot reads require current conversation participation
-and membership, independently of the original capture's desktop grant.
+and membership.
 
 Bridge reports describe activity and grant no authority. The separate server turn
 command binds the requested message to its Codex thread, requester, task and

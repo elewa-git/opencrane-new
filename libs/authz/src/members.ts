@@ -410,11 +410,7 @@ function createMemberAuthorisation(binding: Binding,
     team(memberId: string, teamId: string) {
       return client.check({ user: objectId('person', binding.silo, memberId), object: objectId('team', binding.silo, teamId), relation: 'member' });
     },
-    desktop(memberId: string, computerId: string) {
-      return client.check({ user: objectId('person', binding.silo, memberId),
-        object: objectId('resource', binding.silo, 'shared_desktop', computerId), relation: 'use' });
-    },
-    view(memberId: string, conversationId: string, computerId: string, receipts: string[]) {
+    controlDesktop(memberId: string, conversationId: string, computerId: string, receipts: string[]) {
       const user = objectId('person', binding.silo, memberId);
       function receiptTuple(eventId: string) {
         return { user: object, relation: 'applied',

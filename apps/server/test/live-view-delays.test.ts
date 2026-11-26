@@ -6,7 +6,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { encodeSession } from '@opencrane/auth';
-import { grantStream } from '@opencrane/authz';
 import { history } from '@opencrane/models';
 import { until } from '@opencrane/authz/testing';
 import { parseEventByType } from '@opencrane/events';
@@ -21,9 +20,6 @@ it.each(['authority read', 'NATS replies', 'NATS outage'])('respects the existin
   let socket: WebSocket | undefined;
   const { app, append, config, nats } = fixture;
   try {
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner',
-    }, true);
     const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
       cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now() / 1000) + 120 })}` };
     const admission = await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers });
@@ -61,8 +57,8 @@ it.each(['authority read', 'NATS replies', 'NATS outage'])('respects the existin
     const displayed = nextBinaryMessage(socket); readable.write(Buffer.from('RFB 003.008\n'));
     expect(await displayed).toEqual(Buffer.from('RFB 003.008\n'));
     const closed = once(socket, 'close'), revokedAt = performance.now();
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner',
+    await append('participation-chat', 'participant.removed', {
+      conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
     });
     expect((await closed)[0]).toBe(4003);
     expect(performance.now() - revokedAt).toBeLessThan(2000);
@@ -80,17 +76,14 @@ it.each(['recovered', 'unavailable', 'revoked'])('requires a fresh successful po
   let socket: WebSocket | undefined, audited = false, checks = 0;
   const { app, append, config, nats } = fixture;
   try {
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner',
-    }, true);
     const read = nats.store.readStream.bind(nats.store), write = nats.store.append.bind(nats.store);
     vi.spyOn(nats.store, 'append').mockImplementation(async input => {
       const result = await write(input);
       const event = parseEventByType(input.event);
       if (event.success && event.event.type === 'computer.view_started') {
         audited = true;
-        if (mode === 'revoked') await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', {
-          resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner',
+        if (mode === 'revoked') await append('participation-chat', 'participant.removed', {
+          conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
         });
       }
       return result;
@@ -134,11 +127,8 @@ it('admits slow authority and audit reads while a slow desktop opens and deliver
     return Duplex.from({ readable, writable });
   });
   let socket: WebSocket | undefined, readDelay = 450;
-  const { app, append, config, nats } = fixture;
+  const { app, config, nats } = fixture;
   try {
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner',
-    }, true);
     const read = nats.store.readStream.bind(nats.store), write = nats.store.append.bind(nats.store);
     vi.spyOn(nats.store, 'readStream').mockImplementation(async function* (...args) {
       if (args[0] === 'computer-assistant') await delay(readDelay);
@@ -191,9 +181,6 @@ it('keeps a valid lease when an overlapping OpenFGA reply times out', async () =
   });
   const { app, append, config } = fixture;
   try {
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner',
-    }, true);
     proxy.listen(0, '127.0.0.1'); await once(proxy, 'listening');
     const bound = proxy.address(); if (!bound || typeof bound === 'string') throw new Error('Missing proxy');
     fixture.binding.apiUrl = `http://127.0.0.1:${bound.port}`;
@@ -208,8 +195,8 @@ it('keeps a valid lease when an overlapping OpenFGA reply times out', async () =
     console.log(JSON.stringify({ scenario: 'jittered OpenFGA renewal', replyMs: times }));
     expect(socket.readyState).toBe(WebSocket.OPEN);
     const closed = once(socket, 'close'), revokedAt = performance.now();
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner',
+    await append('participation-chat', 'participant.removed', {
+      conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
     });
     expect((await closed)[0]).toBe(4003);
     expect(performance.now() - revokedAt).toBeLessThan(2000);

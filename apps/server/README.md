@@ -23,7 +23,8 @@ flowchart LR
   server -->|reads and saves permitted events| nats["NATS<br/>the event log"]
   server -->|reads tables| postgres["PostgreSQL<br/>read tables"]
   server -->|signs people in| zitadel["Zitadel<br/>sign-in service"]
-  server -->|checks permissions| openfga["OpenFGA<br/>permissions service"]
+  server -->|checks chat and other permissions| openfga["OpenFGA<br/>permissions service"]
+  restore["Verified pilot restore"] -->|opens reads with writes held| server
   server -.->|checks calls, approvals and chat default choices| models["libs/models<br/>AI access rules"]
 ```
 
@@ -34,7 +35,7 @@ flowchart LR
 - Serve verified pilot restores with writes and assistant work held.
 - Carry personal assistant assignments, chat messages, live replies, stops and tool approvals.
 - Check and scan files before storing them or passing them to a computer.
-- Serve desktop views and screenshots to people with access. Refuse signed-out view
+- Serve desktop views and screenshots to people who can read the chat. Refuse signed-out view
   requests without adding events, and audit signed-in refusals.
 - Manage members, groups, ownership, providers, tool servers and spending settings.
 - Return permitted history, saved results, memory facts and routine details.
@@ -70,8 +71,8 @@ Not built yet:
    Losing access prevents further private reads.
 7. **A person uploads a file.** The server checks its type and scans its contents.
    A clean file is stored and can be sent with a message; a refused file stays unavailable.
-8. **A person views a desktop.** The server checks their chat and desktop permissions.
-   A confirmed loss of access ends the view.
+8. **A person views a desktop.** The server checks whether they can read the chat.
+   Losing chat access ends the view within two seconds.
 
 ## How to run or test it
 

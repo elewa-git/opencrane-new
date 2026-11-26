@@ -178,9 +178,9 @@ try {
       await page.goto(`${origin}/workspace?conversation=${conversationId}`);
       await page.getByRole('textbox', { name: 'Message your agent' }).waitFor();
       await page.waitForFunction(() => !document.querySelector('.skeleton'));
-      await browserLiveViewJourney(page, origin, computer, { member, admin, silo, store: events.store, append, until,
-        desktopAllowed: async () => (await auth.desktop(member, computer!.computer_id)).allowed });
-      const journeyReceipt = JSON.parse(await readFile(`docs/process/live-view/conversation-${width}.json`, 'utf8')) as {
+      const view = { member, admin, silo, store: events.store, append, until };
+      await browserLiveViewJourney(page, origin, computer!, view);
+      const journeyReceipt = JSON.parse(await readFile(`${directory}/live-view/conversation-${width}.json`, 'utf8')) as {
         sessions?: typeof journeySessions; revokedAtTime?: string;
       };
       await writeFile(`${output}/run-${run}.json`, JSON.stringify(journeyReceipt, null, 2) + '\n');

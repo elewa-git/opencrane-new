@@ -4,7 +4,6 @@ import { fileUploadedDataSchema } from '@opencrane/events';
 import { PassThrough, Duplex } from 'node:stream';
 import { expect, it } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
-import { grantStream } from '@opencrane/authz';
 import { files, conversations } from '@opencrane/projections';
 import { history } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
@@ -114,10 +113,7 @@ it('refuses stale authority, arbitrary capture input, failed scans and oversized
   const cookie = (sub = 'alice', orgId = 'org-test', exp = Math.floor(Date.now()/1000)+300) => `${config.cookieName}=${encodeSession(config, { sub, orgId, roles: [], authTime: 1, exp })}`;
   const headers = { origin: new URL(config.redirectUri).origin, cookie: cookie(), 'x-opencrane-view': '1', 'idempotency-key': 'failure' };
   const request = (custom = {}, payload?: object) => app.inject({ method: 'POST', url: '/api/conversations/chat/screenshots', headers: { ...headers, ...custom }, ...(payload ? { payload } : {}) });
-  const grant = { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' };
   try {
-    expect((await request()).statusCode).toBe(403);
-    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
     for (const custom of [{ cookie: '' }, { cookie: cookie('alice', 'org-test', 1) }]) expect((await request(custom)).statusCode).toBe(401);
     for (const custom of [{ cookie: cookie('alice', 'foreign') }, { cookie: cookie('bob') }, { origin: 'https://foreign.test' }, { 'x-opencrane-view': '0' }]) expect((await request(custom)).statusCode).toBe(403);
     expect((await request({}, { url: 'http://metadata/', path: '/tmp/image.png' })).statusCode).toBe(400);
@@ -127,11 +123,15 @@ it('refuses stale authority, arbitrary capture input, failed scans and oversized
     fileOptions.scan = () => Promise.reject(new Error('Scanner unavailable'));
     expect((await request()).statusCode).toBe(503);
     fileOptions.scan = async () => {
-      await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
+      await fixture.append('participation-chat', 'participant.removed', {
+        conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
+      });
       return cleanVerdict;
     };
     expect((await request()).statusCode).toBe(403);
-    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
+    await fixture.append('participation-chat', 'participant.added', {
+      conversationId: 'chat', participantId: 'alice', addedBy: 'owner',
+    }, true);
     fileOptions.scan = async () => {
       await fixture.append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'desktop', generation: 2, sandboxUid: 'next', tokenId: 'token:next' });
       await fixture.append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'desktop', generation: 2, podUid: 'next' });
@@ -181,10 +181,6 @@ async function refusesTeamScreenshotBeforeCapture() {
     await fixture.append('conversation-team-session', 'conversation.created', {
       conversationId: 'team-session', assistantId: 'team-sales', createdBy: 'alice',
       mode: 'agent_session', payingGroupId: 'sales',
-    }, true);
-    await fixture.append(grantStream('shared_desktop', 'team-desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'team-desktop', granteeId: 'alice',
-      granteeKind: 'member', grantedBy: 'alice',
     }, true);
     const session = { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1,
       exp: Math.floor(Date.now() / 1000) + 300 };

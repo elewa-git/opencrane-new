@@ -28,7 +28,6 @@
     "apps/server/src/chat/reports.ts": 1,
     "apps/server/src/computers/takeover-refusals.ts": 1,
     "apps/server/src/computers/takeover.ts": 1,
-    "apps/server/src/computers/view-access.ts": 3,
     "apps/server/src/egress/changes.ts": 2,
     "apps/server/src/files/commands.ts": 1,
     "apps/server/src/integrations/access-changes.ts": 4,

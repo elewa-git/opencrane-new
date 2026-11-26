@@ -14,6 +14,12 @@ import { directory } from './config.ts';
 type Desktop = { assistant_id: string; computer_id: string; generation: number };
 type Append = (type: string, subject: string, data: Record<string, unknown>) => Promise<void>;
 
+export async function assertNoDesktopGrant(store: EventStore, silo: string, computerId: string) {
+  const subject = grantStream('shared_desktop', computerId);
+  const grants = await history(store, subject, silo);
+  assert.equal(grants.length, 0, 'The computer has no desktop grant events');
+}
+
 function hasVisibleDesktopPixels(dialog: Element): boolean {
   const canvas = dialog.querySelector<HTMLCanvasElement>('canvas');
   if (!canvas || canvas.width !== 800 || canvas.height !== 600) return false;
@@ -29,15 +35,12 @@ function hasVisibleDesktopPixels(dialog: Element): boolean {
 export async function browserLiveViewJourney(page: Page, origin: string, computer: Desktop, input: {
   member: string; admin: string; silo: string; store: EventStore; append: Append;
   until: (check: () => Promise<boolean> | boolean, label: string) => Promise<void>;
-  desktopAllowed: () => Promise<boolean>;
 }) {
   const { member, admin, silo, store, append, until } = input;
   const conversationId = new URL(page.url()).searchParams.get('conversation');
   assert(conversationId, 'Viewer starts in the conversation created through the composer');
+  await assertNoDesktopGrant(store, silo, computer.computer_id);
   const width = page.viewportSize()!.width;
-  const grant = { resourceType: 'shared_desktop', resourceId: computer.computer_id, granteeId: member };
-  await append('grant.revoked', grantStream('shared_desktop', computer.computer_id), { ...grant, revokedBy: admin });
-  await until(async () => !await input.desktopAllowed(), 'desktop grant absent');
   if (width === 390) {
     await page.getByRole('button', { name: 'Session panel', exact: true }).focus(); await page.keyboard.press('Enter');
   }
@@ -70,30 +73,32 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   await page.evaluate(function observeStates() {
     const states: { state: string; at: number }[] = [];
     Object.assign(window, { liveViewStates: states });
-    const titles = [...document.querySelectorAll('dialog h2')];
-    const title = titles.find(node => node.textContent?.trim() === 'Computer view')!;
-    const dialog = title.closest('dialog')!;
-    const message = dialog.querySelector('[role="status"] .message')!;
+    function isViewerTitle(node: Element) {
+      return node.textContent?.trim() === 'Computer view';
+    }
     function record() {
-      states.push({ state: message.textContent!.trim(), at: performance.now() });
+      const titles = [...document.querySelectorAll('dialog[open] h2')];
+      const title = titles.find(isViewerTitle);
+      const dialog = title?.closest('dialog');
+      const message = dialog?.querySelector('[role="status"] .message');
+      const state = message?.textContent?.trim();
+      if (state && state !== states.at(-1)?.state) {
+        states.push({ state, at: performance.now() });
+      }
     }
     const observer = new MutationObserver(record);
-    observer.observe(message, { childList: true, characterData: true, subtree: true });
+    const changes = {
+      childList: true, characterData: true, subtree: true, attributeFilter: ['open'],
+    };
+    observer.observe(document.body, changes);
   });
   const open = async () => { await entry.focus(); await page.keyboard.press('Enter'); };
-  await open();
-  await viewer.getByText('Unavailable', { exact: true }).waitFor();
-  assert.equal(await viewer.locator('canvas').count(), 0, 'A participant without a desktop grant receives no pixels');
-  await page.keyboard.press('Escape');
-  assert(await entry.evaluate(node => node === document.activeElement), 'Escape restores the panel entry');
-  await append('grant.given', grantStream('shared_desktop', computer.computer_id), { ...grant, granteeKind: 'member', grantedBy: admin });
-  await until(input.desktopAllowed, 'desktop grant projected');
-
   // A known window makes decoded pixels recognisable; it is fixture activity, not an assistant action.
   await promisify(execFile)('kubectl', ['--kubeconfig', `${directory}/computer-kubeconfig.json`, '-n', namespace,
     'exec', computer.computer_id, '-c', 'computer', '--', 'sh', '-c',
     'DISPLAY=:1 xmessage -geometry 600x250+80+100 "OpenCrane assistant computer — live desktop proof" >/dev/null 2>&1 &'], { timeout: 10_000 });
-  const receipt = 'docs/process/live-view'; await mkdir(receipt, { recursive: true });
+  const receipt = `${directory}/live-view`;
+  await mkdir(receipt, { recursive: true });
   await page.screenshot({ path: `${receipt}/conversation-entry-${width}.png`, fullPage: true });
   const started = page.waitForResponse(response => new URL(response.url()).pathname === `/api/conversations/${conversationId}/view` && response.status() === 200);
   await open();
@@ -139,18 +144,29 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   assert.equal((audit[0]?.event.data as { conversationId: string }).conversationId, conversationId);
   await page.screenshot({ path: `${receipt}/conversation-viewer-${width}.png`, fullPage: true });
 
-  // Close to reach the composer, then watch the same desktop while the real Codex turn completes.
+  // Use a second chat for the removal check so the first chat stays available for the audit.
   await page.keyboard.press('Escape');
   const firstViewStoppedAt = performance.now();
+  assert(await entry.evaluate(node => node === document.activeElement),
+    'Escape restores focus to Watch your computer');
   if (width === 390) await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+n');
+  await page.getByText('Draft', { exact: true }).waitFor();
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   const replies = page.getByRole('article', { name: 'Agent reply', exact: true });
   const before = await replies.count();
   await composer.fill('Say hello while I watch your computer.');
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  await composer.press('Enter'); await page.locator('.caret').waitFor();
+  await composer.press('Enter');
+  function openedSecondChat(url: URL) {
+    const selected = url.searchParams.get('conversation');
+    return Boolean(selected && selected !== conversationId);
+  }
+  await page.waitForURL(openedSecondChat);
+  const secondConversation = new URL(page.url()).searchParams.get('conversation');
+  assert(secondConversation, 'The second chat has been saved');
   if (width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
-  const nextAdmission = page.waitForResponse(response => new URL(response.url()).pathname === `/api/conversations/${conversationId}/view` && response.status() === 200);
+  const nextAdmission = page.waitForResponse(response => new URL(response.url()).pathname === `/api/conversations/${secondConversation}/view` && response.status() === 200);
   await open();
   const watching = await (await nextAdmission).json() as { sessionId: string };
   const duringTurnStartedAt = performance.now();
@@ -163,16 +179,12 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   assert.equal(watchingAudit[0]?.event.type, 'computer.view_started');
   const revokedAt = performance.now();
   const revokedAtTime = new Date().toISOString();
-  await append('grant.revoked', grantStream('shared_desktop', computer.computer_id), { ...grant, revokedBy: admin });
-  await page.waitForFunction(function hidden(dialog: Element) {
-    const message = dialog.querySelector('[role="status"] .message')!;
-    const state = message.textContent!.trim();
-    const display = dialog.querySelector<HTMLElement>('.display')!;
-    return state === 'Access changed' || (state === 'Paused' && display.hidden);
-  }, viewerElement, { timeout: 2000 });
+  const removal = { conversationId: secondConversation, participantId: member, removedBy: admin };
+  await append('participant.removed', `participation-${secondConversation}`, removal);
+  await viewer.getByText('Access changed', { exact: true }).waitFor({ timeout: 2000 });
   const revokedMs = Math.round(performance.now() - revokedAt);
+  assert(revokedMs < 2000, 'The view closes within two seconds of participant removal');
   const duringTurnStoppedAt = performance.now();
-  await viewer.getByText('Access changed', { exact: true }).waitFor({ timeout: 12_000 });
   assert.equal(await viewer.locator('canvas').count(), 0, 'Revocation clears protected pixels');
   await until(async () => (await history(store, `view-${watching.sessionId}`, silo)).length === 2, 'view stop audit');
   const stopped = await history(store, `view-${watching.sessionId}`, silo);
@@ -211,6 +223,8 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
     pauseMs: duringTurnPauses.durationMs, noGrant: 'PASS', keyboard: 'PASS',
     targets44px: 'PASS', assistantStubTurn: 'PASS', status: 'PASS' }, null, 2));
   await page.keyboard.press('Escape');
-  if (width === 390) await page.keyboard.press('Escape');
-  console.log(`PASS browser live view ${width}px: conversation panel → no grant refused → granted real desktop + Codex/stub turn → revoked in ${revokedMs} ms, pixels cleared and stop audited; deployed service account, frontend proxy, keyboard and 44px targets`);
+  if (width === 390 && await page.getByRole('dialog', { name: 'Session', exact: true }).isVisible()) {
+    await page.keyboard.press('Escape');
+  }
+  console.log(`PASS browser live view ${width}px: conversation panel → real desktop with chat access → Codex/stub turn → participant removed in ${revokedMs} ms, pixels cleared and stop audited; deployed service account, frontend proxy, keyboard and 44px targets`);
 }

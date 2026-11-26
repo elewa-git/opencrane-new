@@ -304,7 +304,7 @@ it('hides expired pixels, clears paused pixels and rebuilds the viewer without a
     socket.message('{"lease":"valid","at":0,"until":1500}');
     await fixture.whenStable();
     expect(element.textContent).toContain('Access confirmed. Starting the desktop…');
-    expect(element.textContent).not.toContain("Checking that you're in this computer's audience");
+    expect(element.textContent).not.toContain('Checking your access to this chat.');
     for (let index = 0; index < 4; index++) socket.message(new ArrayBuffer(1));
     const first = FakeRfb.instances[0]!;
     first.dispatchEvent(new Event('connect'));

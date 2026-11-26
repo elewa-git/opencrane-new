@@ -915,8 +915,8 @@ Admission uses `POST /api/conversations/:id/view`; the viewer socket uses
 The session panel and its phone overlay offer **Watch your computer** for a saved
 conversation. The self-contained `LiveView` component opens a native dialog with
 fit/actual-size viewing and Connecting, Viewing, Disconnected and Access changed
-states. Participants need an explicit shared-desktop grant; a refused admission
-shows **Unavailable**. Revocation closes the connection and clears pixels.
+states. A participant with chat access can watch a ready computer. A refused
+request shows **Unavailable**. Losing chat access closes the connection and clears pixels.
 Escape closes the dialog and restores focus to its entry. Changing conversation
 or destroying the component cancels admission and closes the old connection.
 All viewer buttons have 44px targets. The viewer uses only noVNC's OSI-licensed

@@ -187,7 +187,7 @@ async function provisionsExplicitGrantsAndOneComputer() {
   expect(detail.statusCode).toBe(200);
   expect(detail.json()).toMatchObject({ rows: [{ ownerId: 'sales', kind: 'team',
     name: 'Sales assistant', status: 'claiming', generation: 1 }] });
-  expect((await auth.desktop('bob', 'team-shared')).allowed).toBe(false);
+  expect((await auth.use('person', 'bob', 'shared_desktop', 'team-shared')).allowed).toBe(false);
 }
 it('replays group rights and selected grants and repeated reactions claim one computer',
   provisionsExplicitGrantsAndOneComputer);
