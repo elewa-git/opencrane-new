@@ -1078,13 +1078,16 @@ infra/dev-stack/run.sh package-check --id "$DEV_STACK_ID" &&
 
 Compare the namespace and volume claim IDs with the values recorded before
 the update. Check that the deployment and backup Job template use the new
-approved digests, then sign in with an existing member and open their chat
-and upload. Check the next scheduled backup in the catalogue and restore it
+approved digests. After the website pods restart, check the forwarder and
+the saved route. Sign in with an existing member and open their chat and
+upload. Check the next scheduled backup in the catalogue and restore it
 on an empty recovery installation using its exact image pins. Keep the
 earlier verified backup until recovery has passed.
 
-Helm attempts to return to the previous revision if the upgrade or its
-readiness checks fail. Check `helm history` before taking further action. If
+The update command checks the workloads that serve the pilot. The recovery
+volume claim stays unbound until a recovery Job uses it. If the update or
+its readiness checks fail, the command attempts to restore the previous Helm
+revision. Check `helm history` before taking further action. If
 the new application still runs but a sign-in, upload or backup check fails,
 return to the recorded working revision with the guarded rollback command.
 The old scanner record must still be within its approved lifetime.
