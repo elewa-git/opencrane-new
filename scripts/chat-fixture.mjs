@@ -173,6 +173,10 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
     });
   });
   async function waitForReadySocket() {
+    if (socketReady) return;
+    // Wait for the chat to read its history and start connecting before checking the socket.
+    const loadedTranscript = page.locator('section.transcript[aria-busy="false"]');
+    await loadedTranscript.waitFor();
     for (let attempt = 0; attempt < 100; attempt += 1) {
       if (socketReady) return;
       await new Promise(resolve => setTimeout(resolve, 10));
