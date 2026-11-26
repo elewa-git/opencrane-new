@@ -43,3 +43,18 @@ a different spelling of the Kubernetes status even though the server pod request
 was denied. Both runs saved startup and service logs before cleanup.
 
 `run.sh package-down --id 1` and `down.sh --id 1` both passed. Slot 1 reported free.
+
+## Direct workspace visits
+
+Fresh slot-1 routing journey was NOT RUN. The browser setup failed before the
+first direct workspace visit.
+
+On 26 November 2026, slot 1 started fresh from `40f775d3e` with the free
+stand-in. The stack and website reported healthy. The test account signed in
+through Zitadel. The stack had created an owner for a different account, so
+the test account's welcome progress request returned HTTP 403. The browser
+stopped before it could invite a member.
+
+The driver saved `up.log`, `browser.log`, `service-server.log` and the other
+service logs before running `down.sh --id 1`. Cleanup passed and slot 1
+reported free.
