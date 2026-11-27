@@ -13,6 +13,7 @@ function partitionsTests() {
   const imageFiles = image.filter(isTestFile);
   const browserFiles = browser.filter(isTestFile);
   assert.deepEqual(imageFiles, [
+    'apps/computer/test/assistant-native.test.ts',
     'apps/computer/test/codex-config.test.ts',
     'apps/computer/test/display-attacks.test.ts',
     'apps/computer/test/private-recall-call.test.ts',
