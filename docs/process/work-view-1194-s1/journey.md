@@ -1,5 +1,28 @@
 # Watch the computer and save a screenshot
 
+## Fresh journey run 3 on 27 November 2026
+
+**PASS** on commit `313de7778`. One fresh slot 1 stack ran Chromium with the
+stand-in model from 01:36 to 01:54 UTC. Startup, stack health, the core browser
+journey, screenshot and refusal checks, and teardown all passed.
+
+| Expected result | 1280 px | 390 px |
+| --- | --- | --- |
+| Watch a personal computer, save a PNG and reopen it | PASS · [Viewer](run-3/viewer-1280.png) · [Saved PNG](run-3/saved-screenshot-1280.png) | PASS · [Viewer](run-3/viewer-390.png) · [Saved PNG](run-3/saved-screenshot-390.png) |
+| Refuse an active member outside the chat with zero pixels | PASS · [Browser](run-3/non-participant-1280.png) | PASS · [Browser](run-3/non-participant-390.png) |
+| Refuse a signed-in outsider with zero pixels | PASS · [Browser](run-3/outsider-1280.png) | PASS · [Browser](run-3/outsider-390.png) |
+| Close the socket and clear the picture within 2 s of participant removal | PASS · [160 ms](run-3/removed-1280.png) | PASS · [199 ms](run-3/removed-390.png) |
+
+The member reopened the saved PNG from the chat and session panel after
+reloading. Each download matched the digest recorded on save. Both refusal
+accounts received HTTP 403 for the view, capture and saved file requests. The
+refused browsers opened zero desktop sockets, received zero desktop bytes and
+rendered zero desktop canvases. Removed participants received HTTP 403 when
+they tried to reopen the view. [Measured results](run-3/results.json)
+
+Hosted CI **PASS** on the same commit. Shard 2 passed the regression test for
+listing 60 private team sessions. [CI run](https://github.com/elewa-git/opencrane-new/actions/runs/45920176487)
+
 ## Final fix journey on 27 November 2026
 
 **NOT RUN** on commit `bfb39e78b`. Slot 1 was free during parts of the
