@@ -12,9 +12,19 @@
     "opt/native/node_modules/@openai/codex-linux-x64/package.json": "64bcf4ada80b1236fbc20de2a41f10cd91ede666e50350148a931e221eb5c25f",
     "opt/native/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex": "1748767b230ebfc3d4ab7e4e254920d0c0ad9691fd8c11f190e7d44511a4a92e",
     "app/apps/computer/src/private-codex.ts": "97f8dfee3ca713a5b759d62c9d0adfa4a99eff78c383a658b8f3726ec63b62c9",
-    "app/apps/computer/src/codex-config.ts": "93ffc2aa84e312c1b1008a3b2af93f89b9e1c7525a7a38e0faded0d7850c7507",
+    "app/apps/computer/src/codex-config.ts": "73a648da981e3c87edc646bb8904e2be917576da459a1b66cf900a6260256fb0",
     "app/apps/computer/src/codex-connection.ts": "b3ad1d74cabc65151eacac402f42a71f779287b1a017ae50e37e0774c6a9f330",
-    "app/apps/computer/src/http.ts": "00651afc84257edbd9cb5a784ec2c67a6e1919112a66c47ec7925f7e64da86e6"
+    "app/apps/computer/src/http.ts": "00651afc84257edbd9cb5a784ec2c67a6e1919112a66c47ec7925f7e64da86e6",
+    "app/apps/computer/src/assistant-brief.ts": "4de365e6264f7a5fbd9c74a95f6e6efeae1619e9db2693cf9e81013feedf83bf",
+    "app/apps/computer/src/prompts/soul.md": "7e28fefb947d1798c11e2124786c5b8db8f0ba83bd976bda89d000c668b8506f",
+    "app/apps/computer/src/prompts/persona.md": "d12cc10dcf04a4b99f4e6e49359ffdafd36905f3eded450ac12ff4ee9c37f506",
+    "app/apps/computer/src/prompts/agent-personal.md": "ba9e7966299479b517f457f9eb7fd8f98e33f0d3686d8e68d154ceab2aa2e10b",
+    "app/apps/computer/src/prompts/agent-shared.md": "99c0e239c83767f68ac83150db40d6e2167c00e786f4fe1338fea8db2b8edb2b",
+    "app/apps/computer/src/prompts/agent-routine.md": "a133f848f378e9ef64d668c6ff7af36b880ec298438ab144af51401a7c501bf4",
+    "app/apps/computer/src/prompts/environment-tools.md": "63c9237a6e5810cb27747d6ec55cbd114bc6db6e709fd79988f374e2b8d92c51",
+    "app/apps/computer/src/prompts/environment-private.md": "7caab3864bcaaa5fba9e2176dd907dee65df59d2ee52c831d6ccd596e5345bb6",
+    "app/apps/computer/src/prompts/LICENSE-Codex": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+    "app/apps/computer/src/prompts/NOTICE-Codex": "9d71575ecfd9a843fc1677b0efb08053c6ba9fd686a0de1a6f5382fd3c220915"
   },
   "helperLicence": "AGPL-3.0-or-later",
   "helperLicenceSource": "LICENSE"
