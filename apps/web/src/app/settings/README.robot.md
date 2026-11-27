@@ -7,16 +7,19 @@ session name as read-only and offers `/welcome/survey` only for an unfinished
 survey. `personal-settings-shell.*` renders desktop navigation and the phone
 menu. `pages.ts` names Account, Preferences, Assistant and My tools routes.
 
-`my-tools.*` reads `GET /api/my/tools/:serverId/profiles` with 20 rows per page.
-`/account/tools?serverId=<id>` supplies the server id. The server currently has
-no member-facing catalogue of integrations, so the bare settings link asks for
-an integration ID. Rows contain safe profile ids and status only. They do
-not contain verified provider names, scopes, expiry or secrets. Selected is
+`my-tools.*` reads `GET /api/my/tools` to show each registered server by name
+and the member's status. Connect opens the key form for that server. Manage
+connection opens the member's saved profiles, including after a grant is
+removed. A chat link with `?serverId=<id>` opens the matching row when its
+connection can be managed. Saving a choice or revoking a key refreshes the
+tool statuses.
+
+`ToolConnections` reads `GET /api/my/tools/:serverId/profiles` with 20 rows
+per page. Profile rows contain safe profile ids and status. Selected is
 shown separately and never means a grant. A blocked profile stays visible.
 The page ignores a detail reply after another profile is chosen. It reads a
-profile's safe detail before showing Revoke. The review names its safe profile
-and integration ids and explains
-the local effect and the provider limit. It sends one change reference and saved
+profile's safe detail before showing Revoke. The review names the tool and safe
+profile id and explains the local effect and the provider limit. It sends one change reference and saved
 profile revision. It saves the profile id and change reference in session storage
 before POST, under `my-tools-revoke:<serverId>`. A return visit restores them.
 A lost reply keeps that reference and only checks its original status. A 404
@@ -37,7 +40,7 @@ Definite input and body-size refusals clear the unpublished change
 reference; uncertain outcomes still require the original receipt. Failed reads, writes
 and receipt checks report only fixed operation and cause categories to the browser
 console. They never log exception messages, account fields or response bodies.
-The Connect or choose a key action opens `personal-key.*` on the same page.
+Connect opens `personal-key.*` on the same page.
 It loads the reviewed connection settings, accepts a password input and clears it
 before waiting for POST. A successful own-profile read shows the verified account.
 Use this key calls the existing explicit selection command. Lost save or selection

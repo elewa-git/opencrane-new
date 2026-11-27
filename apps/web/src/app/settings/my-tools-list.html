@@ -1,0 +1,61 @@
+<section class="my-tools">
+  <h1>My tools</h1>
+  @switch (loadState()) {
+    @case ('loading') {
+      <p role="status">Loading your tools…</p>
+    }
+    @case ('access') {
+      <p role="status">Sign in again to see your tools.</p>
+    }
+    @case ('failed') {
+      <p role="status">
+        @if (tools().length) {
+          We couldn't refresh your tools. Showing the last loaded list.
+        } @else {
+          We couldn't load your tools.
+        }
+      </p>
+      <button type="button" (click)="refresh()">Try again</button>
+    }
+    @case ('ready') {
+      @if (tools().length === 0) {
+        <p role="status">No tools have been added yet.</p>
+      }
+    }
+  }
+
+  @if (tools().length) {
+    <ul class="tools" aria-label="Tools added by your organisation">
+      @for (tool of tools(); track tool.serverId) {
+        <li>
+          <div class="tool-summary">
+            <div class="tool-info">
+              <h2>{{ tool.name }}</h2>
+              <p role="status">{{ statusLabels[tool.status] }}</p>
+              @if (tool.status === 'unavailable') {
+                <p>An owner or admin can give you access.</p>
+              }
+            </div>
+            @if (tool.canManageConnection) {
+              <button type="button" [attr.aria-expanded]="activeServerId() === tool.serverId"
+                (click)="toggleConnection(tool.serverId)">
+                @if (activeServerId() === tool.serverId) {
+                  Close connection
+                } @else if (tool.status === 'needs_account') {
+                  Connect
+                } @else {
+                  Manage connection
+                }
+              </button>
+            }
+          </div>
+          @if (tool.canManageConnection && activeServerId() === tool.serverId) {
+            <oc-tool-connections [serverId]="tool.serverId" [name]="tool.name"
+              [canConnect]="tool.status !== 'unavailable'"
+              [startConnecting]="tool.status === 'needs_account'" (changed)="refresh()" />
+          }
+        </li>
+      }
+    </ul>
+  }
+</section>

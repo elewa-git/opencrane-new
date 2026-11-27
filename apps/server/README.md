@@ -33,6 +33,7 @@ flowchart LR
 - Check access before returning private information or saving changes.
 - Serve verified pilot restores with writes and assistant work held.
 - Carry personal assistant assignments, chat messages, live replies, stops and tool approvals.
+- Show each signed-in member the organisation's tools and their own connection status.
 - Check and scan files before storing them or passing them to a computer.
 - Check chat access before opening a desktop view or saving a screenshot.
   Refuse signed-out view requests without adding events, and audit signed-in refusals.

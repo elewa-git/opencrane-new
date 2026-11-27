@@ -702,21 +702,22 @@ describe('personal settings shell', () => {
     expect(root(fixture).textContent).not.toContain('Taylor Example');
   });
 
-  it('opens My tools without reading until an integration is chosen', async () => {
+  it('opens My tools from settings and reads the member’s tools', async () => {
     globalThis.history.replaceState({}, '', '/account/tools');
-    const fixture = await create(response({}));
+    const fixture = await create(response({ rows: [] }));
     const element = root(fixture);
     expect(element.querySelector('h1')?.textContent).toBe('My tools');
-    expect(element.textContent).toContain('Enter an integration ID to see your saved connections');
+    await vi.waitFor(() => expect(element.textContent).toContain('No tools have been added yet.'));
     expect(element.querySelectorAll('.sidebar nav a')).toHaveLength(4);
     expect(element.querySelector('.sidebar a.back[href="/workspace"]')?.textContent)
       .toContain('Back to workspace');
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe('/api/my/tools');
   });
 
   async function checkSettingsDestination(pathname: string, expectedHeading: string): Promise<void> {
     globalThis.history.replaceState({}, '', pathname);
-    const fixture = await create(response({}));
+    const body = pathname === '/account/tools' ? { rows: [] } : {};
+    const fixture = await create(response(body));
     const element = root(fixture);
     expect(element.querySelector('h1')?.textContent).toBe(expectedHeading);
     expect(element.querySelectorAll('.sidebar nav a')).toHaveLength(4);

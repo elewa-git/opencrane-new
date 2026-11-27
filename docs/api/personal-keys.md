@@ -12,6 +12,13 @@ from member and assistant grants.
 All routes require an authenticated member of the current organisation. Writes also
 require the exact Origin. Replies use `Cache-Control: no-store`.
 
+- `GET /api/my/tools` returns the names and ids of the organisation's registered
+  servers, the signed-in member's status and whether they can manage a connection.
+  The route takes no query parameters and returns no account metadata, grants
+  or destinations. A ready server without an account requirement needs a current
+  member grant. A server that needs a personal account also needs a verified
+  selection. Chat checks the chosen assistant's grants and consent separately.
+  Members can open their own saved profiles for revoke if a grant ends.
 - `GET /api/my/tools/:serverId/connection` returns the current `connectionId`,
   `identityTool`, `selectionRevision`, optional `selectedProfileId` and optional
   `allowedAssistantIds`. Consent controls must match the selected profile before editing. The server must be published, personal and

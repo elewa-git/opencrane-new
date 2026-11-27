@@ -46,7 +46,7 @@ function classifyCause(error: Error): FailureCause {
 }
 
 export function logPersonalConnectionFailure(request: FastifyRequest, error: unknown,
-  operation: 'connection.save' | 'connection.needs') {
+  operation: 'connection.save' | 'connection.needs' | 'connection.list') {
   const causes: FailureCause[] = [];
   const seen = new Set<Error>();
   let current = error;

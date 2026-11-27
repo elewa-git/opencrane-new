@@ -97,7 +97,8 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerGroupRoutes(app, authConfig, options.groups);
   registerMemberReads(app, authConfig, options.memberReads);
   registerRoutineReads(app, authConfig, options.memberReads);
-  registerConnectionProfileRead(app, authConfig, options.memberReads);
+  registerConnectionProfileRead(app, authConfig, options.memberReads,
+    options.integrations?.catalogue);
   registerConnectionProfileDisable(app, authConfig, options.memberReads);
   registerRoleRoutes(app, authConfig, options.memberReads);
   registerInvitationEmail(app, authConfig, options.invitationEmail);

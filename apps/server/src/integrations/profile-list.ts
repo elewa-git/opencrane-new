@@ -3,6 +3,7 @@ import { personalConnectionCreation } from '@opencrane/events';
 import { z } from 'zod';
 import { foldConnectionSelection, history, loadPersonalProfileMetadata,
   readActiveMember } from '@opencrane/models';
+import type { Query as ProjectionQuery } from '@opencrane/projections';
 import type { GroupOptions } from '../members/group-routes.ts';
 import { conversationListCursor, ConversationListChanged } from '../chat/list-cursor.ts';
 
@@ -18,6 +19,20 @@ const progressSchema = z.object({ sequence: z.coerce.number().int().nonnegative(
 const candidateSchema = z.object({ profile_id: id, position: z.coerce.number().int().positive() });
 function candidate(record: Record<string, unknown>) {
   return candidateSchema.parse(record);
+}
+
+export async function readOwnConnectionServers(db: ProjectionQuery, silo: string,
+  memberId: string) {
+  const result = await db.query(`SELECT DISTINCT server_id FROM connection_profiles
+    WHERE silo = $1 AND member_id = $2`, [silo, memberId],
+  { deadline: performance.now() + 10_000 });
+  const servers = new Set<string>();
+  const serverRow = z.object({ server_id: id });
+  for (const raw of result.rows) {
+    const row = serverRow.parse(raw);
+    servers.add(row.server_id);
+  }
+  return servers;
 }
 
 function matchesStatus(status: string, filter: Query['status']) {

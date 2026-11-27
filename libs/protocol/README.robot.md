@@ -261,6 +261,9 @@ replay; parsing a browser reply does not authorise a tool call.
 
 ## Inventory history availability
 
+`myToolsSchema` checks the member view of the integrations register. Each row
+has a tool server id, a name, the member's status and a connection action flag.
+
 Departure routines and personal connections carry `absent_on_version` only after
 a complete check. Known unsupported records carry `unsupported_history`. Missing,
 changed or over-limit inventory inputs carry `unavailable`, with removal disabled.

@@ -16,6 +16,11 @@ const row = {
 
 async function serve(state, route) {
   const url = new URL(route.request().url());
+  if (url.pathname === '/api/my/tools') {
+    const tool = { serverId: 'odoo', name: 'Orders', status: 'ready', canManageConnection: true };
+    await route.fulfill({ json: { rows: [tool] } });
+    return;
+  }
   if (url.pathname === '/api/my/tools/odoo/profiles') {
     const rows = state === 'INT-60' ? [] : [row];
     await route.fulfill({ json: { rows, next: null, complete: true } });

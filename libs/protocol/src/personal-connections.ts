@@ -1,7 +1,16 @@
 import { recordIdSchema } from '@opencrane/events';
 import { z } from 'zod';
+import { integrationRowSchema } from './integrations.ts';
 
 const identifier = recordIdSchema;
+const myToolSchema = integrationRowSchema.pick({ name: true }).extend({
+  serverId: identifier,
+  status: z.enum(['ready', 'needs_account', 'unavailable']),
+  canManageConnection: z.boolean(),
+});
+export const myToolsSchema = z.strictObject({ rows: z.array(myToolSchema) });
+export type MyTool = z.infer<typeof myToolSchema>;
+
 export const personalProfileMetadataSchema = z.object({
   serverId: identifier, profileId: identifier, profileRevision: z.int().positive(),
   status: z.enum(['saved_unverified', 'verified', 'unavailable']),

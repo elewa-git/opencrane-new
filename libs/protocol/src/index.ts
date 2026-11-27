@@ -122,7 +122,7 @@ export { currentEffectsQuerySchema, currentEffectsResponseSchema,
   type CurrentEffectsQuery, type CurrentEffectsResponse } from './current-effects.ts';
 
 export { personalProfileMetadataSchema, personalConnectionSettingsSchema,
-  personalKeyCommandSchema, personalConnectionNeedsSchema,
+  personalKeyCommandSchema, personalConnectionNeedsSchema, myToolsSchema, type MyTool,
   connectionSelectionBodySchema, connectionSelectionCommandSchema, type PersonalProfileMetadata } from './personal-connections.ts';
 
 export { sessionDefaults } from './session-defaults.ts';

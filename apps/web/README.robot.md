@@ -6,8 +6,10 @@ My tools uses the [personal settings contracts](src/app/settings/README.robot.md
 for assistant consent. Chat’s personal-connection notice handles `assistant_not_allowed`
 with a plain refusal and a My tools link, without displaying account details.
 
-`/account/tools?serverId=<id>` reads the signed-in person's bounded profiles for
-one integration, then the exact safe profile detail before a local revoke.
+`/account/tools` lists the organisation's tools and the signed-in person's
+status. Connect opens that tool's personal key form. A chat link with
+`?serverId=<id>` can open its connections directly. The page reads the person's
+bounded profiles for that tool and its safe profile detail before a local revoke.
 Unknown revoke replies retain their original change reference in session storage
 for read-only status checks after navigation. See `src/app/settings/README.robot.md` and the intercepted display receipt
 under `docs/process/screen-p3-8-bearer/`.

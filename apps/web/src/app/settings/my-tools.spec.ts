@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TestBed } from '@angular/core/testing';
-import { MyTools } from './my-tools';
+import { ToolConnections } from './my-tools';
 
 const saved = {
   serverId: 'odoo', profileId: 'alex', profileRevision: 3,
@@ -17,10 +17,11 @@ function page(rows: unknown[], next: string | null = null) {
   return { rows, next, generation: 1, sequence: 4, complete: next === null };
 }
 
-function view(): { fixture: ReturnType<typeof TestBed.createComponent<MyTools>>;
+function view(): { fixture: ReturnType<typeof TestBed.createComponent<ToolConnections>>;
   element: HTMLElement } {
-  const fixture = TestBed.createComponent(MyTools);
+  const fixture = TestBed.createComponent(ToolConnections);
   fixture.componentRef.setInput('serverId', 'odoo');
+  fixture.componentRef.setInput('name', 'Orders');
   fixture.detectChanges();
   const element: unknown = fixture.nativeElement;
   if (!(element instanceof HTMLElement)) throw new Error('Missing tools root');
@@ -29,7 +30,7 @@ function view(): { fixture: ReturnType<typeof TestBed.createComponent<MyTools>>;
 
 describe('My tools', () => {
   beforeEach(() => {
-    TestBed.configureTestingModule({ imports: [MyTools] });
+    TestBed.configureTestingModule({ imports: [ToolConnections] });
     sessionStorage.clear();
     Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
       configurable: true,
@@ -252,7 +253,7 @@ describe('My tools', () => {
     expect(sessionStorage.getItem('my-tools-revoke:odoo')).toContain(originalReference);
   });
 
-  it('names the safe integration and profile identifiers in the revoke review', async () => {
+  it('names the tool and the saved profile in the revoke review', async () => {
     function serve(url: string | URL | Request): Promise<Response> {
       const address = url instanceof Request ? url.url : url.toString();
       if (address.endsWith('/alex')) return response(saved);
@@ -271,7 +272,7 @@ describe('My tools', () => {
     });
     element.querySelector<HTMLButtonElement>('.danger-outline')?.click();
     const review = element.querySelector('dialog');
-    expect(review?.textContent).toContain('odoo');
+    expect(review?.textContent).toContain('Orders');
     expect(review?.textContent).toContain('alex');
   });
 

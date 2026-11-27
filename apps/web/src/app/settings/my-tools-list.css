@@ -1,0 +1,66 @@
+.my-tools {
+  max-width: 760px;
+}
+
+h1 {
+  margin: 0 0 16px;
+}
+
+.tools {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #cdd4d5;
+  border-radius: 12px;
+}
+
+.tools > li {
+  padding: 14px;
+}
+
+.tools > li + li {
+  border-top: 1px solid #cdd4d5;
+}
+
+.tool-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.tool-info {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+h2 {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+}
+
+p {
+  margin: 0 0 4px;
+  color: var(--oc-ink-muted);
+}
+
+button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #aab6b9;
+  border-radius: 8px;
+  background: #fff;
+  color: #16191a;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 2px solid #0a8497;
+  outline-offset: 2px;
+}
+
+oc-tool-connections {
+  display: block;
+  margin-top: 14px;
+}

@@ -1586,6 +1586,12 @@ Full row qualification still needs P5-5 and P5-6b. See the
 
 ## Organisation integrations
 
+`GET /api/my/tools` lists the same registered servers for a current member.
+It returns only each server's name, id, the member's status and whether they
+can open their own connection. It uses the saved grants, current published
+policy and verified personal selection. The member can manage a saved profile
+after a grant ends. See [Personal API keys](../../docs/api/personal-keys.md).
+
 `GET /api/org/integrations` requires the encrypted session cookie, the configured silo and
 organisation, a joined issuer/subject binding in the members projection, and current
 OpenFGA `admin` permission (which includes owners). Cookie roles are ignored. Missing or

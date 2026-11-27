@@ -2,19 +2,20 @@
 
 ## What this is
 
-This folder shows a person's Account page, saved personal tool connections and
-settings menu. People can check their signed-in name and continue their welcome
-survey. The Assistant page links to saved persona review.
+This folder shows a person's Account page, My tools and settings menu. People
+can check their signed-in name and continue their welcome survey. The Assistant
+page links to saved persona review.
 
 ## Where it fits
 
 These pages are part of the website. They read identity and progress from the
-server, save and choose verified personal keys and their allowed assistants, and use the shared menu controls.
+server and show the tools the organisation has added. People can connect their
+own account and choose which assistants may use it.
 
 ```mermaid
 flowchart LR
   web["apps/web<br/>personal screens"] -->|opens| settings["settings<br/>account and menu"]
-  settings -->|reads identity, saves keys and assistant choices| server["apps/server<br/>session and progress"]
+  settings -->|reads identity, progress and tools| server["apps/server<br/>account and tools"]
   settings -->|links to| welcome["welcome<br/>survey and persona"]
   settings -.->|uses| ui["ui<br/>shared controls"]
 ```
@@ -27,7 +28,8 @@ flowchart LR
 - Show desktop navigation and a phone menu for personal settings.
 - Link Assistant to saved persona review.
 - Save a personal key only after the reviewed server verifies its account, then choose it for use.
-- List saved personal profiles for a chosen integration and explain their safe status.
+- Show each tool and whether the person can use it, needs to connect an account
+  or needs access from an owner or admin.
 - Let the person choose which assistants may use their selected key and keep confirmed
   choices usable while the profile list is catching up.
 - Review the effects before revoking a saved personal connection.
@@ -39,12 +41,12 @@ flowchart LR
    It checks welcome progress before offering the survey link.
 2. **Navigation.** The shell keeps Account, Preferences, Assistant and My tools
    in one menu. Assistant offers a link to the separate persona review screen.
-3. **Connections.** My tools checks a key with the reviewed identity tool before saving
-   it. The person then chooses the verified key and the assistants that may use it.
-   Their own assistant is allowed by default; shared assistants start switched off. My tools reads saved profiles and opens
-   safe details for the last chosen profile. Its review names the profile and
-   integration. If a revoke reply is lost, a return visit can check the original
-   request before another attempt.
+3. **Connections.** Connect opens the chosen tool's key form. My tools checks the
+   account before saving the key. The person then selects the key and chooses
+   which assistants may use it. Their own assistant is allowed by default.
+   My tools also opens saved connections for review and revoke. The review
+   names the tool and profile. If a reply is lost, a return visit can check
+   the original request.
 
 ## How to run or test it
 
