@@ -50,13 +50,13 @@ async function fixture() {
     return Promise.resolve();
   }
   function wasResumed() { return resumed; }
-  const parts = { events: capture, database: capture, files: capture };
+  const parts = { events: capture, database: capture, files: capture, 'member-keys': capture };
   const source: BackupSource = { pause, verify, resume, parts };
   const options = { directory, id: 'backup-one', silo: 'test', images: { server: 'test-image' } };
   return { directory, options, source, observations, point, wasResumed };
 }
 
-it('publishes three checked parts from one stopped point and lists exactly those bytes',
+it('publishes four checked parts from one stopped point and lists exactly those bytes',
   async function capturesTogether() {
     const test = await fixture();
     await captureScheduledBackup(test.options, test.source);
@@ -67,8 +67,10 @@ it('publishes three checked parts from one stopped point and lists exactly those
     expect(listed[0]).toEqual(manifest);
     expect(manifest.point).toEqual(test.point);
     expect(manifest.id).toBe('backup-one');
-    expect(Object.keys(manifest.parts)).toEqual(['events', 'database', 'files']);
-    for (const part of Object.values(manifest.parts)) {
+    expect(Object.keys(manifest.parts)).toEqual(['events', 'database', 'files', 'member-keys']);
+    for (const name of ['events', 'database', 'files', 'member-keys'] as const) {
+      const part = manifest.parts[name];
+      if (!part) throw new Error('Test backup part missing');
       expect(part.backupId).toBe(manifest.id);
       expect(part.sequence).toBe(42);
       expect(part.byteCount).toBeGreaterThan(0);
@@ -77,10 +79,10 @@ it('publishes three checked parts from one stopped point and lists exactly those
       const bytes = await readFile(join(test.directory, 'backup-one', part.path));
       expect(bytes.length).toBe(part.byteCount);
     }
-    expect(test.observations).toEqual(['verify', 'events', 'database', 'files', 'verify']);
+    expect(test.observations).toEqual(['verify', 'events', 'database', 'files', 'member-keys', 'verify']);
   });
 
-for (const part of ['events', 'database', 'files'] as const) {
+for (const part of ['events', 'database', 'files', 'member-keys'] as const) {
   it(`fails the whole run visibly when ${part} fails and restores admission`,
     async function refusesFailedPart() {
       const test = await fixture();

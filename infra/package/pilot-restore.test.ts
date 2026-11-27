@@ -35,6 +35,10 @@ function emptyTarget() {
   function record(stage: string) {
     if (!stages.includes(stage)) stages.push(stage);
   }
+  function keys() {
+    record('keys');
+    return Promise.resolve();
+  }
   function events() {
     record('events');
     return Promise.resolve();
@@ -52,13 +56,13 @@ function emptyTarget() {
     return Promise.resolve();
   }
   function open() {
-    expect(stages.slice(0, 4)).toEqual(['events', 'database', 'files', 'verify']);
+    expect(stages.slice(0, 5)).toEqual(['keys', 'events', 'database', 'files', 'verify']);
     record('open');
     admitted = true;
     return Promise.resolve();
   }
   const target: PilotRestoreTarget = { acquire, identity, requireIsolated, hold, empty,
-    events, database, files, verify, open };
+    keys, events, database, files, verify, open };
   return { target, stages, admitted: () => admitted };
 }
 
@@ -68,10 +72,10 @@ async function restoresAnEmptyInstallationBeforeAdmission() {
   await expect(restorePilotBackup(options, runtime.target)).resolves.toMatchObject({
     status: 'complete', backupId: options.id, sequence: 1,
   });
-  expect(runtime.stages).toEqual(['events', 'database', 'files', 'verify', 'open']);
+  expect(runtime.stages).toEqual(['keys', 'events', 'database', 'files', 'verify', 'open']);
   expect(runtime.admitted()).toBe(true);
 }
-it('restores all three parts into an empty installation before opening reading',
+it('restores all four parts into an empty installation before opening reading',
   restoresAnEmptyInstallationBeforeAdmission);
 
 async function refusesWithoutMemberKeys() {
@@ -90,6 +94,21 @@ async function refusesWithoutMemberKeys() {
   expect(runtime.admitted()).toBe(false);
 }
 it('refuses a backup without member keys before restoring any data', refusesWithoutMemberKeys);
+
+async function refusesMissingKeyFile(missing: 'encrypted part' | 'encryption key') {
+  const options = await pilotBackupFixture();
+  const file = missing === 'encrypted part'
+    ? join(options.directory, options.id, 'member-keys') : options.backupKeyFile;
+  await rm(file);
+  const runtime = emptyTarget();
+  await expect(restorePilotBackup(options, runtime.target)).rejects.toMatchObject({
+    reason: 'member_keys_unavailable', stage: 'backup',
+  });
+  expect(runtime.stages).toEqual([]);
+  expect(runtime.admitted()).toBe(false);
+}
+it.each(['encrypted part', 'encryption key'] as const)(
+  'refuses without the %s before restoring any data', refusesMissingKeyFile);
 
 async function restoresProviderCheckpointInventory() {
   const options = await pilotBackupFixture();
@@ -160,7 +179,7 @@ async function refusesInvalidSet(kind: string) {
 it.each(['mixed', 'version', 'point', 'ahead', 'missing checkpoint', 'dates', 'tampered'])(
   'refuses %s evidence before restoring anything', refusesInvalidSet);
 
-async function resumesEachStage(stage: 'events' | 'database' | 'files' | 'verify' | 'open') {
+async function resumesEachStage(stage: 'keys' | 'events' | 'database' | 'files' | 'verify' | 'open') {
   const options = await pilotBackupFixture();
   const runtime = emptyTarget();
   const original = runtime.target[stage].bind(runtime.target);
@@ -177,9 +196,9 @@ async function resumesEachStage(stage: 'events' | 'database' | 'files' | 'verify
   await expect(restorePilotBackup(options, runtime.target)).resolves.toMatchObject({
     status: 'complete', sequence: 1,
   });
-  expect(runtime.stages).toEqual(['events', 'database', 'files', 'verify', 'open']);
+  expect(runtime.stages).toEqual(['keys', 'events', 'database', 'files', 'verify', 'open']);
 }
-it.each(['events', 'database', 'files', 'verify', 'open'] as const)(
+it.each(['keys', 'events', 'database', 'files', 'verify', 'open'] as const)(
   'resumes the same set after interruption at %s', resumesEachStage);
 
 async function acceptsCheckedRerun() {

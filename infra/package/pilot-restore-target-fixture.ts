@@ -45,7 +45,9 @@ async function kubernetesFixture(directory: string) {
     if (args[1] === 'pvc') {
       const items = [];
       for (const name of ['backups', 'pilot-restore', 'data-nats-0', 'data-postgres-0',
-        'data-objects-0']) items.push({ metadata: { name, uid: `uid-${name}` } });
+        'data-objects-0', 'personal-secrets', 'memory-secrets']) {
+        items.push({ metadata: { name, uid: `uid-${name}` } });
+      }
       return JSON.stringify({ items });
     }
     if (args[1] === 'deployments') {
@@ -200,6 +202,7 @@ export async function restoreTargetFixture() {
   const environment = { ...nats.env(), POSTGRES_ADMIN_URL: databases.adminUrl.href,
     PROJECTION_DATABASE_URL: databases.contentUrl.href,
     HANDLER_DATABASE_URL: databases.contentUrl.href,
+    MEMORY_PROJECTION_SCHEMA: 'opencrane_memory',
     SILO_ID: 'dev', RUNTIME_SECRET: 'runtime', KUBE_NAMESPACE: 'restore-test' };
   const options = await pilotBackupFixture();
   return { nats, content: databases.content, options, directory,

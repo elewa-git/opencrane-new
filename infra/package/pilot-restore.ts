@@ -5,7 +5,8 @@ import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { checkPilotBackup, type CheckedPilotBackup } from './pilot-backup-contract.ts';
 import { readPrivateFile } from './event-restore.ts';
-import { privateDirectory } from './scheduled-backup.ts';
+import { privateDirectory } from './backup-bytes.ts';
+import { MemberKeysUnavailable, type MemberKeyDirectories } from './pilot-member-keys.ts';
 
 export type PilotRestoreOptions = {
   directory: string;
@@ -13,6 +14,8 @@ export type PilotRestoreOptions = {
   silo: string;
   images: Record<string, string>;
   stateDirectory: string;
+  backupKeyFile: string;
+  keyDirectories: MemberKeyDirectories;
   providerMode?: boolean;
 };
 
@@ -22,6 +25,7 @@ export type PilotRestoreTarget = {
   requireIsolated(): Promise<void>;
   hold(): Promise<void>;
   empty(): Promise<boolean>;
+  keys(backup: CheckedPilotBackup): Promise<void>;
   events(backup: CheckedPilotBackup, resume?: boolean): Promise<void>;
   database(backup: CheckedPilotBackup): Promise<void>;
   files(backup: CheckedPilotBackup): Promise<void>;
@@ -29,7 +33,8 @@ export type PilotRestoreTarget = {
   open(backup: CheckedPilotBackup): Promise<void>;
 };
 
-const stages = ['events', 'database', 'files', 'verify', 'open', 'complete'] as const;
+const dataStages = ['keys', 'events', 'database', 'files'] as const;
+const stages = [...dataStages, 'verify', 'open', 'complete'] as const;
 const journalSchema = z.object({
   version: z.literal(1), backupId: z.string(), manifestDigest: z.string(),
   target: z.record(z.string(), z.string().min(1)), stage: z.enum(stages),
@@ -37,7 +42,7 @@ const journalSchema = z.object({
 }).strict();
 type Journal = z.infer<typeof journalSchema>;
 export type PilotRestoreReason = 'invalid_backup' | 'non_empty' | 'target_changed'
-  | 'concurrent' | 'stage_failed';
+  | 'concurrent' | 'stage_failed' | 'member_keys_unavailable';
 
 export class PilotRestoreRefused extends Error {
   readonly reason: PilotRestoreReason;
@@ -86,7 +91,7 @@ async function restorationJournal(options: PilotRestoreOptions,
   if (!await target.empty()) throw new PilotRestoreRefused('non_empty', 'empty');
   await target.requireIsolated();
   const journal: Journal = { version: 1, backupId: backup.manifest.id,
-    manifestDigest: backup.manifestDigest, target: identity, stage: 'events', eventsStarted: false };
+    manifestDigest: backup.manifestDigest, target: identity, stage: 'keys', eventsStarted: false };
   await saveJournal(options.stateDirectory, journal);
   return journal;
 }
@@ -94,7 +99,7 @@ async function restorationJournal(options: PilotRestoreOptions,
 async function restoreStages(options: PilotRestoreOptions, backup: CheckedPilotBackup,
   target: PilotRestoreTarget, journal: Journal) {
   if (journal.stage === 'complete' || journal.stage === 'open') await target.hold();
-  for (const stage of ['events', 'database', 'files'] as const) {
+  for (const stage of dataStages) {
     if (stages.indexOf(stage) < stages.indexOf(journal.stage)) continue;
     await checkTargetIdentity(target, journal);
     await target.requireIsolated();
@@ -148,6 +153,7 @@ export async function restorePilotBackup(options: PilotRestoreOptions,
     let reason: PilotRestoreReason = 'stage_failed';
     if (stage === 'backup') reason = 'invalid_backup';
     if (stage === 'lock') reason = 'concurrent';
+    if (cause instanceof MemberKeysUnavailable) reason = 'member_keys_unavailable';
     throw new PilotRestoreRefused(reason, stage, cause);
   } finally {
     await release?.();

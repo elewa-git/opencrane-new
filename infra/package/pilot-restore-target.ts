@@ -13,6 +13,7 @@ import { checkPilotCheckpoints, replayPilotDatabase } from './pilot-restore-data
 import { restoreKube } from './pilot-restore-kube.ts';
 import { packageDatabaseRoles } from './package-database.ts';
 import { pilotStorage } from './pilot-storage.ts';
+import { memberKeyFoldersEmpty, restoreMemberKeys, verifyMemberKeys } from './pilot-member-keys.ts';
 import { PilotRestoreRefused, type PilotRestoreOptions,
   type PilotRestoreTarget } from './pilot-restore.ts';
 
@@ -26,7 +27,8 @@ const inventory = z.object({ items: z.array(resource) });
 const held = ['server', 'worker-dispatcher', 'worker-members', 'worker-mcp-catalogue',
   'worker-computers', 'worker-conversations', 'worker-files', 'worker-budgets',
   'worker-audit', 'backup-catalogue'];
-const claimNames = ['backups', 'pilot-restore', 'data-nats-0', 'data-postgres-0', 'data-objects-0'];
+const claimNames = ['backups', 'pilot-restore', 'data-nats-0', 'data-postgres-0', 'data-objects-0',
+  'personal-secrets', 'memory-secrets'];
 
 export async function packageRestoreTarget(options: PilotRestoreOptions) {
   const connection = await connectNats();
@@ -140,6 +142,7 @@ class PackageRestoreTarget implements PilotRestoreTarget {
     if (pods.items.length) throw new Error('Restore writers remain');
   }
   async empty() {
+    if (!await memberKeyFoldersEmpty(this.options.keyDirectories)) return false;
     const reply = await this.connection.request('$JS.API.STREAM.INFO.EVENTS', '{}', { timeout: 2000 });
     const absent = z.object({ error: z.object({ code: z.literal(404), err_code: z.literal(10059) }) });
     if (!absent.safeParse(reply.json()).success) return false;
@@ -154,6 +157,9 @@ class PackageRestoreTarget implements PilotRestoreTarget {
     const objects = await this.storage();
     for await (const _object of objects.listObjectsV2('files', '', true)) return false;
     return true;
+  }
+  async keys(backup: CheckedPilotBackup) {
+    await restoreMemberKeys(this.options.keyDirectories, backup.keys);
   }
   async events(backup: CheckedPilotBackup, resume = false) {
     const options = { directory: '', silo: this.options.silo, disposable: true, resume };
@@ -189,7 +195,7 @@ class PackageRestoreTarget implements PilotRestoreTarget {
   }
   private async rebuildReadTables(backup: CheckedPilotBackup, replace: boolean) {
     const replay = { sequence: backup.manifest.point.sequence, replace,
-      providerMode: this.options.providerMode ?? false };
+      providerMode: this.options.providerMode ?? false, keyDirectories: this.options.keyDirectories };
     await replayPilotDatabase(this.admin, this.env.PROJECTION_DATABASE_URL, this.store, replay);
   }
   private async patchRuntime(stringData: Record<string, string>) {
@@ -241,6 +247,7 @@ class PackageRestoreTarget implements PilotRestoreTarget {
   }
   async verify(backup: CheckedPilotBackup) {
     this.check();
+    await verifyMemberKeys(this.options.keyDirectories, backup.keys);
     const bounds = captureBounds(this.connection, {});
     try {
       const info = infoSchema.parse(await bounds.request('$JS.API.STREAM.INFO.EVENTS', {}));

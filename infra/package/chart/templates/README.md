@@ -35,7 +35,7 @@ an exact log position. It keeps the existing database users and emits no backup 
 | `provider-secrets.yaml` | Keeps provider keys on private persistent storage when selected. |
 | `member-keys.yaml` | Gives the survey and Memory separate persistent key volumes. |
 | `data.yaml` | Describes the database, optional backup and recovery settings, event log and saved storage. |
-| `pilot-backup.yaml` | Runs the pilot backup, restricted restore Job and private catalogue. |
+| `pilot-backup.yaml` | Saves backups with encrypted member keys, restores them and lists checked sets. |
 | `backup.yaml` | Describes one paused database backup schedule for preview only. |
 | `_backup.tpl` | Checks local storage addresses and existing private-setting references. |
 | `_recovery.tpl` | Requires one exact recovery source, backup and log position. |

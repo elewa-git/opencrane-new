@@ -32,7 +32,7 @@ it('lists and shows checked backup bytes without loading the capture runtime',
       return { bucket: 'files', objects: [] };
     }
     const source = { pause: position, verify: position, resume,
-      parts: { events: capture, database: capture, files: emptyFiles } };
+      parts: { events: capture, database: capture, files: emptyFiles, 'member-keys': capture } };
     const options = { directory, id: 'saved-backup', silo: 'test', images: { server: 'test' } };
     const manifest = await captureScheduledBackup(options, source);
     const writes: string[] = [];

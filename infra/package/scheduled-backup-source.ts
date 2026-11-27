@@ -6,11 +6,15 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 import { Client, Pool } from 'pg';
 import { connectNats } from '@opencrane/event-store';
+import { memoryProjectionSchema } from '@opencrane/projections';
 import { pilotProjectionNames } from './pilot-projections.ts';
 import { hashBackupBytes } from './backup-bytes.ts';
 import { z } from 'zod';
 import { collectEventBackup, descriptorSchema, infoSchema } from './event-backup.ts';
 import { pilotStorage } from './pilot-storage.ts';
+import {
+  captureMemberKeys, pilotBackupKeyFile, pilotKeyDirectories, type MemberKeyDirectories,
+} from './pilot-member-keys.ts';
 import {
   checkPilotFileInventory, maximumPilotObjects, readPilotFileReferences,
 } from './pilot-file-inventory.ts';
@@ -28,9 +32,13 @@ function databaseConnection(variable: string) {
     connectionTimeoutMillis: 2000, query_timeout: 5000 };
 }
 
-export async function packageBackupSource(options: ScheduledBackupOptions) {
+type BackupKeyStorage = { file: string; directories: MemberKeyDirectories };
+const installedBackupKeys = { file: pilotBackupKeyFile, directories: pilotKeyDirectories };
+
+export async function packageBackupSource(options: ScheduledBackupOptions,
+  keyStorage: BackupKeyStorage = installedBackupKeys) {
   const connection = await connectNats();
-  const source = new PilotBackupSource(options, connection);
+  const source = new PilotBackupSource(options, connection, keyStorage);
   async function close() {
     await source.close();
   }
@@ -47,15 +55,18 @@ class PilotBackupSource implements BackupSource {
 
   private readonly options: ScheduledBackupOptions;
   private readonly connection: Awaited<ReturnType<typeof connectNats>>;
+  private readonly keyStorage: BackupKeyStorage;
 
   constructor(options: ScheduledBackupOptions,
-    connection: Awaited<ReturnType<typeof connectNats>>) {
+    connection: Awaited<ReturnType<typeof connectNats>>, keyStorage: BackupKeyStorage) {
     this.options = options;
     this.connection = connection;
+    this.keyStorage = keyStorage;
   }
 
   readonly parts = {
     events: this.events.bind(this), database: this.database.bind(this), files: this.files.bind(this),
+    'member-keys': this.memberKeys.bind(this),
   };
 
   private remaining() {
@@ -96,7 +107,8 @@ class PilotBackupSource implements BackupSource {
     try {
       await projection.connect();
       const rows = await projection.query<{ name: string; sequence: string }>(
-        'SELECT name, sequence::text FROM projection_checkpoints');
+        'SELECT name, sequence::text FROM public.projection_checkpoints UNION ALL ' +
+        `SELECT name, sequence::text FROM ${memoryProjectionSchema}.projection_checkpoints`);
       const result: Record<string, number> = {};
       for (const row of rows.rows) {
         result[row.name] = Number(row.sequence);
@@ -116,7 +128,7 @@ class PilotBackupSource implements BackupSource {
     this.info = await this.eventInfo();
     let positions = await this.checkpoints();
     const sequence = this.info.state.last_seq;
-    const projectionNames = pilotProjectionNames(this.options.providerMode);
+    const projectionNames = [...pilotProjectionNames(this.options.providerMode), 'memory'];
     const readerNames = [...readers];
     if (this.options.providerMode) {
       readerNames.push('worker-routines');
@@ -207,6 +219,11 @@ class PilotBackupSource implements BackupSource {
     const access = { storeId: process.env['OPENFGA_STORE_ID'],
       modelId: process.env['OPENFGA_MODEL_ID'] };
     return pilotDatabaseDetailsSchema.parse({ databases: names, lsn: this.point.lsn, access });
+  }
+  private async memberKeys(destination: string) {
+    this.remaining();
+    const identity = { id: this.options.id, silo: this.options.silo, sequence: this.point.sequence };
+    return captureMemberKeys(destination, identity, this.keyStorage.file, this.keyStorage.directories);
   }
   private async fileReferences() {
     // Read the event-backed table after its worker has caught up and all writers have stopped.

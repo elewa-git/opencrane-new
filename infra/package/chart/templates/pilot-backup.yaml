@@ -38,7 +38,8 @@ rules:
   {{- if $restore }}
   - apiGroups: [""]
     resources: [persistentvolumeclaims]
-    resourceNames: [backups, pilot-restore, data-nats-0, data-postgres-0, data-objects-0]
+    resourceNames: [backups, pilot-restore, data-nats-0, data-postgres-0, data-objects-0,
+      personal-secrets, memory-secrets]
     verbs: [get]
   - apiGroups: [""]
     resources: [serviceaccounts]
@@ -70,6 +71,7 @@ roleRef:
 {{- end }}
 {{- $root := . -}}
 {{- range $restore := list false true }}
+{{- $keys := list "personal-secrets" "memory-secrets" }}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -111,7 +113,10 @@ spec:
                   chown 1000:1000 /backups/sets && chmod 0700 /backups/sets &&{{ end }}
                   mkdir -p /run/opencrane/files &&
                   cp /run/opencrane-source/* /run/opencrane/files/ &&
-                  chown 1000:1000 /run/opencrane/files/* && chmod 0400 /run/opencrane/files/*
+                  chown 1000:1000 /run/opencrane/files/* && chmod 0400 /run/opencrane/files/* &&
+                  if [ -f /run/backup-key/credential ]; then
+                  install -m 0600 -o 1000 -g 1000 /run/backup-key/credential
+                  /run/opencrane/files/pilot-backup-key; fi
               securityContext: { runAsUser: 0, allowPrivilegeEscalation: false }
               volumeMounts:
                 - { name: backups, mountPath: /backups, readOnly: {{ $restore }} }
@@ -120,6 +125,11 @@ spec:
                 {{- end }}
                 - { name: runtime-file-source, mountPath: /run/opencrane-source, readOnly: true }
                 - { name: runtime-files, mountPath: /run/opencrane/files }
+                - { name: backup-key, mountPath: /run/backup-key, readOnly: true }
+            {{- if and $restore $root.Values.pilotRestore.enabled }}
+            {{- $init := dict "name" "private-member-keys" "image" $root.Values.images.server "volumes" $keys }}
+            {{- include "opencrane.memberKeyInit" $init | nindent 12 }}
+            {{- end }}
           containers:
             - name: backup
               image: {{ $root.Values.images.server | quote }}
@@ -139,6 +149,9 @@ spec:
                     fieldRef: { fieldPath: metadata.namespace }
                 - { name: KUBECONFIG, value: /run/kubeconfig/config.json }
                 - { name: BACKUP_IMAGES, value: {{ toJson $root.Values.images | quote }} }
+                {{- if $restore }}
+                {{- include "opencrane.memoryKeyEnvironment" . | nindent 16 }}
+                {{- end }}
 {{- if eq (toString $root.Values.models.mode) "provider" }}
                 - { name: BACKUP_PROVIDER_MODE, value: "true" }
 {{- end }}
@@ -160,6 +173,10 @@ spec:
                 - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
                 - { name: object-owner, mountPath: /run/object-owner, readOnly: true }
                 - { name: temporary, mountPath: /tmp }
+                {{- if or (not $restore) $root.Values.pilotRestore.enabled }}
+                {{- $mounts := dict "volumes" $keys "readOnly" (not $restore) }}
+                {{- include "opencrane.memberKeyMounts" $mounts | nindent 16 }}
+                {{- end }}
           volumes:
             - name: backups
               persistentVolumeClaim: { claimName: backups }
@@ -169,6 +186,8 @@ spec:
               emptyDir: { medium: Memory }
             - name: runtime-file-source
               secret: { secretName: {{ $root.Values.secrets.runtimeFiles | quote }}, defaultMode: 256 }
+            - name: backup-key
+              secret: { secretName: pilot-backup-key, defaultMode: 256, optional: true }
             - name: object-owner
               secret: { secretName: {{ $root.Values.secrets.objects | quote }} }
             - name: temporary
@@ -176,6 +195,9 @@ spec:
             {{- if $restore }}
             - name: restore
               persistentVolumeClaim: { claimName: pilot-restore }
+            {{- end }}
+            {{- if or (not $restore) $root.Values.pilotRestore.enabled }}
+            {{- include "opencrane.memberKeyVolumes" $keys | nindent 12 }}
             {{- end }}
 {{- end }}
 ---

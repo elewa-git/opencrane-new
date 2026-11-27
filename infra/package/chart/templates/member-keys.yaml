@@ -1,4 +1,3 @@
-{{- if not .Values.pilotRestore.enabled }}
 {{- range list "personal-secrets" "memory-secrets" }}
 ---
 apiVersion: v1
@@ -9,5 +8,4 @@ spec:
   accessModes: [ReadWriteOnce]
   resources:
     requests: { storage: 1Gi }
-{{- end }}
 {{- end }}

@@ -16,6 +16,7 @@ import { prepareScannerFiles } from '../dev-stack/scanner-settings.ts';
 import { readBootstrapToken } from '../../apps/server/src/bootstrap-token.ts';
 import { readPublicSettings, type PublicPackageValues } from './public-settings.mjs';
 import { readApprovedRelease } from '../clamav/release.mjs';
+import { readBackupKey } from './event-restore.ts';
 
 import { modelRuntimeSettings, type PackageModels } from './model-settings.ts';
 
@@ -34,7 +35,7 @@ async function command(program: string, args: string[], cwd = root) {
 }
 
 async function createSecret(owner: PackageOwner, name: string,
-  environment: string | Record<string, string> = {}, files: Record<string, string> = {}) {
+  environment: string | Record<string, string | Buffer> = {}, files: Record<string, string> = {}) {
   const source = await mkdtemp(`${directory}/package-secret-`);
   try {
     const settings = typeof environment === 'string' ? await readEnv(environment) : environment;
@@ -52,6 +53,30 @@ async function createSecret(owner: PackageOwner, name: string,
       { cwd: source, timeout: 120_000, env: connection.environment });
   } finally {
     await rm(source, { recursive: true, force: true });
+  }
+}
+
+async function provisionBackupKey(owner: PackageOwner, restore: boolean) {
+  const supplied = process.env['PACKAGE_BACKUP_KEY_FILE'];
+  if (supplied !== undefined) {
+    assert(isAbsolute(supplied), 'Pilot backup key needs an absolute file name');
+  } else {
+    assert(!restore, 'Pilot restore requires the original backup key');
+  }
+  const local = `${directory}/pilot-backup-key`;
+  if (supplied === undefined) {
+    const generated = randomBytes(32);
+    try {
+      await writeFile(local, generated, { mode: 0o600, flag: 'wx', flush: true });
+    } finally {
+      generated.fill(0);
+    }
+  }
+  const key = readBackupKey(supplied ?? local);
+  try {
+    await createSecret(owner, 'pilot-backup-key', { credential: key });
+  } finally {
+    key.fill(0);
   }
 }
 
@@ -306,6 +331,7 @@ async function main() {
   const values = JSON.parse(await readFile(valuesFile, 'utf8')) as PublicPackageValues & {
     images: Record<string, string>; scanner: { approvedSha: string };
     secrets: Record<string, string>; natsCluster?: unknown; models?: PackageModels;
+    pilotRestore?: { enabled: boolean };
   };
   stage = 'development sign-in setup';
   if (values.exposure?.public?.enabled !== true &&
@@ -320,6 +346,8 @@ async function main() {
   const publicCredential = await prepareSettings(values);
   stage = 'file services';
   await prepareFileServices(values, owner);
+  stage = 'pilot backup encryption key';
+  await provisionBackupKey(owner, values.pilotRestore?.enabled === true);
   stage = 'Kubernetes secrets';
   await provisionSecrets(values.secrets, owner, publicCredential, values.models);
   console.log('PASS private package secrets created from files in the claimed slot');

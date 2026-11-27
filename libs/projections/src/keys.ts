@@ -12,6 +12,10 @@ function reference(silo: string, conversation: string) {
   return sha256Hex(identity);
 }
 
+export function onboardingKeyIdentity(memberId: string) {
+  return `personal:${memberId}`;
+}
+
 function encryptBytes(key: Buffer, identity: Buffer, plaintext: Buffer) {
   const initialisationVector = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', key, initialisationVector);

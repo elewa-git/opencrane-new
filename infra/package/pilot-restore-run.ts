@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createLogger } from '@opencrane/observability';
 import { descriptorSchema } from './event-backup.ts';
 import { backupProviderMode } from './model-settings.ts';
+import { pilotBackupKeyFile, pilotKeyDirectories } from './pilot-member-keys.ts';
 import { restorePilotBackup, PilotRestoreRefused } from './pilot-restore.ts';
 import { packageRestoreTarget } from './pilot-restore-target.ts';
 
@@ -14,7 +15,8 @@ async function main() {
   const id = descriptorSchema.shape.attempt.parse(argument);
   const images = z.record(z.string(), z.string()).parse(JSON.parse(process.env['BACKUP_IMAGES'] ?? '{}'));
   const options = { directory: '/backups/sets', stateDirectory: '/restore/state', id,
-    silo: process.env['SILO_ID'] ?? '', images, providerMode: backupProviderMode(process.env) };
+    silo: process.env['SILO_ID'] ?? '', images, providerMode: backupProviderMode(process.env),
+    backupKeyFile: pilotBackupKeyFile, keyDirectories: pilotKeyDirectories };
   const runtime = await packageRestoreTarget(options);
   try {
     const result = await restorePilotBackup(options, runtime.target);
@@ -34,7 +36,11 @@ function failed(error: unknown) {
   }
   // Keep dependency output and credentials inside the operation, away from operator logs.
   const err = new Error('Pilot restore FAIL', { cause: { kind: 'pilot_restore', reason, stage } });
-  logger.error({ err, reason, stage }, 'Pilot restore FAIL; keep the installation isolated');
+  let message = 'Pilot restore FAIL; keep the installation isolated';
+  if (reason === 'member_keys_unavailable') {
+    message = 'Pilot restore FAIL. Onboarding and Memory keys are missing or could not be verified';
+  }
+  logger.error({ err, reason, stage }, message);
   process.exitCode = 1;
 }
 

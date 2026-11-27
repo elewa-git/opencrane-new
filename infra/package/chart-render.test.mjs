@@ -1087,6 +1087,17 @@ function unchangedResources(render) {
     resources.delete(name);
   }
   for (const resource of resources.values()) {
+    if (resource.kind === 'CronJob' &&
+        ['pilot-backup', 'pilot-restore'].includes(resource.metadata.name)) {
+      withoutBackupKeyChanges(resource.spec.jobTemplate.spec.template.spec);
+    }
+    if (resource.kind === 'Role' && resource.metadata.name === 'package-restore') {
+      for (const rule of resource.rules) {
+        if (!rule.resources.includes('persistentvolumeclaims')) continue;
+        function keep(name) { return !keyVolumes.includes(name); }
+        rule.resourceNames = rule.resourceNames.filter(keep);
+      }
+    }
     if (resource.kind !== 'Deployment') {
       continue;
     }
@@ -1103,6 +1114,20 @@ function unchangedResources(render) {
     }
   }
   return resources;
+}
+
+function withoutBackupKeyChanges(pod) {
+  pod.volumes = entriesWithout(pod.volumes, [...keyVolumes, 'backup-key']);
+  for (const container of pod.initContainers) {
+    if (container.name !== 'private-directories') continue;
+    container.volumeMounts = entriesWithout(container.volumeMounts, ['backup-key']);
+    const command = container.args[0];
+    container.args[0] = command.split(' && if [ -f')[0];
+  }
+  for (const container of pod.containers) {
+    container.volumeMounts = entriesWithout(container.volumeMounts, keyVolumes);
+    container.env = entriesWithout(container.env, keySettings);
+  }
 }
 
 async function defaultOnlyAddsMemberKeys() {
@@ -1148,14 +1173,52 @@ function rendersOnboardingAndMemoryStorage() {
   assert.ok(projection, 'Run the Memory projection with the member worker');
   assertKeyDirectory(members, 'memory', 'MEMORY_KEY_DIRECTORY', memory, true);
   assert.deepEqual(keyReaders(resources, 'personal-secrets'), [
+    'CronJob/pilot-backup:backup',
     'Deployment/server:private-member-keys', 'Deployment/server:server',
   ]);
   assert.deepEqual(keyReaders(resources, 'memory-secrets'), [
+    'CronJob/pilot-backup:backup',
     'Deployment/server:private-member-keys', 'Deployment/server:server',
     'Deployment/worker-dispatcher:private-memory-keys', 'Deployment/worker-dispatcher:worker',
     'Deployment/worker-members:memory', 'Deployment/worker-members:private-memory-keys',
   ]);
 }
+
+function rendersBackupAndRestoreKeyRights() {
+  const ordinary = renderedResources(chartValues());
+  const restoreValues = chartValues();
+  restoreValues.pilotRestore = { enabled: true, backupId: 'saved-backup' };
+  const recovery = renderedResources(restoreValues);
+  const restore = recovery.get('CronJob/pilot-restore').spec.jobTemplate.spec.template.spec;
+  assertKeySetup(restore, 'private-member-keys', [
+    '/var/lib/opencrane/personal-secrets', '/var/lib/opencrane/memory-secrets',
+  ]);
+  for (const claim of keyVolumes) {
+    const capture = keyMounts(ordinary, claim).find(function backup(mount) {
+      return mount.workload === 'CronJob/pilot-backup';
+    });
+    assert.equal(capture?.readOnly, true);
+    assert.deepEqual(keyReaders(recovery, claim), [
+      'CronJob/pilot-backup:backup', 'CronJob/pilot-restore:backup',
+      'CronJob/pilot-restore:private-member-keys', 'Deployment/server:server',
+    ]);
+    for (const mount of keyMounts(recovery, claim)) {
+      const readOnly = mount.workload !== 'CronJob/pilot-restore';
+      assert.equal(mount.readOnly ?? false, readOnly, mount.workload);
+    }
+  }
+  const wrappingKey = restore.volumes.find(function backupKey(volume) {
+    return volume.name === 'backup-key';
+  });
+  assert.deepEqual(wrappingKey.secret, {
+    secretName: 'pilot-backup-key', defaultMode: 256, optional: true,
+  });
+  const catalogue = recovery.get('Deployment/backup-catalogue').spec.template.spec;
+  assert.deepEqual(catalogue.volumes, [{ name: 'backups',
+    persistentVolumeClaim: { claimName: 'backups' } }]);
+}
+test('only the restore Job can write member keys while recovery is held',
+  rendersBackupAndRestoreKeyRights);
 
 function assertKeySetup(pod, name, paths) {
   function keySetup(container) {

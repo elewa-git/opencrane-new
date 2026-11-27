@@ -1,5 +1,5 @@
-import { hashBackupBytes as sha256 } from './backup-bytes.ts';
-import { createCipheriv, createHash, randomBytes } from 'node:crypto';
+import { beginBackupEncryption, hashBackupBytes as sha256 } from './backup-bytes.ts';
+import { createHash } from 'node:crypto';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, realpathSync,
   renameSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -94,9 +94,8 @@ async function copyObject(objects: ReturnType<typeof storageClient>, address: st
     output = openSync(join(destination, reference.identity), 'wx', 0o600);
     // Write only nonce, ciphertext and tag; bind each file to its archived identity and hash.
     const archiveHash = createHash('sha256');
-    const nonce = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', key, nonce);
-    cipher.setAAD(Buffer.from(JSON.stringify([reference.identity, reference.sha256])));
+    const identity = Buffer.from(JSON.stringify([reference.identity, reference.sha256]));
+    const { nonce, cipher } = beginBackupEncryption(key, identity);
     writeBytes(output, nonce, bounds, archiveHash);
     const iterator = response[Symbol.asyncIterator]();
     const hash = createHash('sha256');

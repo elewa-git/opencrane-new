@@ -1,10 +1,10 @@
-import { Pool } from 'pg';
-import { readFile, writeFile } from 'node:fs/promises';
+import { Client, Pool } from 'pg';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { envelope } from '@opencrane/models';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { pgDb } from '@opencrane/projections';
+import { memoryKeys, memoryScopeId, pgDb } from '@opencrane/projections';
 import { restoreTargetFixture } from './pilot-restore-target-fixture.ts';
 import { packageRestoreTarget } from './pilot-restore-target.ts';
 import { restorePilotBackup } from './pilot-restore.ts';
@@ -29,6 +29,8 @@ let ownsGlobals = false;
 let interrupted = false;
 let imports = 0;
 const databases = ['projections', 'handlers', 'openfga', 'pilot_replay', 'pilot_dump'];
+const savedFact = 'I work from a short agenda';
+const savedSequence = 2;
 
 async function storage() { return fixture.storage(); }
 async function kube(args: string[], _deadline: number, input?: Buffer) {
@@ -102,7 +104,7 @@ async function dumpedDatabase(altered: boolean) {
   await admin.query('CREATE DATABASE projections OWNER projection');
   const content = new Pool({ connectionString: projectionUrl() });
   try {
-    await replayPilotTables(pgDb(content), source.store, 1);
+    await replayPilotTables(pgDb(content), source.store, savedSequence);
     if (altered) {
       await content.query("UPDATE model_budgets SET state=jsonb_set(state,'{ceilingCents}','501')");
     }
@@ -115,9 +117,29 @@ async function dumpedDatabase(altered: boolean) {
     await content.end();
   }
 }
+async function saveMemory() {
+  const personal = join(fixture.directory, 'source-personal');
+  const memory = join(fixture.directory, 'source-memory');
+  await mkdir(personal, { mode: 0o700 });
+  await mkdir(memory, { mode: 0o700 });
+  const scopeId = memoryScopeId('dev', 'person', 'alice');
+  const identity = { scopeId, scopeKind: 'person' as const, ownerId: 'alice',
+    memoryId: 'saved-fact', revision: 1 as const };
+  const keys = memoryKeys(memory);
+  const keyIdentity = { ...identity, silo: 'dev' };
+  keys.provision(keyIdentity);
+  const encrypted = keys.encrypt(keyIdentity, savedFact);
+  const payload = { ...identity, ...encrypted, schemaVersion: 1, kind: 'fact',
+    pinned: false, expiresAt: null, sources: [], dependsOn: [] };
+  const base = envelope('dev', `scope-${scopeId}`, 'memory.written', payload);
+  const event = { ...base, commandId: 'saved-fact', principal: { kind: 'human' as const, id: 'alice' } };
+  await source.seed([event]);
+  return { personal, memory };
+}
 async function backupOptions(altered = false) {
+  const directories = await saveMemory();
   const bytes = await dumpedDatabase(altered);
-  const options = await pilotBackupFixture(source.connection);
+  const options = await pilotBackupFixture(source.connection, { sequence: savedSequence, directories });
   const path = join(options.directory, options.id, 'manifest.json');
   const manifest = manifestSchema.parse(JSON.parse(await readFile(path, 'utf8')));
   manifest.parts.database.byteCount = bytes.length;
@@ -136,12 +158,24 @@ async function checkedMoney(expectedCents: number) {
     const money = await content.query<{ state: { ceilingCents: number } }>(
       'SELECT state FROM model_budgets');
     expect(money.rows[0]?.state.ceilingCents).toBe(expectedCents);
-    await checkPilotCheckpoints(pgDb(content), 1);
+    await checkPilotCheckpoints(pgDb(content), savedSequence);
   } finally {
     await content.end();
   }
-  expect(await fixture.nats.store.head()).toBe(1);
+  expect(await fixture.nats.store.head()).toBe(savedSequence);
   expect((await fixture.state()).opened).toBe(false);
+}
+
+async function checkedMemory() {
+  const content = new Client({ connectionString: projectionUrl() });
+  try {
+    await content.connect();
+    const memory = await content.query<{ search_text: string; content_status: string }>(
+      'SELECT search_text, content_status FROM opencrane_memory.memory_facts');
+    expect(memory.rows).toEqual([{ search_text: savedFact, content_status: 'available' }]);
+  } finally {
+    await content.end();
+  }
 }
 async function refusesAlteredDump() {
   const options = await backupOptions(true);
@@ -168,8 +202,9 @@ async function resumesDatabaseStage(stage: string) {
   runtime = undefined;
   expect((await fixture.state()).opened).toBe(false);
   if (stage === 'import') {
-    const partial = new Pool({ connectionString: projectionUrl() });
+    const partial = new Client({ connectionString: projectionUrl() });
     try {
+      await partial.connect();
       const result = await partial.query('SELECT count(*)::int AS count FROM model_budgets');
       expect(result.rows).toEqual([{ count: 0 }]);
     } finally {
@@ -185,6 +220,7 @@ async function resumesDatabaseStage(stage: string) {
   await runtime.close();
   runtime = undefined;
   await checkedMoney(500);
+  await checkedMemory();
   expect(imports).toBe(2);
 }
 it.each(['import', 'replacement'])(

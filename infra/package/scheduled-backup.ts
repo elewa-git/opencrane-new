@@ -1,14 +1,16 @@
-import { hashBackupBytes } from './backup-bytes.ts';
-import { lstat, mkdir, open, readdir, realpath, rename, rm, writeFile }
+import { hashBackupBytes, privateDirectory } from './backup-bytes.ts';
+import { mkdir, open, readdir, rename, rm, writeFile }
   from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { descriptorSchema } from './event-backup.ts';
 import { readPrivateFile } from './event-restore.ts';
 import { pilotFileDetailsSchema } from './pilot-file-inventory.ts';
+import { maximumMemberKeyArchiveBytes, MemberKeysUnavailable } from './pilot-member-keys.ts';
 
 export const maximumManifestBytes = 1024 * 1024;
+const partNames = ['events', 'database', 'files', 'member-keys'] as const;
 const identifier = descriptorSchema.shape.attempt;
 const integer = descriptorSchema.shape.lastSequence;
 const pointSchema = z.object({
@@ -16,7 +18,7 @@ const pointSchema = z.object({
   checkpoints: z.record(z.string(), integer),
 }).strict();
 const partSchema = z.object({
-  backupId: identifier, sequence: integer, path: z.enum(['events', 'database', 'files']),
+  backupId: identifier, sequence: integer, path: z.enum(partNames),
   byteCount: integer, sha256: descriptorSchema.shape.sha256,
   startedAt: z.iso.datetime(), finishedAt: z.iso.datetime(),
   details: z.record(z.string(), z.json()),
@@ -25,31 +27,35 @@ export const manifestSchema = z.object({
   version: z.literal(1), id: identifier, silo: identifier, point: pointSchema,
   startedAt: z.iso.datetime(), stoppedAt: z.iso.datetime(), completedAt: z.iso.datetime(),
   images: z.record(z.string(), z.string()), chartVersion: z.literal('0.1.0'),
-  parts: z.object({ events: partSchema, database: partSchema, files: partSchema }).strict(),
+  parts: z.object({ events: partSchema, database: partSchema, files: partSchema,
+    'member-keys': partSchema.optional() }).strict(),
 }).strict();
 export type BackupPoint = z.infer<typeof pointSchema>;
 export type BackupSource = {
   pause(): Promise<BackupPoint>;
   verify(): Promise<BackupPoint>;
   resume(): Promise<void>;
-  parts: Record<'events' | 'database' | 'files',
-    (destination: string) => Promise<z.infer<typeof partSchema>['details']>>;
+  parts: Record<typeof partNames[number], CapturePart>;
 };
+type CapturePart = (destination: string) => Promise<z.infer<typeof partSchema>['details']>;
 export type ScheduledBackupOptions = {
   directory: string; id: string; silo: string; images: Record<string, string>;
   providerMode?: boolean;
 };
 
-export async function privateDirectory(directory: string) {
-  const metadata = await lstat(directory);
-  if (!metadata.isDirectory() || metadata.uid !== process.getuid?.() ||
-      (metadata.mode & 0o777) !== 0o700 || await realpath(directory) !== resolve(directory)) {
-    throw new Error('Backup directory refused');
+export function readBackupPart(directory: string, name: typeof partNames[number]) {
+  const memberKeys = name === 'member-keys';
+  const limit = memberKeys ? maximumMemberKeyArchiveBytes : 128 * 1024 * 1024;
+  try {
+    return readPrivateFile(join(directory, name), limit);
+  } catch (cause) {
+    if (memberKeys) throw new MemberKeysUnavailable(cause);
+    throw cause;
   }
 }
 
-async function fingerprint(path: string) {
-  const bytes = readPrivateFile(path, 128 * 1024 * 1024);
+function fingerprint(directory: string, name: typeof partNames[number]) {
+  const bytes = readBackupPart(directory, name);
   return { byteCount: bytes.length, sha256: hashBackupBytes(bytes) };
 }
 
@@ -80,17 +86,18 @@ async function resume(source: BackupSource, lock: Awaited<ReturnType<typeof open
 
 async function captureParts(source: BackupSource, directory: string, id: string, sequence: number) {
   const parts: Partial<z.infer<typeof manifestSchema>['parts']> = {};
-  for (const name of ['events', 'database', 'files'] as const) {
+  for (const name of partNames) {
+    const capture = source.parts[name];
     const startedAt = new Date().toISOString();
     const path = join(directory, name);
-    const details = await source.parts[name](path);
+    const details = await capture(path);
     const file = await open(path, 'r');
     try {
       await file.sync();
     } finally {
       await file.close();
     }
-    const bytes = await fingerprint(path);
+    const bytes = fingerprint(directory, name);
     parts[name] = { backupId: id, sequence, path: name, ...bytes, details,
       startedAt, finishedAt: new Date().toISOString() };
   }
@@ -147,7 +154,8 @@ export async function captureScheduledBackup(options: ScheduledBackupOptions, so
   } catch (error) {
     if (!resumed) throw error;
     // Dependency output may contain credentials or file content. Keep only the failed stage.
-    const cause = { kind: 'scheduled_backup', reason: stage };
+    const reason = error instanceof MemberKeysUnavailable ? 'member_keys_unavailable' : stage;
+    const cause = { kind: 'scheduled_backup', reason };
     // eslint-disable-next-line preserve-caught-error -- Withhold credential-bearing dependency output.
     throw new Error('Scheduled backup failed', { cause });
   } finally {
@@ -177,9 +185,10 @@ export async function showBackup(directory: string, id: string) {
   pilotFileDetailsSchema.parse(manifest.parts.files.details);
   if (manifest.id !== id) throw new Error('Backup identity differs');
   drained(manifest.point);
-  for (const name of ['events', 'database', 'files'] as const) {
+  for (const name of partNames) {
     const part = manifest.parts[name];
-    const actual = await fingerprint(join(backup, name));
+    if (!part) continue;
+    const actual = fingerprint(backup, name);
     if (part.backupId !== id || part.sequence !== manifest.point.sequence ||
         part.path !== name || actual.byteCount !== part.byteCount || actual.sha256 !== part.sha256) {
       throw new Error('Backup bytes differ');

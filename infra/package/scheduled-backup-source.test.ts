@@ -114,7 +114,7 @@ vi.mock('node:timers/promises', async function pollingClock(importOriginal) {
 });
 const projectionNames = [members.name, mcpCatalogue.name, computers.name, conversations.name,
   files.name, budgets.name, auditTrail.name, personalSettings.name, groups.name, providers.name,
-  modelAccess.name, egressPolicy.name, connectionProfiles.name, childRequests.name];
+  modelAccess.name, egressPolicy.name, connectionProfiles.name, childRequests.name, 'memory'];
 const services = ['server', 'worker-dispatcher', 'worker-members', 'worker-mcp-catalogue',
   'worker-computers', 'worker-conversations', 'worker-files', 'worker-budgets', 'worker-audit',
   'openfga'];
@@ -156,7 +156,12 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
   await mkdir(backupDirectory, { mode: 0o700 });
   const options = { directory: backupDirectory, id: 'adapter-backup',
     silo: 'test', images: { server: 'test' }, providerMode };
-  const runtime = await packageBackupSource(options);
+  const file = join(directory, 'fixture-backup-key');
+  await writeFile(file, Buffer.alloc(32, 6), { mode: 0o600 });
+  const directories = { personal: join(directory, 'personal'), memory: join(directory, 'memory') };
+  await mkdir(directories.personal, { mode: 0o700 });
+  await mkdir(directories.memory, { mode: 0o700 });
+  const runtime = await packageBackupSource(options, { file, directories });
   const replicas = new Map<string, number>();
   function kube(args: string[]) {
     if (args[0] === 'scale') {

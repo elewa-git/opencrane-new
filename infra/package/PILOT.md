@@ -64,9 +64,10 @@ flowchart LR
 ## Back up and restore
 
 The operator checks the nightly backup in the catalogue and keeps a verified
-copy away from this box. A recovery drill uses an empty installation and
-checks that a signed-in member can read the original chat on desktop and
-phone while writes are refused. The
+copy away from this box. The backup encryption key stays in the operator's
+secret store. A recovery drill uses an empty installation and checks that a
+signed-in member can read the original chat, survey answers, persona and memory
+facts on desktop and phone while writes are refused. The
 [backup and recovery commands](README.robot.md#pilot-backup-and-recovery-commands)
 show how to identify the separate recovery installation. The backup excludes
 provider credentials and assistant computer homes.

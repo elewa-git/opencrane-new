@@ -4,9 +4,12 @@ import { z } from 'zod';
 import { hashBackupBytes } from './backup-bytes.ts';
 import { descriptorSchema } from './event-backup.ts';
 import { readPrivateFile } from './event-restore.ts';
-import { manifestSchema, maximumManifestBytes, showBackup } from './scheduled-backup.ts';
+import { manifestSchema, maximumManifestBytes, readBackupPart, showBackup }
+  from './scheduled-backup.ts';
 import { pilotFileDetailsSchema, pilotFileEntrySchema } from './pilot-file-inventory.ts';
 import { pilotProjectionNames } from './pilot-projections.ts';
+import { MemberKeysUnavailable, openMemberKeyArchive, type MemberKeyArchive }
+  from './pilot-member-keys.ts';
 import type { PilotRestoreOptions } from './pilot-restore.ts';
 
 const storeReference = descriptorSchema.shape.attempt.refine(isBoundStore);
@@ -26,19 +29,21 @@ export type CheckedPilotBackup = {
   files: z.infer<typeof pilotFileDetailsSchema>;
   database: z.infer<typeof pilotDatabaseDetailsSchema>;
   objects: Map<string, Buffer>;
+  keys: MemberKeyArchive;
   bytes: Record<'events' | 'database' | 'files', Buffer>;
 };
 
 function validatePositions(manifest: CheckedPilotBackup['manifest'], providerMode?: boolean) {
   const actualNames = Object.keys(manifest.point.checkpoints).sort();
   const expectedNames = pilotProjectionNames(providerMode);
-  const names = [...expectedNames, 'dispatcher'].sort();
+  const names = [...expectedNames, 'dispatcher', 'memory'].sort();
   if (!isDeepStrictEqual(actualNames, names)) throw new Error('Checkpoint inventory differs');
   const start = Date.parse(manifest.startedAt);
   const stop = Date.parse(manifest.stoppedAt);
   const complete = Date.parse(manifest.completedAt);
   if (start > stop || stop > complete) throw new Error('Backup dates differ');
   for (const part of Object.values(manifest.parts)) {
+    if (!part) continue;
     if (Date.parse(part.startedAt) < stop || Date.parse(part.finishedAt) > complete ||
         Date.parse(part.startedAt) > Date.parse(part.finishedAt)) {
       throw new Error('Part dates differ');
@@ -48,6 +53,14 @@ function validatePositions(manifest: CheckedPilotBackup['manifest'], providerMod
 
 export async function checkPilotBackup(options: PilotRestoreOptions): Promise<CheckedPilotBackup> {
   const manifest = await showBackup(options.directory, options.id);
+  const directory = join(options.directory, options.id);
+  const keyPart = manifest.parts['member-keys'];
+  if (!keyPart || keyPart.details['encryption'] !== 'aes-256-gcm') {
+    throw new MemberKeysUnavailable();
+  }
+  const keyBytes = checkedPart(directory, keyPart);
+  const identity = { id: manifest.id, silo: manifest.silo, sequence: manifest.point.sequence };
+  const keys = openMemberKeyArchive(keyBytes, identity, options.backupKeyFile);
   if (manifest.silo !== options.silo || !isDeepStrictEqual(manifest.images, options.images) ||
       Object.keys(options.images).length !== 8) throw new Error('Package version differs');
   for (const image of Object.values(manifest.images)) {
@@ -67,7 +80,6 @@ export async function checkPilotBackup(options: PilotRestoreOptions): Promise<Ch
     throw new Error('Database inventory differs');
   }
   const files = pilotFileDetailsSchema.parse(manifest.parts.files.details);
-  const directory = join(options.directory, options.id);
   const bytes = {
     events: checkedPart(directory, manifest.parts.events),
     database: checkedPart(directory, manifest.parts.database),
@@ -78,7 +90,7 @@ export async function checkPilotBackup(options: PilotRestoreOptions): Promise<Ch
   if (!isDeepStrictEqual(reread, manifest)) throw new Error('Manifest changed');
   const manifestDigest = hashBackupBytes(manifestBytes);
   const objects = decodeFiles(files, bytes.files);
-  return { manifest, manifestDigest, events, files, database, bytes, objects };
+  return { manifest, manifestDigest, events, files, database, bytes, objects, keys };
 }
 
 function decodeFiles(details: CheckedPilotBackup['files'], bytes: Buffer) {
@@ -110,7 +122,7 @@ function decodeFiles(details: CheckedPilotBackup['files'], bytes: Buffer) {
 }
 
 function checkedPart(directory: string, part: CheckedPilotBackup['manifest']['parts']['events']) {
-  const bytes = readPrivateFile(join(directory, part.path), 128 * 1024 * 1024);
+  const bytes = readBackupPart(directory, part.path);
   if (bytes.length !== part.byteCount || hashBackupBytes(bytes) !== part.sha256) {
     throw new Error('Backup changed');
   }
