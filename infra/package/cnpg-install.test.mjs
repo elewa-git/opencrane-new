@@ -372,7 +372,8 @@ const pullFailures = [
   ['unrecognised reason', helm3Failure(pullJob, 'UnexpectedReason')],
   ['extra text in the failure line', helm3Failure(pullJob, `DeadlineExceeded ${canary}`)],
   ['unrelated Helm 4 namespace', 'Error: INSTALLATION FAILED: failed pre-install: resource ' +
-    `Job/other/${pullJob} not ready. status: Failed, message: Job Failed. failed: 1/1\n`],
+    `Job/opencrane-package-2/${pullJob} not ready. status: Failed, ` +
+    'message: Job Failed. failed: 1/1\n'],
 ];
 
 for (const [name, output, reason] of pullFailures) {
