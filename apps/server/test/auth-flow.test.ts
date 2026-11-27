@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { decodeSession, encodeSession, type AuthConfig } from '@opencrane/auth';
+import { decodeSession, encodeSession, loadAuthConfig, type AuthConfig } from '@opencrane/auth';
 import { buildServer } from '../src/server.ts';
 import { DEFAULT_MOCK_USER, startMockOidcProvider, type MockOidcProvider } from './support/mock-oidc-provider.ts';
 import { replaceInCiphertext, tamperCookie, testAuthConfig, truncateAuthTag } from './support/test-auth-config.ts';
@@ -132,6 +132,31 @@ describe('OIDC login flow (against a local mock provider)', () => {
     expectCookieAttributes(callback, stack.config.cookieName, true);
     // Clearing a cookie keeps the same attributes, or a browser may ignore it.
     expectCookieAttributes(callback, stack.config.flowCookieName, true);
+  });
+
+  it('replaces the old HTTPS session name with a cookie restricted to the host root', async function replaceSession() {
+    const settings = loadAuthConfig({
+      OIDC_ISSUER_URL: 'https://idp.example.test', OIDC_CLIENT_ID: 'fixture',
+      OIDC_REDIRECT_URI: 'https://app.example.test/auth/callback',
+      OIDC_COOKIE_SECRET: 'fixture session key'.repeat(2), OIDC_COOKIE_NAME: 'fixture_session',
+    });
+    const { cookieName, cookieSecure } = settings;
+    const stack = await startStack({}, { cookieName, cookieSecure });
+    const callback = await signIn(stack);
+    const replacement = findCookie(callback, '__Host-fixture_session');
+    expect(replacement).toMatchObject({ path: '/', httpOnly: true, secure: true, sameSite: 'Lax' });
+    expect(replacement).not.toHaveProperty('domain');
+    expect(findCookie(callback, 'fixture_session')).toMatchObject({ path: '/', value: '', maxAge: 0 });
+
+    const session = decodeSession(stack.config, replacement.value);
+    const oldConfig = { ...stack.config, cookieName: 'fixture_session' };
+    const retired = `${oldConfig.cookieName}=${encodeSession(oldConfig, session)}`;
+    const current = `${stack.config.cookieName}=${replacement.value}`;
+    const me = { method: 'GET' as const, url: '/auth/me' };
+    const oldOnly = await stack.app.inject({ ...me, headers: { cookie: retired } });
+    expect(oldOnly.json()).toEqual(NOT_SIGNED_IN);
+    const both = await stack.app.inject({ ...me, headers: { cookie: `${current}; ${retired}` } });
+    expect(both.json()).toMatchObject({ authenticated: true, user: { sub: session.sub } });
   });
 
   it('never lets the session outlive the ID token, whatever sessionMaxAgeSeconds says', async () => {

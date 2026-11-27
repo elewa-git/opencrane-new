@@ -811,6 +811,22 @@ it.each(['missing', 'tampered', 'expired'])('refuses a %s session without append
   expect(await nats.store.head()).toBe(2);
 });
 
+async function joinWithStaleCookie(staleFirst: boolean) {
+  await invite();
+  const headers = sessionHeaders(session);
+  const previousInstall = { ...config, cookieSecret: 'previous installation key'.repeat(2) };
+  const stale = `${config.cookieName}=${encodeSession(previousInstall, session)}`;
+  const cookies = staleFirst ? [stale, headers.cookie] : [headers.cookie, stale];
+  headers.cookie = cookies.join('; ');
+  const response = await app.inject({ method: 'POST', url: '/members/join', payload: input, headers });
+  expect(response.json<JoinResult>()).toMatchObject({ status: 'joined' });
+  expect(response.statusCode).toBe(200);
+  expect(await history()).toHaveLength(2);
+}
+
+it.each([true, false])('joins with a valid cookie beside a stale cookie (stale first: %s)',
+  joinWithStaleCookie);
+
 it('refuses command-id reuse with changed arguments, a second acceptance, and acceptance after removal', async () => {
   await invite();
   await accept();
