@@ -5,7 +5,7 @@ import { organisationPage } from './web-page.mjs';
 import { pathToFileURL } from 'node:url';
 import { createLogger } from '@opencrane/observability';
 
-const logger = createLogger('web-upgrade');
+const logger = createLogger('web-proxy');
 
 const webRoot = '/app/apps/web/dist/web/browser';
 const indexPath = join(webRoot, 'index.html');
@@ -48,13 +48,24 @@ function proxyRequest(incoming, response) {
     response.writeHead(upstreamResponse.statusCode ?? 502, headers);
     upstreamResponse.pipe(response);
   }
-  function onUpstreamError() {
+  function onUpstreamError(error) {
+    // Log the system code so the warning leaves out request data.
+    const code = error.code ?? 'unknown_error';
+    logger.warn({ code }, 'HTTP proxy request failed');
     if (response.headersSent) response.destroy();
     else sendError(response, 502);
   }
   const headers = forwardedHeaders(incoming.headers);
-  const upstream = request({ hostname: 'server', port: 8080, method: incoming.method,
-    path: incoming.url, headers }, onUpstreamResponse);
+  // Open a fresh connection so an idle close cannot race the next save.
+  const options = {
+    hostname: 'server',
+    port: 8080,
+    method: incoming.method,
+    path: incoming.url,
+    headers,
+    agent: false,
+  };
+  const upstream = request(options, onUpstreamResponse);
   upstream.on('error', onUpstreamError);
   incoming.pipe(upstream);
 }
