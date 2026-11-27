@@ -146,9 +146,11 @@ and start again.
 
 Two minutes after a Job finishes, Kubernetes can remove it and any
 remaining Pods. The installer reports the checked Job name and reason.
-Helm 4 reports only that the Job failed. The Pod events give more detail. This image download happens during fresh installation. The pilot
-application update uses its own approval check and retains the installed
-computer image.
+Helm 4 reports only that the Job failed. The Pod events give more detail.
+The pull Jobs run only on fresh installs. The pilot reinstalls to pick up a
+new computer image. Its in-place application update uses its own approval check
+and keeps the installed computer image. Pulling a new computer image during an
+in-place update belongs to the next slice.
 
 The forwarder binds only `127.0.0.1`, on port 25106 or 25206. No Tailscale
 Funnel or public listener is created. A package namespace keeps its slot busy
@@ -224,8 +226,8 @@ The chart runs the member, catalogue, computer, conversation, file, budget and
 audit workers, plus the dispatcher. It starts the model gateway beside the server
 and installs the checked computer template and a zero-size warm pool. One computer
 is claimed per assistant, including shared group assistants, and starts when needed.
-Before Helm installs or updates the release, it waits for a Job on each uncordoned
-node without a `NoSchedule` or `NoExecute` taint. The Jobs use the same gVisor runtime
+On a fresh install, Helm waits for a Job on each uncordoned node without a
+`NoSchedule` or `NoExecute` taint. The Jobs use the same gVisor runtime
 class and the same `images.computer` digest as the computer template. The digest gives
 both Kubernetes' `IfNotPresent` pull policy. The offline render includes the Job image,
 so the existing image and licence checks cover it. The Jobs run `/bin/true` without

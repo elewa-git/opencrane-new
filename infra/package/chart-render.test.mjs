@@ -151,7 +151,8 @@ function checkPullJob(job, image) {
 function pullsOnInstall() {
   const values = chartValues();
   const resources = renderedResources(values);
-  const computer = resources.get('SandboxTemplate/computer').spec.podTemplate.spec;
+  const computerTemplate = resources.get('SandboxTemplate/computer');
+  const computer = computerTemplate.spec.podTemplate.spec;
   assert.equal(computer.runtimeClassName, 'gvisor');
   assert.equal(computer.containers[0].image, values.images.computer);
   const container = computer.containers[0];

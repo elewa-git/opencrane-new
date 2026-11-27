@@ -415,9 +415,10 @@ async function allowsFourSerialPulls() {
   const fixture = computerPullFixture();
   fixture.pullNodes = ['node-a', 'node-b', 'node-c', 'node-d'];
   const items = fixture.pullNodes.map(computerNodeFromName);
-  items.push(computerNode('cordoned', { unschedulable: true }));
-  items.push(computerNode('dedicated', { taints: [{ effect: 'NoSchedule' }] }));
-  items.push(computerNode('evicted', { taints: [{ effect: 'NoExecute' }] }));
+  const cordonedNode = computerNode('cordoned', { unschedulable: true });
+  const dedicatedNode = computerNode('dedicated', { taints: [{ effect: 'NoSchedule' }] });
+  const evictedNode = computerNode('evicted', { taints: [{ effect: 'NoExecute' }] });
+  items.push(cordonedNode, dedicatedNode, evictedNode);
   fixture.nodes = { items };
   fixture.pullElapsedMs = 4 * 110_000;
   await runFixture(fixture, undefined, true);
