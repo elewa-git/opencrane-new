@@ -15,18 +15,24 @@ export function computerSessionConfiguration(turn: ComputerSessionFacts) {
   // Keep shared-input refusals even when a frame also carries routine identifiers.
   const routine = turn.senderAttemptId && !turn.sharingClass;
   const conversation = routine ? { routinePreparation: {} } : {};
-  return sessionConfiguration({ conversation, sharingClass: turn.sharingClass,
+  const input = { conversation, sharingClass: turn.sharingClass,
     requestedMode: turn.executionMode ?? 'memory_free',
-    memoryEnabled: turn.executionMode === 'restricted' });
+    memoryEnabled: turn.executionMode === 'restricted' };
+  return sessionConfiguration(input);
 }
 
 export function computerSessionInstructions(turn: ComputerSessionFacts,
   soulFile = defaultSoulFile) {
   const configuration = computerSessionConfiguration(turn);
   let variant = 'personal';
-  if (turn.sharingClass) variant = 'shared';
-  else if (turn.senderAttemptId) variant = 'routine';
-  else if (turn.assistantKind === 'team') variant = 'shared';
+  // Keep shared context limits when a turn also carries routine identifiers.
+  if (turn.sharingClass) {
+    variant = 'shared';
+  } else if (turn.senderAttemptId) {
+    variant = 'routine';
+  } else if (turn.assistantKind === 'team') {
+    variant = 'shared';
+  }
   const environment = configuration.localTools ? 'environment-tools' : 'environment-private';
   const tools: string[] = [];
   for (const server of turn.tools ?? []) {
@@ -64,7 +70,9 @@ cwd = "/workspace"
 }
 
 export function memoryFreeConfig(model: string) {
-  const configuration = computerSessionConfiguration({ executionMode: 'memory_free' });
+  const facts = { executionMode: 'memory_free' as const };
+  const configuration = computerSessionConfiguration(facts);
+  const instructions = instructionsToml(facts);
   return `model = ${JSON.stringify(model)}
 model_provider = "local"
 thread_unload_delay_secs = 0
@@ -72,7 +80,7 @@ approval_policy = "on-request"
 sandbox_mode = "danger-full-access"
 web_search = "disabled"
 tool_output_token_limit = 2000
-${instructionsToml({ executionMode: 'memory_free' })}
+${instructions}
 [model_providers.local]
 name = "local authenticated proxy"
 base_url = "http://127.0.0.1:8080/v1"

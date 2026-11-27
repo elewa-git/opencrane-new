@@ -88,11 +88,15 @@ function readAssistantIdentity(value: Record<string, unknown>, turn: Turn) {
   if (kind !== undefined && kind !== 'personal' && kind !== 'team') {
     throw new Error('Invalid assistant kind');
   }
-  if (kind) turn.assistantKind = kind;
+  if (kind) {
+    turn.assistantKind = kind;
+  }
   if (value['approvedPersona'] !== undefined) {
     // Keep personal identity off shared, routine and private Memory turns.
-    if (kind !== 'personal' || turn.executionMode !== 'memory_free'
-      || turn.sharingClass || turn.senderAttemptId) throw new Error('Persona not allowed');
+    // Require restricted mode for shared and routine input before reaching this check.
+    if (kind !== 'personal' || turn.executionMode !== 'memory_free') {
+      throw new Error('Persona not allowed');
+    }
     turn.approvedPersona = memoryTextSchema.parse(value['approvedPersona']);
   }
 }

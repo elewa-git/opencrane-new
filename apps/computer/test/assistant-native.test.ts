@@ -31,7 +31,8 @@ async function usesToolsWithTheReplacementSoul() {
   try {
     const path = '/workspace/uploads/chat/file/project.pdf.md';
     await computer.write(path, 'Project code: Willow-47.');
-    socket.send(JSON.stringify({ type: 'resume', since: 0 }));
+    const resume = { type: 'resume', since: 0 };
+    socket.send(JSON.stringify(resume));
     const turn = { type: 'turn', id: 'brief-turn', conversationId: 'chat',
       assistantId: 'assistant', requesterId: 'alice', assistantKind: 'personal',
       executionMode: 'memory_free', approvedPersona: 'Your name is Willow. Be warm and careful.',

@@ -13,7 +13,9 @@ export function approvedPersonaReader(options: PersonaOptions) {
     const created = await creationEvent(options.store, options.silo,
       `assistant-${assistantId}`, 'assistant.created');
     const assistant = sessionAssistantSchema.parse(created.data);
-    if (assistant.kind !== 'personal' || assistant.ownerId !== memberId) return undefined;
+    if (assistant.kind !== 'personal' || assistant.ownerId !== memberId) {
+      return undefined;
+    }
     // Read onboarding history before the short turn-start access checks begin.
     const history = await surveyHistory(options, memberId);
     function isApproved(reference: typeof history.revisions[number]) {
@@ -21,8 +23,11 @@ export function approvedPersonaReader(options: PersonaOptions) {
     }
     const approved = history.revisions.find(isApproved);
     await requireTurnMember(options.store, options.silo, memberId);
-    if (!approved) return undefined;
+    if (!approved) {
+      return undefined;
+    }
     const row = await personaEvent(options, memberId, approved);
+    // Check again so removal during the point read cannot release persona text.
     await requireTurnMember(options.store, options.silo, memberId);
     return checkedPersona(decryptPersona(options, memberId, row.event));
   }

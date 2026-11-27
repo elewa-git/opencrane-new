@@ -123,6 +123,19 @@ function threadToolsConfig(tools: Turn['tools'], loadKey: string) {
   return { mcp_servers: servers };
 }
 
+function threadInstructions(driver: ThreadLoadDriver, input: Turn) {
+  const instructions = driver.instructions?.(input) ?? computerSessionInstructions(input);
+  const tools = input.tools ?? [];
+  const fingerprint = sha256HexOfJson({ tools, instructions });
+  return { instructions, fingerprint };
+}
+
+function instructionToolConfig(tools: Turn['tools'], loadKey: string,
+  instructions: ReturnType<typeof computerSessionInstructions>) {
+  const toolConfig = threadToolsConfig(tools, loadKey);
+  return { ...instructions, ...toolConfig };
+}
+
 export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<string> = new Set()) {
   let stopped = false;
   const keys = new Set<string>();
@@ -178,9 +191,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
 
   async function prepare(input: Turn, previousThread: string | undefined,
     startParams: Record<string, unknown>) {
-    const instructions = driver.instructions?.(input) ?? computerSessionInstructions(input);
-    const tools = input.tools ?? [];
-    const fingerprint = sha256HexOfJson({ tools, instructions });
+    const { instructions, fingerprint } = threadInstructions(driver, input);
     const previousLoad = previousThread && loaded.get(previousThread);
     if (previousLoad && previousLoad.fingerprint === fingerprint) {
       try {
@@ -192,6 +203,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
         throw error;
       }
     }
+    // Unload before resuming: Codex ignores changed identity settings on a loaded thread.
     if (previousThread) await unloadPrevious(previousThread);
     return startLoad(input, previousThread, startParams, fingerprint, instructions);
   }
@@ -224,7 +236,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
     let newThread: string | undefined;
     try {
       await register(input, loadKey, previousThread);
-      const config = { ...instructions, ...threadToolsConfig(input.tools, loadKey) };
+      const config = instructionToolConfig(input.tools, loadKey, instructions);
       let method = 'thread/start';
       let params: Record<string, unknown> = { ...startParams, config };
       if (previousThread) {
@@ -370,8 +382,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
       checkPrivateStart(entry, input);
       const proposed = { tools: parseTools(input.tools) };
       const tools = privateTools(input, proposed);
-      const config = { ...computerSessionInstructions(input),
-        ...threadToolsConfig(tools, entry.loadKey) };
+      const config = instructionToolConfig(tools, entry.loadKey, computerSessionInstructions(input));
       const params = { model: modelForTask(input.taskKind), approvalPolicy: 'never',
         sandbox: 'read-only', ephemeral: true, environments: [], config };
       const response = record(await entry.session.rpc('thread/start', params));
