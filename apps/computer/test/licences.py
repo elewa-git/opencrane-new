@@ -68,6 +68,29 @@ assert result(tool_package, tool_evidence) == 'PASS', 'tool report check uses th
 tool_evidence['notices']['/app/libs/events/LICENSE'] = 'changed licence'
 assert result(tool_package, tool_evidence) == 'FAIL', 'changed tool check licence requires review'
 
+computer_package = {'name': 'opencrane-computer', 'version': 'p2-1', 'type': 'application',
+                    'licenses': [{'value': 'AGPL-3.0-or-later'}]}
+computer_notices = {'/app/LICENSE': (root.parent.parent / 'LICENSE').read_text()}
+for name in ['LICENSE-Codex', 'NOTICE-Codex']:
+    computer_notices['/app/src/prompts/' + name] = (root / 'src/prompts' / name).read_text()
+computer_evidence = {'notices': computer_notices}
+computer_inventory = checker.check({'artifacts': [computer_package]}, osi,
+                                   computer_evidence, reviewed)
+assert all(item['result'] == 'PASS' for item in computer_inventory), (
+    'adapted Codex prompt notices must belong to the reviewed computer application',
+    computer_inventory,
+)
+for name in ['LICENSE-Codex', 'NOTICE-Codex']:
+    changed = copy.deepcopy(computer_evidence)
+    changed['notices']['/app/src/prompts/' + name] = 'changed notice'
+    assert result(computer_package, changed) == 'FAIL', 'changed prompt notice requires review'
+changed = copy.deepcopy(computer_evidence)
+changed['notices']['/app/src/prompts/NOTICE-extra'] = 'Apache-2.0'
+computer_inventory = checker.check({'artifacts': [computer_package]}, osi, changed, reviewed)
+assert any(item['result'] == 'FAIL' for item in computer_inventory), (
+    'an additional prompt notice must still fail the gate'
+)
+
 # Package metadata declares MIT; a separately identified bundled part uses CC0.
 metadata = '/node_modules/probe/package.json'
 licence_file = '/node_modules/probe/LICENSE'
