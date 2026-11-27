@@ -382,7 +382,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
       checkPrivateStart(entry, input);
       const proposed = { tools: parseTools(input.tools) };
       const tools = privateTools(input, proposed);
-      const config = instructionToolConfig(tools, entry.loadKey, computerSessionInstructions(input));
+      const config = threadToolsConfig(tools, entry.loadKey);
       const params = { model: modelForTask(input.taskKind), approvalPolicy: 'never',
         sandbox: 'read-only', ephemeral: true, environments: [], config };
       const response = record(await entry.session.rpc('thread/start', params));

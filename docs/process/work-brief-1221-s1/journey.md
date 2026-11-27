@@ -137,3 +137,37 @@ The timeout is unrelated to this repair. The same run also reports two failed
 thread-start and thread-resume assertions in `private-turn-channel.test.ts`.
 Those failures remain outside this style repair. The PR comment records the
 failed-job rerun and both package workflow results.
+
+## Private thread configuration repair
+
+Journey: NOT RUN, as instructed. No stack was claimed.
+
+The failed private-start assertion exposed a real behaviour change: ordinary
+private starts and starts with reviewed Memory tools received the new assistant
+instructions. Both paths now keep their previous configuration. Routine preparation
+uses the same unchanged private start. No new persona or instructions reach these
+private turns. Read-only execution, ephemeral threads, empty environments and
+reviewed Memory tool checks remain in place.
+
+The Memory-free resume failure was an outdated expected configuration. The test
+now expects the new instructions and still checks the exact persistent thread id
+and empty tool configuration. The private-start assertion was kept unchanged.
+
+The original server file failed locally with the same two assertions. Before the
+fix, the private-start regression failed on the extra configuration, and the
+reviewed Memory regression failed on its extra instruction fields. These tests
+were committed before the product fix. The existing review findings and their
+previous repairs are unchanged.
+
+PASS: 322 focused cases across 11 computer and server files, twice (57.85 and
+65.42 seconds). This includes all 59 private-turn channel cases, reviewed private
+Memory loads, ordinary thread reloads, routine preparation, persona delivery and
+private configuration restrictions. The new regressions fail when the previous
+instruction injection is restored, as shown by their runs before the fix.
+
+PASS: event catalogue (175 types), knip (two existing configuration hints),
+changelog, changed-file ESLint without warnings, Markdown, public privacy,
+secret scan and whitespace checks. Fetched main is already an ancestor; no rebase
+was needed or remains in progress. Hosted CI is recorded in the PR after pushing.
+
+PASS: full workspace, application package and dev-stack typecheck.

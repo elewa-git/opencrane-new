@@ -815,7 +815,8 @@ names and derives local-tool availability from the existing session settings.
 An identity or tool-list change uses the existing unload and resume path, because
 Codex ignores changed configuration on an already loaded thread. Other chats stay loaded.
 Restricted turns keep their existing isolation, tool refusals and Memory admission.
-They receive no personal onboarding persona. The routine wording enables no routine.
+They receive neither the new instructions nor a personal onboarding persona.
+The routine templates enable no routine.
 
 Network access and desktop launching remain unavailable to shell commands. The
 instructions allow attempts, installations and any deliverable format, but explain

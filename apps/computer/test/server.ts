@@ -1,7 +1,8 @@
 export { approvalHolds } from '../src/approval-holds.ts';
 export { requireBridgeGateAuthority } from '../src/bridge-gate-authority.ts';
 export { bridgeChannel } from '../src/channel.ts';
-export { memoryFreeConfig, privateConfig, privateEnvironments } from '../src/codex-config.ts';
+export { computerSessionInstructions, memoryFreeConfig, privateConfig, privateEnvironments }
+  from '../src/codex-config.ts';
 export { codexConnection } from '../src/codex-connection.ts';
 export { privateCodexLaunch } from '../src/private-codex.ts';
 export { proxy } from '../src/proxy.ts';

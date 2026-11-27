@@ -11,3 +11,6 @@ under Apache-2.0, so the package gate accepts them without relaxing its checks.
 
 Native licence review input hashes are checked before building the application
 package. The assistant shell test runs in the CI job that builds its computer image.
+
+Private thread starts keep their previous configuration without the new assistant
+instructions. Memory-free resume tests check the complete new configuration.

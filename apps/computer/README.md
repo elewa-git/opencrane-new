@@ -31,7 +31,7 @@ flowchart LR
 ## What it is responsible for
 
 - Build the computer image with Codex, a desktop and document tools.
-- Give the assistant its approved identity and instructions that match its available tools.
+- Give Memory-free assistants their approved identity and instructions for their available tools.
 - Run the bridge that receives work and reports its progress.
 - Keep the assistant's files while its computer sleeps.
 - Place scanned uploads in the workspace and report new or changed published files.

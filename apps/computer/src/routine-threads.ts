@@ -2,7 +2,6 @@ import type { RecallOwner } from './private-recall.ts';
 import { modelForTask } from '@opencrane/models/routing';
 import { record } from './http.ts';
 import { requiredString, type Turn } from './turn-frame.ts';
-import { computerSessionInstructions, type ComputerSessionFacts } from './codex-config.ts';
 
 export interface PrivateSession {
   recallOwner?: RecallOwner | undefined;
@@ -12,11 +11,9 @@ export interface PrivateSession {
   exited?: Promise<void>;
 }
 
-export async function startPrivateThread(session: PrivateSession, taskKind: string,
-  facts: ComputerSessionFacts = { executionMode: 'restricted' }) {
+export async function startPrivateThread(session: PrivateSession, taskKind: string) {
   const params = { model: modelForTask(taskKind), approvalPolicy: 'never',
-    sandbox: 'read-only', ephemeral: true, environments: [],
-    config: computerSessionInstructions(facts) };
+    sandbox: 'read-only', ephemeral: true, environments: [] };
   const response = record(await session.rpc('thread/start', params));
   const thread = record(response['thread']);
   const environments = thread['environments'];
@@ -31,11 +28,6 @@ export async function startPrivateThread(session: PrivateSession, taskKind: stri
 type Identity = Pick<Turn, 'id' | 'conversationId' | 'assistantId' | 'requesterId'>;
 type Prepared = { identity: Identity; expiresAt: number; timer: NodeJS.Timeout;
   session?: PrivateSession; response?: Record<string, unknown> };
-
-function startRoutineThread(session: PrivateSession, senderAttemptId: string) {
-  const facts = { executionMode: 'restricted' as const, senderAttemptId };
-  return startPrivateThread(session, 'chat_turn', facts);
-}
 
 export function routineThreads(open: (() => Promise<PrivateSession>) | undefined,
   track: (work: Promise<void>) => Promise<void>) {
@@ -94,7 +86,7 @@ export function routineThreads(open: (() => Promise<PrivateSession>) | undefined
       }
       prepared.session = session;
       void session.closed.then(expire, expire);
-      const response = await startRoutineThread(session, identity.id);
+      const response = await startPrivateThread(session, 'chat_turn');
       if (pending.get(identity.id) !== prepared || expiresAt <= Date.now()) {
         throw new Error('Routine thread unavailable');
       }
