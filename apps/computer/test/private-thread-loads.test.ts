@@ -195,6 +195,8 @@ async function matching() {
     const result = await turn.load();
     expect(result['thread']).toEqual(turn.thread);
     expect(turn.offered).toEqual({ tools: [definition] });
+    const config = record(record(turn.params)['config']);
+    expect(Object.keys(config)).toEqual(['mcp_servers']);
     expect(turn.params).toMatchObject({ ephemeral: true, environments: [], sandbox: 'read-only',
       approvalPolicy: 'never' });
     expect(turn.calls).toEqual(['config/mcpServer/reload', 'mcpServerStatus/list']);

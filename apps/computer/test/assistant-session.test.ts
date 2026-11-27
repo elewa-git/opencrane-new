@@ -55,7 +55,7 @@ async function sendsMemoryFreeInstructions(kind: 'personal' | 'team') {
 it.each(['personal', 'team'] as const)(
   'sends the generated soul and actual %s instructions to Codex', sendsMemoryFreeInstructions);
 
-async function sendsRestrictedInstructions(variant: 'shared' | 'routine') {
+async function keepsInstructionsOutOfPrivateThreads() {
   const calls: Record<string, unknown>[] = [];
   function rpc(_method: string, params: Record<string, unknown>) {
     calls.push(params);
@@ -65,24 +65,11 @@ async function sendsRestrictedInstructions(variant: 'shared' | 'routine') {
   function close() {}
   function keepOpen() {}
   const closed = new Promise<void>(keepOpen);
-  const facts = variant === 'shared'
-    ? { executionMode: 'restricted' as const, sharingClass: 'shared_only' as const }
-    : { executionMode: 'restricted' as const, senderAttemptId: 'attempt' };
-  await startPrivateThread({ rpc, close, closed }, 'chat_turn', facts);
-  expect(calls[0]).toMatchObject({ sandbox: 'read-only', ephemeral: true, environments: [] });
-  const config = record(calls[0]?.['config']);
-  expect(config['model_instructions_file']).toBeTypeOf('string');
-  expect(config['personality']).toBe('none');
-  const developer = String(config['developer_instructions']);
-  expect(developer).toContain(variant === 'shared' ? 'shared assistant' : 'Nobody is watching');
-  expect(developer).toContain('Shell, file edits and browser tools are');
-  expect(developer).not.toContain('Installing software in your sandbox is allowed');
-  if (variant === 'routine') {
-    expect(developer).toContain('stop and notify');
-  }
+  await startPrivateThread({ rpc, close, closed }, 'chat_turn');
+  expect(calls).toEqual([{ model: 'gpt-6.1-sol', approvalPolicy: 'never',
+    sandbox: 'read-only', ephemeral: true, environments: [] }]);
 }
-it.each(['shared', 'routine'] as const)(
-  'sends the %s brief without changing private restrictions', sendsRestrictedInstructions);
+it('keeps persona and instructions out of private threads', keepsInstructionsOutOfPrivateThreads);
 
 function keepsTeamRoutinesUnattended() {
   const facts = { executionMode: 'restricted' as const, assistantKind: 'team' as const,
