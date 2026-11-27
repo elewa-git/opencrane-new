@@ -91,3 +91,26 @@ Raw output remains outside the repository in `image-before.log`,
 The full local image check of the first build was stopped after product source
 changed. Final image approval remains a separate check of the final pushed commit.
 Raw command output stays outside the repository. No live condition is marked PASS.
+
+## Package hash and CI test placement repair
+
+Journey: NOT RUN, as instructed. No secondary stack was claimed.
+
+The native inventory recorded the licence review hash from before the retained
+Codex notices were assigned. The review still contains those intended assignments.
+The inventory now records its actual SHA-256. A new source test failed for that
+exact mismatch before the fix and passed twice afterwards. It checks all three
+review input hashes without requiring an image build. All 14 native helper,
+template and notice source hashes also pass.
+
+The assistant native test was missing from the computer image job's file list.
+The CI selection test failed for that missing file before the fix and passed
+twice afterwards. The file now runs in the image job and is excluded from all four
+ordinary shards. The test assertions and time limits are unchanged.
+
+The first local native test attempt failed while waiting for the default fixture
+image to become healthy. The test passed twice with the rebuilt round 2 computer image.
+This check uses a local stand-in model and costs 0 euro cents.
+
+Application package run 45980193385 was dispatched after the hash repair was
+pushed. Its result belongs to CI; the PR records its current status.

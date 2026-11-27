@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 
 const fixtureGroups = {
   'fixtures-image': [
+    'apps/computer/test/assistant-native.test.ts',
     'apps/computer/test/codex-config.test.ts',
     'apps/computer/test/display-attacks.test.ts',
     'apps/computer/test/private-recall-call.test.ts',
