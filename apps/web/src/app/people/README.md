@@ -17,8 +17,9 @@ flowchart LR
 
 - Searches and pages through current members, lists groups and creates local groups.
   While the server sets up the signed-in person's access, the page clears earlier
-  member rows and hides **Invite people**. It reads again for a few seconds.
-  Ordinary temporary failures keep earlier rows. Access refusals clear both lists.
+  member rows and hides **Invite people**. It reads again for a few seconds and
+  offers **Check access** if access is still being set up. Ordinary temporary failures
+  keep earlier rows. Access refusals clear both lists.
 - Shows a member's role, groups, assistant and granted access. Phone layouts use labelled cards. Restricted readers see only the permitted name and role.
 - Changes Member and Admin roles, and reviews departures before removal. The review names lost access, affected personal [computers](../../../../../GLOSSARY.md#computer), shared work needing a decision and retained history. Pending role and removal requests cannot overlap.
 - Adds active members to local groups and reviews removals. Changes wait for both saved data and permissions to catch up. Groups managed by a company sign-in service keep their membership controls separate.

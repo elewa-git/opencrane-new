@@ -333,7 +333,9 @@ page, and `next` loads more rows. Directory and member detail reads retry only
 HTTP 425 with `{ status: 'access_applying' }`. They retry up to ten times, 500 ms apart,
 within ten seconds. Leaving the page cancels the read. On the first applying reply,
 the Members tab clears earlier rows, counts and invite access. It starts again at
-the first page and shows data only after a successful read. A request generation
+the first page and shows data only after a successful read. If the last reply still
+says access is applying, the tab shows that it is waiting and offers **Check access**.
+A request generation
 drops older successful and ordinary failed search replies. Any live 401 or 403
 clears member and group rows, closes the tabs and stops later replies from showing
 names. Member rows are read-only in this part.

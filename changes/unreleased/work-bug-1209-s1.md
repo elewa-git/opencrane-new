@@ -1,2 +1,2 @@
-The first owner can invite people straight after claiming the installation. The
-invitation waits briefly while the member list and permissions catch up.
+The first owner can open People and send their first invitation straight after
+claiming the installation. Both steps wait briefly for their new permissions.
