@@ -14,6 +14,13 @@ import { z } from 'zod';
 import { WebSocket } from 'ws';
 const exec = promisify(execFile);
 
+export type UploadComputerOptions = {
+  image?: string;
+  protected?: boolean;
+  holdPrivateTool?: boolean;
+  installedSource?: boolean;
+};
+
 export async function openComputerBridge(url: string, credential: string): Promise<WebSocket> {
   const options = { headers: { 'x-bridge-token': credential } };
   const socket = new WebSocket(`${url.replace('http:', 'ws:')}/bridge`, options);
@@ -23,8 +30,7 @@ export async function openComputerBridge(url: string, credential: string): Promi
 
 /** Start a disposable computer with a local model stub and no shared stack. */
 export async function uploadComputer(deliverCredential = true, nodeOptions = '',
-  fixtureOptions: { image?: string; protected?: boolean; holdPrivateTool?: boolean;
-    installedSource?: boolean } = {}) {
+  fixtureOptions: UploadComputerOptions = {}) {
   const capture = await mkdtemp(`${tmpdir()}/upload-requests-`);
   const stub = spawn(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'],
     {

@@ -3,6 +3,16 @@ import { until } from '@opencrane/authz/testing';
 import { openComputerBridge, uploadComputer } from '../../server/test/support/upload-computer.ts';
 import { record } from '../src/http.ts';
 import { writeFile } from 'node:fs/promises';
+import type { WebSocket } from 'ws';
+
+function acknowledgeTurn(socket: WebSocket, frame: Record<string, unknown>) {
+  if (frame['type'] !== 'agent.turn_started') {
+    return;
+  }
+  const acknowledgement = { type: 'ack', sequence: frame['sequence'],
+    token: 'fixture-turn', model: 'gpt-6.1-sol', expiresAt: Date.now() + 60_000 };
+  socket.send(JSON.stringify(acknowledgement));
+}
 
 async function captureRequests(computer: Awaited<ReturnType<typeof uploadComputer>>, name: string) {
   const capture = await computer.requests();
@@ -13,9 +23,20 @@ async function captureRequests(computer: Awaited<ReturnType<typeof uploadCompute
   return capture;
 }
 
+function lastRequest(capture: string) {
+  const trimmed = capture.trim();
+  const lines = trimmed.split('\n');
+  return record(JSON.parse(lines.at(-1)!));
+}
+
 function expectBrief(request: Record<string, unknown>, persona: string) {
   const instructions = [request['instructions']];
-  for (const item of request['input'] as Record<string, unknown>[]) {
+  const input = request['input'];
+  if (!Array.isArray(input)) {
+    throw new Error('Expected model input items');
+  }
+  for (const value of input) {
+    const item = record(value);
     if (item['role'] === 'developer' || item['role'] === 'system') {
       instructions.push(item['content']);
     }
@@ -27,6 +48,43 @@ function expectBrief(request: Record<string, unknown>, persona: string) {
   expect(modelInstructions).toContain('cannot open network sockets');
   expect(modelInstructions).toContain('/workspace/artifacts');
   expect(modelInstructions).toContain('server checks and shares new or changed files');
+}
+
+async function checkSavedThread(computer: Awaited<ReturnType<typeof uploadComputer>>,
+  turn: Record<string, unknown>, since: number) {
+  const before = await computer.requests();
+  const trimmedBefore = before.trim();
+  const beforeLines = trimmedBefore.split('\n');
+  await computer.restart();
+  const socket = await openComputerBridge(computer.url, computer.credential.value);
+  let terminal: string | undefined;
+  function receive(bytes: Buffer) {
+    const frame = record(JSON.parse(bytes.toString()));
+    acknowledgeTurn(socket, frame);
+    if (frame['type'] === 'agent.turn_completed' || frame['type'] === 'agent.turn_failed') {
+      terminal = frame['type'];
+    }
+  }
+  function finished() {
+    return terminal !== undefined;
+  }
+  socket.on('message', receive);
+  try {
+    const resume = { type: 'resume', since };
+    socket.send(JSON.stringify(resume));
+    const nextTurn = { ...turn, id: 'brief-after-restart', expiresAt: Date.now() + 60_000 };
+    socket.send(JSON.stringify(nextTurn));
+    await until(finished, 30_000);
+    expect(terminal).toBe('agent.turn_completed');
+    const capture = await captureRequests(computer, 'saved-thread');
+    const trimmed = capture.trim();
+    const lines = trimmed.split('\n');
+    const request = record(JSON.parse(lines[beforeLines.length]!));
+    expectBrief(request, 'Your name is Cedar.');
+    expect(JSON.stringify(request)).not.toContain('Your name is Willow.');
+  } finally {
+    socket.terminate();
+  }
 }
 
 async function usesToolsWithTheReplacementSoul() {
@@ -42,11 +100,7 @@ async function usesToolsWithTheReplacementSoul() {
     if (isTerminal(frame)) {
       terminals++;
     }
-    if (frame['type'] === 'agent.turn_started') {
-      const acknowledgement = { type: 'ack', sequence: frame['sequence'],
-        token: 'fixture-turn', model: 'gpt-6.1-sol', expiresAt: Date.now() + 60_000 };
-      socket.send(JSON.stringify(acknowledgement));
-    }
+    acknowledgeTurn(socket, frame);
   }
   function finished() {
     return terminals === expectedTerminals;
@@ -56,6 +110,8 @@ async function usesToolsWithTheReplacementSoul() {
   }
   socket.on('message', receive);
   try {
+    const version = await computer.exec('node', '/usr/local/bin/codex', '--version');
+    expect(version).toBe('codex-cli 0.159.2');
     const path = '/workspace/uploads/chat/file/project.pdf.md';
     await computer.write(path, 'Project code: Willow-47.');
     const resume = { type: 'resume', since: 0 };
@@ -77,6 +133,13 @@ async function usesToolsWithTheReplacementSoul() {
     expect(capture).toContain('Project code: Willow-47.');
     expect(JSON.stringify(frames)).toContain('The project code is Willow-47.');
     expectedTerminals = 2;
+    const sameTurn = { ...turn, id: 'brief-same-persona' };
+    socket.send(JSON.stringify(sameTurn));
+    await until(finished, 30_000);
+    expect(frames.at(-1)?.['type']).toBe('agent.turn_completed');
+    const loadedCapture = await captureRequests(computer, 'loaded-thread');
+    expectBrief(lastRequest(loadedCapture), 'Your name is Willow.');
+    expectedTerminals = 3;
     const nextTurn = { ...turn, id: 'brief-second', approvedPersona: 'Your name is Cedar.' };
     socket.send(JSON.stringify(nextTurn));
     await until(finished, 30_000);
@@ -84,9 +147,14 @@ async function usesToolsWithTheReplacementSoul() {
     const nextCapture = await captureRequests(computer, 'resumed-thread');
     const trimmedNextCapture = nextCapture.trim();
     const nextLines = trimmedNextCapture.split('\n');
-    const nextRequest = record(JSON.parse(nextLines[lines.length]!));
+    const loadedLines = loadedCapture.trim();
+    const loadedRequestLines = loadedLines.split('\n');
+    const nextRequest = record(JSON.parse(nextLines[loadedRequestLines.length]!));
     expectBrief(nextRequest, 'Your name is Cedar.');
     expect(JSON.stringify(nextRequest)).not.toContain('Your name is Willow.');
+    const sequence = Number(frames.at(-1)?.['sequence']);
+    socket.terminate();
+    await checkSavedThread(computer, nextTurn, sequence);
   } finally {
     socket.terminate();
     await computer.close();
