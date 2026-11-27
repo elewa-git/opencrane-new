@@ -18,7 +18,6 @@ for (const name of ['event-store', 'authz', 'handlers']) {
 
 // Load the real service packages before replacing calls to disposable services.
 // Keep their own imports and workspace links subject to Node's normal resolution.
-const { systemClock } = await import('@opencrane/event-store');
 for (const name of ['pg', '@opencrane/authz',
   '@opencrane/handlers', '@opencrane/events', '@opencrane/models', '@nats-io/jetstream']) {
   await import(name);
