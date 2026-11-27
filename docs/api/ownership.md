@@ -74,12 +74,17 @@ handler subscription manifest still requires the existing
 [controlled dispatcher rebuild](../../libs/handlers/README.robot.md#recovery-and-subscription-changes).
 This is separate from ownership seeding; no ordering-key migration is needed.
 
-Startup seeding makes at most five attempts, each with a fresh global fence and a
-ten-second scan bound. A concurrent append causes a fresh scan and retry. The
-single seed append fences the ownership stream and captured global head. If the
-bound is exhausted or a dependency fails, the server logs the failure and keeps
-serving; ownership commands remain unavailable until seeding succeeds on a later
-startup. An empty install waits for the claim's durable seed reaction.
+The seed save requires an empty ownership stream and the same log position
+that was captured before reading membership. This keeps a later membership
+change from producing an outdated owner list.
+
+Development owner setup has one ten-second limit for reading, waiting and
+saving. After a competing write, it waits up to 100 milliseconds before reading
+again. The server startup check and each worker delivery after a token claim
+make up to five attempts, each with a new ten-second read limit and the event
+store's normal append limit. The server logs a startup seeding failure and
+keeps serving. Ownership commands become available after seeding succeeds.
+An empty install waits for a saved owner claim to trigger seeding.
 
 Legacy owner changes belong only before this seed. Afterwards, owner-role values
 and owner removal on a member stream are rejected by both projections. A valid

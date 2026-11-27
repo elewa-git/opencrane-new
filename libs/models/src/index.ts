@@ -33,7 +33,7 @@ export { losslessJson } from '@opencrane/events/lossless-json';
 export { readEffect, readEffectChange, listEffects, resolveEffect, resolutionCommandSchema } from './reconciliation.ts';
 
 export { ownershipConfirmationHandler } from './ownership-confirmation.ts';
-export { seedOwnership, ownershipSeedHandler,
+export { seedOwnership, seedDevelopmentOwnership, ownershipSeedHandler,
   ownershipSubject, ownershipState, currentMembership, currentOwnershipMembership } from './ownership.ts';
 export { providerCommand, providerCommandSchema, providerAuthority, providerReceipt,
   ProviderChoiceRefused, ProviderRefused, ProviderUnpriced, ProviderConflict,
