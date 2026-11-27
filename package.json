@@ -11,7 +11,7 @@
     "libs/*"
   ],
   "scripts": {
-    "lint": "npm run lint:code && npm run lint:debt && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:reads && npm run lint:readmes && npm run lint:links && npm run lint:fixtures && npm run check:package-licences && npm run lint:changelog",
+    "lint": "npm run lint:code && npm run lint:debt && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run check:overview && npm run lint:reads && npm run lint:readmes && npm run lint:links && npm run lint:fixtures && npm run check:package-licences && npm run lint:changelog",
     "typecheck": "npm run typecheck --workspaces && npm run typecheck:package && npm run typecheck:dev-stack",
     "typecheck:package": "tsc --noEmit -p infra/package/tsconfig.json",
     "typecheck:dev-stack": "tsc --noEmit -p infra/dev-stack/tsconfig.json",
@@ -19,6 +19,7 @@
     "test": "vitest run",
     "ops": "npm run ops -w apps/ops --",
     "replay": "npm run start -w apps/ops --",
+    "check:overview": "node --experimental-strip-types scripts/check-architecture-overview.mjs",
     "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs",
     "check:qualification": "node scripts/check-local-qualification.mjs",
     "check:package-licences": "python3 infra/package/check-licences.py",
