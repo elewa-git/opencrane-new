@@ -49,14 +49,19 @@ function acceptsOnlyPersonalMemoryFreePersonas() {
   const invalid = [
     { ...personal, assistantKind: 'team' },
     { ...personal, assistantKind: undefined },
-    { ...personal, assistantKind: 'unknown' },
+    { ...frame, assistantKind: 'unknown' },
     { ...personal, executionMode: 'restricted' },
     { ...personal, approvedPersona: '' },
     { ...personal, approvedPersona: 'a'.repeat(4097) },
     { ...personal, approvedPersona: '界'.repeat(1366) },
     { ...personal, approvedPersona: 42 },
   ];
-  for (const turn of invalid) expect(() => parseTurn(turn)).toThrow();
+  for (const turn of invalid) {
+    function parseInvalidIdentity() {
+      return parseTurn(turn);
+    }
+    expect(parseInvalidIdentity).toThrow();
+  }
 }
 it('accepts a bounded approved persona only on personal Memory-free turns',
   acceptsOnlyPersonalMemoryFreePersonas);

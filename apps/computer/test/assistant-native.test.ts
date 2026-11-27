@@ -12,7 +12,9 @@ async function usesToolsWithTheReplacementSoul() {
   function receive(bytes: Buffer) {
     const frame = record(JSON.parse(bytes.toString()));
     frames.push(frame);
-    if (isTerminal(frame)) terminals++;
+    if (isTerminal(frame)) {
+      terminals++;
+    }
     if (frame['type'] === 'agent.turn_started') {
       const acknowledgement = { type: 'ack', sequence: frame['sequence'],
         token: 'fixture-turn', model: 'gpt-6.1-sol', expiresAt: Date.now() + 60_000 };
@@ -39,7 +41,8 @@ async function usesToolsWithTheReplacementSoul() {
     await until(finished, 30_000);
     expect(frames.at(-1)?.['type']).toBe('agent.turn_completed');
     const capture = await computer.requests();
-    const lines = capture.trim().split('\n');
+    const trimmedCapture = capture.trim();
+    const lines = trimmedCapture.split('\n');
     const firstRequest = record(JSON.parse(lines[0]!));
     const modelInput = JSON.stringify(firstRequest);
     expect(modelInput).toContain('Your name is Willow.');
@@ -54,7 +57,8 @@ async function usesToolsWithTheReplacementSoul() {
     await until(finished, 30_000);
     expect(frames.at(-1)?.['type']).toBe('agent.turn_completed');
     const nextCapture = await computer.requests();
-    const nextLines = nextCapture.trim().split('\n');
+    const trimmedNextCapture = nextCapture.trim();
+    const nextLines = trimmedNextCapture.split('\n');
     const nextRequest = JSON.stringify(JSON.parse(nextLines[lines.length]!));
     expect(nextRequest).toContain('Your name is Cedar.');
     expect(nextRequest).not.toContain('Your name is Willow.');
