@@ -149,7 +149,19 @@ it('serves private chat commands and reads to joined members, refusing other org
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: headers(), payload: create })).statusCode).toBe(200);
     await auth.handler.handle((await history(nats.store, `conversation-${conversationId}`, 'test'))[0]!.event, db);
     await refusesRoutineIdentifiers(app, nats.store, headers(), conversationId);
-    expect((await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/messages`, headers: headers(), payload: { id: randomUUID(), text: 'Hello computer' } })).statusCode).toBe(200);
+    const messageId = randomUUID();
+    const messagePath = `/api/conversations/${conversationId}/messages`;
+    const sent = await app.inject({ method: 'POST', url: messagePath, headers: headers(),
+      payload: { id: messageId, text: 'Hello computer' } });
+    expect(sent.statusCode).toBe(200);
+    const statusPath = `/api/conversations/${conversationId}/changes/${messageId}`;
+    const applying = await app.inject({ url: statusPath, headers: headers() });
+    expect(applying.statusCode).toBe(200);
+    expect(applying.json()).toMatchObject({
+      status: 'appended', commandId: messageId, type: 'message.posted',
+      sequence: sent.json<{ sequence: number }>().sequence,
+      projection: { content: 'applying', iam: 'current' },
+    });
     await runner.run(conversations);
     await runner.run(computers);
     const list = await app.inject({ url: '/api/conversations', headers: headers() });
