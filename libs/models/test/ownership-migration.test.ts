@@ -1,6 +1,6 @@
 import { expect, it, vi } from 'vitest';
 import { parseEventByType } from '@opencrane/events';
-import { event, natsFixture } from '@opencrane/event-store/testing';
+import { event, manualClock, natsFixture } from '@opencrane/event-store/testing';
 import { history, seedOwnership, ownershipSeedHandler } from '../src/index.ts';
 
 async function fencesMigration() {
@@ -46,32 +46,52 @@ async function fencesMigration() {
 it('migration fences concurrent member changes and competing seeds reconstruct only current owners',
   fencesMigration);
 
-async function boundsSeedConflicts() {
-  const nats = await natsFixture();
-  try {
-    const owner = { ...event('join-owner', 'member-owner', 'member.joined'),
-      data: { memberId: 'owner', email: 'owner@example.test', displayName: 'Owner', role: 'owner' } };
-    expect((await nats.store.append({ event: owner, expectedSequence: 0 })).status).toBe('appended');
-    const original = nats.store.append.bind(nats.store);
-    let attempts = 0;
-    async function compete(command: Parameters<typeof original>[0]) {
-      attempts++;
-      const teamId = `competing-${attempts}`;
+async function competeWithSeed(nats: Awaited<ReturnType<typeof natsFixture>>, writeLimit: number) {
+  const owner = { ...event('join-owner', 'member-owner', 'member.joined'),
+    data: { memberId: 'owner', email: 'owner@example.test', displayName: 'Owner', role: 'owner' } };
+  const joined = await nats.store.append({ event: owner, expectedSequence: 0 });
+  expect(joined.status).toBe('appended');
+  const append = nats.store.append.bind(nats.store);
+  let writes = 0;
+  async function compete(command: Parameters<typeof append>[0]) {
+    if (writes < writeLimit) {
+      writes++;
+      const teamId = `competing-${writes}`;
       const record = { ...event(teamId, `team-${teamId}`, 'team.created'),
         data: { teamId, name: 'Competing write', createdBy: 'owner' } };
-      const result = await original({ event: record, expectedSequence: 0 });
+      const result = await append({ event: record, expectedSequence: 0 });
       expect(result.status).toBe('appended');
-      return original(command);
     }
-    const spy = vi.spyOn(nats.store, 'append').mockImplementation(compete);
+    return append(command);
+  }
+  return vi.spyOn(nats.store, 'append').mockImplementation(compete);
+}
+
+function clockForConflicts() {
+  const clock = manualClock();
+  function sleep(milliseconds: number, signal?: AbortSignal) {
+    // Let real NATS reads finish before their deadline timers.
+    if (signal) {
+      return clock.sleep(milliseconds, signal);
+    }
+    clock.advance(milliseconds);
+    return Promise.resolve();
+  }
+  return { now: clock.now, sleep };
+}
+
+async function seedsAfterCompetingWrites() {
+  const clock = clockForConflicts();
+  const nats = await natsFixture({ clock });
+  try {
+    const spy = await competeWithSeed(nats, 5);
     try {
-      await expect(seedOwnership(nats.store, 'test')).rejects.toThrow('after five attempts');
-      expect(attempts).toBe(5);
-      expect(await nats.store.head('ownership-test')).toBe(0);
+      await seedOwnership(nats.store, 'test');
+      expect(clock.now()).toBeGreaterThan(0);
     } finally {
       spy.mockRestore();
     }
-    await Promise.all([seedOwnership(nats.store, 'test'), seedOwnership(nats.store, 'test')]);
+    await seedOwnership(nats.store, 'test');
     const rows = await history(nats.store, 'ownership-test', 'test');
     expect(rows).toHaveLength(1);
     expect(rows[0]?.event.data).toEqual({ ownerIds: ['owner'] });
@@ -79,8 +99,21 @@ async function boundsSeedConflicts() {
     await nats.close();
   }
 }
-it('seed conflicts stop after five attempts and competing fresh seeds append only once',
-  boundsSeedConflicts);
+it('waits and saves ownership once after five competing writes', seedsAfterCompetingWrites);
+
+async function boundsSeedConflicts() {
+  const clock = clockForConflicts();
+  const nats = await natsFixture({ clock });
+  try {
+    await competeWithSeed(nats, Infinity);
+    await expect(seedOwnership(nats.store, 'test'))
+      .rejects.toThrow('Timed out waiting for ownership migration conflicts to settle');
+    expect(await nats.store.head('ownership-test')).toBe(0);
+  } finally {
+    await nats.close();
+  }
+}
+it('stops without saving ownership when competing writes keep coming', boundsSeedConflicts);
 
 async function oldBootstrapDoesNotRestoreOwnership() {
   const nats = await natsFixture();
