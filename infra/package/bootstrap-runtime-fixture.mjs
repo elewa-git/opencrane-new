@@ -5,6 +5,7 @@ import { homedir, userInfo } from 'node:os';
 import { rootCertificates } from 'node:tls';
 import * as files from 'node:fs/promises';
 import { registerHooks } from 'node:module';
+import { systemClock } from '@opencrane/event-store';
 
 assert.equal(process.getuid(), 1000);
 assert.equal(process.cwd(), '/app');
@@ -157,7 +158,7 @@ const services = {
         return { status: 'appended', sequence };
       }
       async function close() {}
-      // Provide the real store clock because bootstrap approval reads it in this fixture too.
+      // Bootstrap approval reads the real store clock in this fixture too.
       return { store: { clock: systemClock, head, readStream, append }, close };
     },
   },
