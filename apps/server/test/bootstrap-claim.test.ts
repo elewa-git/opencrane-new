@@ -5,7 +5,9 @@ import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as crypto from 'node:crypto';
 import { encodeSession, type SessionData } from '@opencrane/auth';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { createEventStore, type EventStore } from '@opencrane/event-store';
+import { appendEvent, manualClock, natsFixture } from '@opencrane/event-store/testing';
+import { history, ownershipSeedHandler } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -221,11 +223,70 @@ it('requires a session and rejects body authority and invalid contact data', asy
   expect(await nats.store.head()).toBe(0);
 });
 
+async function seedsAfterAContendedClaim() {
+  const response = await claim();
+  expect(response.statusCode).toBe(201);
+  const silo = 'test';
+  const claimed = await history(nats.store, 'member-bootstrap-owner', silo);
+  const trigger = claimed[0]?.event;
+  expect(trigger?.type).toBe('silo.owner_bootstrapped');
+  if (!trigger) {
+    throw new Error('Missing owner claim');
+  }
+
+  const seedClock = manualClock();
+  const store = await createEventStore(nats.connection, seedClock);
+  const read = store.readStream.bind(store);
+  const append = store.append.bind(store);
+  const deadlines: Array<number | undefined> = [];
+  async function* scanMembership(...args: Parameters<EventStore['readStream']>) {
+    if (args[0] === 'member-*') {
+      deadlines.push(args[2]);
+      seedClock.advance(6_000);
+    }
+    yield* read(...args);
+  }
+  async function saveCompetingWrite(command: Parameters<EventStore['append']>[0]) {
+    const teamId = 'other-installation-write';
+    const team = { silo, subject: `team-${teamId}`, type: 'team.created',
+      data: { teamId, name: 'Installation team', createdBy: 'bootstrap-owner' } };
+    await appendEvent(nats.store, team);
+    return append(command);
+  }
+  const reads = vi.spyOn(store, 'readStream');
+  reads.mockImplementation(scanMembership);
+  const appends = vi.spyOn(store, 'append');
+  appends.mockImplementationOnce(saveCompetingWrite);
+  function query(): never {
+    throw new Error('Unexpected SQL');
+  }
+  const handler = ownershipSeedHandler(store);
+  const noSql = { query };
+  const sleep = seedClock.sleep.bind(seedClock);
+  function advanceRetryWait(milliseconds: number, signal?: AbortSignal) {
+    const wait = sleep(milliseconds, signal);
+    if (!signal) {
+      seedClock.advance(milliseconds);
+    }
+    return wait;
+  }
+  const waits = vi.spyOn(seedClock, 'sleep');
+  waits.mockImplementation(advanceRetryWait);
+  await handler.handle(trigger, noSql);
+  expect(deadlines).toEqual([10_000, 16_000]);
+  expect(appends).toHaveBeenCalledTimes(2);
+  const seeds = await history(nats.store, 'ownership-test', silo);
+  expect(seeds).toHaveLength(1);
+  expect(seeds[0]?.event.data).toEqual({ ownerIds: ['bootstrap-owner'] });
+}
+it('saves ownership in the first token claim delivery after two slow scans and a conflict',
+  seedsAfterAContendedClaim);
+
 it('claim reactions seed ownership once and replay identity, IAM, assistant and model grants', async () => {
   const { databases, openfga } = await import('@opencrane/authz/testing');
   const { createStore, memberAuthorisation, rebuildMembers } = await import('@opencrane/authz');
   const { connectMemberFeed, members, pgDb, ProjectionRunner } = await import('@opencrane/projections');
-  const { BudgetActor, ownershipSeedHandler, modelGrantHandler, models } = await import('@opencrane/models');
+  const { BudgetActor, modelGrantHandler, models } = await import('@opencrane/models');
   const { lifecycleHandlers } = await import('../../ops/test/server.ts');
   const { createLogger } = await import('@opencrane/observability');
   const dbs = await databases(), fga = await openfga();
