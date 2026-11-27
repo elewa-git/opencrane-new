@@ -6,11 +6,10 @@
       (repeated)="repeatCapture()" />
   </div>
 <oc-modal-sheet kind="computer" backLabel="" [open]="viewOpen()" title="Computer view"
-  description="Read-only · shared desktop" [returnFocusTo]="opener" (closed)="panelClosed()">
+  description="Read-only" [returnFocusTo]="opener" (closed)="panelClosed()">
   @if (state() === 'Unavailable') {
-    <p>A conversation participant needs a shared-desktop grant and a ready computer to watch.
-      Ask the desktop owner for access.</p>
-      <p>New screenshots are not available until you can watch this computer.</p>
+    <p>You can watch this computer when it is ready and you can read this chat.</p>
+    <p>New screenshots are not available until you can watch this computer.</p>
   }
   <div role="status" aria-live="polite">
     <oc-shared-state [kind]="viewState()" [message]="state()"
@@ -19,7 +18,7 @@
   @if (state() === 'Connecting') {
     <p>{{ connectionDetail() }}</p>
     @if (!accessConfirmed()) {
-      <p>Checking that you're in this computer's audience before any pixels load.</p>
+      <p>Checking your access to this chat.</p>
     }
   }
   @if (state() === 'Paused') {
@@ -34,7 +33,7 @@
     <p>Reconnect to take a screenshot.</p>
     <button type="button" class="retry" (click)="retry()">Reconnect</button>
   }
-  @if (state() === 'Access changed') { <p>Ask the desktop owner for access, or sign in again.</p> }
+  @if (state() === 'Access changed') { <p>Check that you can still open this chat.</p> }
   @if (state() === 'Viewing') {
     <div class="tools">
       <button type="button"

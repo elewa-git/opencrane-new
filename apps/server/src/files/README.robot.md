@@ -9,7 +9,8 @@ download private files.
 
 `commands.ts` reads upload permission from `sessionConfiguration` in the events
 library. Shared-assistant uploads keep their existing refusal, after the same
-creator and membership checks. File reads keep their current access rules.
+creator and membership checks. A computer screenshot uses the chat reader's
+access check. The server checks again inside the conditional file append.
 
 `POST /api/conversations/:conversationId/files` still refuses a closed chat.
 The file command reads the chat history, checks for a saved close, then uses one

@@ -156,8 +156,9 @@ async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: W
   const data = { conversationId: file.conversationId, fileId: file.fileId,
     computerId: input.computerId, sha256: file.sha256, outcome };
   const id = `file-delivered-${file.fileId}-${input.computerId}`;
-  const result = await fileCommand(options.store, options.silo, file.uploadedBy,
-    id, 'file.delivered', data);
+  const command = { silo: options.silo, memberId: file.uploadedBy, eventId: id,
+    type: 'file.delivered' as const, value: data };
+  const result = await fileCommand(options.store, command);
   if (result.status !== 'appended') throw new Error('File acknowledgement unavailable');
   delivered.add(file.fileId);
 }

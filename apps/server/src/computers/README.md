@@ -5,7 +5,7 @@ This folder lets people watch an assistant's desktop, take a screenshot and see 
 ## What it is responsible for
 
 - Lists computer status for owners and admins.
-- Opens a view only for someone with current conversation access and a desktop grant.
+- Opens a view of a running computer for people who can read its chat.
 - Keeps checking access while the desktop is visible.
 - Saves authorised screenshots through the normal file checks.
 - Reads saved control requests, including paused and failed results, for chat participants.
@@ -13,9 +13,9 @@ This folder lets people watch an assistant's desktop, take a screenshot and see 
 - Saves one short writer lease after quiet proof, renews it within its original deadline, and saves Return.
 - Saves refused control attempts separately from the computer, without interrupting work.
 
-Each [computer](../../../../GLOSSARY.md#computer) belongs to one assistant. A personal assistant has its own; a group's assistant uses one shared computer. Viewing holds one place while the connection opens and until it ends. A confirmed member removal or conversation denial ends the view immediately, even while another access check is slow. A later invitation alone does not restore desktop or file access. Starting a turn or receiving a file does not remove viewing access.
+Each [computer](../../../../GLOSSARY.md#computer) belongs to one assistant. A personal assistant has its own; a group's assistant uses one shared computer. Viewing holds one place while the connection opens and until it ends. Losing chat access ends the view within two seconds, even while another access check is slow. A later invitation alone does not restore desktop or file access. Starting a turn or receiving a file does not remove viewing access.
 
-A screenshot opens a temporary authorised connection to the assistant's desktop, then passes the picture through the normal [file checks](../files/README.md). No open viewer is needed. People who join a conversation later can see only files and screenshots from their latest join onwards.
+You can save and reopen a screenshot in your personal assistant chat. The server checks your chat access, opens a temporary connection to the computer and scans the picture. It checks access again when it saves the [file](../files/README.md). People who join a conversation later can see only files and screenshots from their latest join onwards.
 
 When enabled, a control request must name the current requester's message and current computer. Pending intent prevents new work and new AI passes. Authorised viewing, an explicit request to stop a reply and denying an approval remain available. Reading control status does not touch the computer or grant control.
 
@@ -38,7 +38,19 @@ The server checks that requester's access again after reading the computer. A cl
 
 ## How it connects
 
-The [server](../../README.md) registers these requests. [Chat](../chat/README.md) supplies conversation access and delivers pause requests. [Members](../members/README.md) checks current membership. The [assistant computer](../../../computer/README.md) supplies desktop pictures over authenticated Kubernetes access, the private management connection to the running computer.
+The [server](../../README.md) registers these requests. [Chat](../chat/README.md)
+checks who can read a conversation and delivers pause requests. The
+[assistant computer](../../../computer/README.md) supplies desktop pictures over
+the private Kubernetes connection. [Files](../files/README.md) scans and saves
+screenshots.
+
+```mermaid
+flowchart LR
+  server[Server] --> computers[Desktop views and capture]
+  chat[Chat] -->|checks access| computers
+  assistant[Assistant computer] -->|sends desktop pictures| computers
+  computers -->|saves screenshots| files[Files]
+```
 
 ## Not done here
 

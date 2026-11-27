@@ -1,120 +1,162 @@
-import { sha256HexOfJson } from '@opencrane/events/digest';
-import { recordIdSchema } from '@opencrane/events';
+import { recordIdSchema, fileUploadedDataSchema, fileRejectedDataSchema } from '@opencrane/events';
+import type { StoredEvent } from '@opencrane/event-store';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
-import { fileUploadedDataSchema, fileRejectedDataSchema } from '@opencrane/events';
 import { sessionFor } from '../members/routes.ts';
+import { sameOrigin } from '../members/guard.ts';
+import { chatHistory } from '../chat/commands.ts';
 import { FileRefusal } from '../files/refusals.ts';
-import { ownConversation } from '../files/commands.ts';
-import { uploadFile, type FileOptions } from '../files/routes.ts';
-import { viewAccess } from './view-access.ts';
+import {
+  findPreviousUpload, uploadFile, uploadIdentity, type FileOptions,
+} from '../files/routes.ts';
+import { sameViewComputer, viewAccess, ViewAccessRefused } from './view-access.ts';
 import type { LiveViewOptions } from './view.ts';
 import { captureDesktop } from './capture.ts';
 
-type Result = { status: string; fileId: string; sequence?: number; error?: string };
-const statusCode = (status: string) => ({ appended: 201, infected: 422, unavailable: 503 } as Record<string, number>)[status] ?? 409;
+type Result = { status: 'appended' | 'infected' | 'conflict'; fileId: string;
+  sequence?: number; error?: string };
+type Capture = Awaited<ReturnType<typeof authoriseCapture>>;
 
-export function registerScreenshots(app: FastifyInstance, config: AuthConfig, files?: FileOptions, view?: LiveViewOptions) {
+const statuses = { appended: 201, infected: 422, conflict: 409 };
+
+export function registerScreenshots(app: FastifyInstance, config: AuthConfig,
+  files?: FileOptions, view?: LiveViewOptions) {
   const pending = new Map<string, Promise<Result>>();
-  app.post('/api/conversations/:conversationId/screenshots', { bodyLimit: 1024 }, async (request, reply) => {
+  async function screenshot(request: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
-    if (!sessionFor(request, config, new Date())) return reply.code(401).send({ status: 'refused', error: 'Sign in to capture a screenshot.' });
-    if (!files || !view) return reply.code(503).send({ status: 'unavailable', error: 'Screenshot unavailable.' });
+    if (!sessionFor(request, config, new Date())) {
+      return reply.code(401).send({ status: 'refused', error: 'Sign in to capture a screenshot.' });
+    }
+    if (!files || !view) {
+      return reply.code(503).send({ status: 'unavailable', error: 'Screenshot unavailable.' });
+    }
     try {
-      const context = await authoriseCapture(config, files, view, request);
-      const { fileId, conversationId, memberId, fresh } = context;
-      const previous = (await ownConversation(files.store, files.silo, conversationId, memberId, true, true)).find(row => row.event.id === `file-upload-${fileId}`);
-      if (previous) {
-        const file = (previous.event.type === 'file.uploaded' ? fileUploadedDataSchema : fileRejectedDataSchema).parse(previous.event.data);
-        if (!file.screenshot) throw new Error('Id reused');
-        await fresh();
-        const status = previous.event.type === 'file.uploaded' ? 'appended' : 'infected';
-        return reply.code(statusCode(status)).send({ status, fileId, sequence: previous.sequence, ...(status === 'infected' ? { error: 'File rejected: malware detected' } : {}) });
+      const capture = await authoriseCapture(config, files, view, request);
+      const { conversationId, fileId } = capture;
+      const rows = await chatHistory(files.store, files.silo, conversationId);
+      const previous = findPreviousUpload(rows, fileId);
+      if (!previous && !pending.has(fileId) && pending.size >= 4) {
+        return reply.code(503).send({ status: 'unavailable', error: 'Screenshot busy. Retry shortly.' });
       }
-      if (!pending.has(fileId) && pending.size >= 4) return reply.code(503).send({ status: 'unavailable', error: 'Screenshot busy. Retry shortly.' });
-      let work = pending.get(fileId);
-      if (!work) {
-        work = captureFile(files, view, context); pending.set(fileId, work);
-        void work.finally(() => pending.delete(fileId)).catch(() => undefined);
-      }
-      const result = await work;
-      // Even a coalesced retry must recheck its own current session.
-      await fresh();
-      return reply.code(statusCode(result.status)).send(result);
+      const result = previous
+        ? savedScreenshot(previous, fileId)
+        : await currentCapture(pending, files, view, capture);
+      // Check the current session even when returning a saved file or sharing a capture.
+      await capture.checkAccess();
+      return reply.code(statuses[result.status]).send(result);
     } catch (error) {
       return captureFailure(request, reply, error);
     }
-  });
+  }
+  app.post('/api/conversations/:conversationId/screenshots', { bodyLimit: 1024 }, screenshot);
 }
 
-async function authoriseCapture(config: AuthConfig, files: FileOptions, view: LiveViewOptions, request: FastifyRequest) {
+function savedScreenshot(previous: StoredEvent, fileId: string): Result {
+  const sequence = previous.sequence;
+  const event = previous.event;
+  if (event.type === 'file.uploaded' && fileUploadedDataSchema.parse(event.data).screenshot) {
+    return { status: 'appended', fileId, sequence };
+  }
+  if (event.type === 'file.rejected' && fileRejectedDataSchema.parse(event.data).screenshot) {
+    return { status: 'infected', fileId, sequence, error: 'File rejected: malware detected' };
+  }
+  throw new FileRefusal('id_reused');
+}
+
+function currentCapture(pending: Map<string, Promise<Result>>, files: FileOptions,
+  view: LiveViewOptions, capture: Capture) {
+  const { fileId } = capture;
+  const previous = pending.get(fileId);
+  if (previous) return previous;
+  async function save() {
+    try {
+      return await captureFile(files, view, capture);
+    } finally {
+      pending.delete(fileId);
+    }
+  }
+  const work = save();
+  pending.set(fileId, work);
+  return work;
+}
+
+async function captureComputer(view: LiveViewOptions, memberId: string, conversationId: string) {
+  try {
+    return await viewAccess(view, memberId, conversationId);
+  } catch (error) {
+    if (error instanceof ViewAccessRefused) {
+      throw new FileRefusal('conversation_refused', { cause: error });
+    }
+    throw error;
+  }
+}
+
+async function authoriseCapture(config: AuthConfig, files: FileOptions, view: LiveViewOptions,
+  request: FastifyRequest) {
   const session = sessionFor(request, config, new Date());
-  // Bind capture to the signed-in identity, CSRF marker, origin and matching silo resources.
-  if (!isCaptureIdentityCurrent(config, files, view, request, session)) throw new Error('Access changed');
-  const id = recordIdSchema;
-  const { conversationId } = z.object({ conversationId: id }).parse(request.params);
-  const key = id.parse(request.headers['idempotency-key']);
-  // Capture accepts no URL, filesystem path, bytes, dimensions or claimed identity.
+  if (!session || !isOrganisationSession(config, session) || !sameOrigin(request, config) ||
+      request.headers['x-opencrane-view'] !== '1') {
+    throw new FileRefusal('conversation_refused');
+  }
+  // Check that desktop access and file storage refer to the same silo and event log.
+  if (files.silo !== view.silo || files.store !== view.store || files.binding.silo !== files.silo) {
+    throw new FileRefusal('conversation_refused');
+  }
+  const { conversationId } = z.object({ conversationId: recordIdSchema }).parse(request.params);
+  const key = recordIdSchema.parse(request.headers['idempotency-key']);
   z.undefined().parse(request.body);
-  const memberId = await files.feed.memberId(files.silo, config.issuerUrl, session.sub);
-  if (!memberId) throw new Error('Access changed');
-  const computer = await viewAccess(view, memberId, conversationId);
-  const fresh = async () => {
-    if (!sessionFor(request, config, new Date()) || JSON.stringify(await viewAccess(view, memberId, conversationId)) !== JSON.stringify(computer)) throw new Error('Access changed');
-  };
-  const fileId = sha256HexOfJson([files.silo, conversationId, memberId, `screenshot-${key}`]);
-  return { computer, memberId, conversationId, fileId, key, fresh };
+  const resolved = await files.feed.memberId(files.silo, config.issuerUrl, session.sub);
+  if (!resolved) throw new FileRefusal('conversation_refused');
+  const memberId = resolved;
+  const computer = await captureComputer(view, memberId, conversationId);
+  async function checkAccess() {
+    if (!sessionFor(request, config, new Date())) {
+      throw new FileRefusal('conversation_refused');
+    }
+    const current = await captureComputer(view, memberId, conversationId);
+    if (!sameViewComputer(current, computer)) {
+      throw new FileRefusal('conversation_refused');
+    }
+  }
+  const uploadKey = `screenshot-${key}`;
+  const fileId = uploadIdentity(files.silo, conversationId, memberId, uploadKey);
+  return { computer, memberId, conversationId, fileId, uploadKey, checkAccess };
 }
 
-function isCaptureIdentityCurrent(
-  config: AuthConfig,
-  files: FileOptions,
-  view: LiveViewOptions,
-  request: FastifyRequest,
-  session: ReturnType<typeof sessionFor>,
-): session is NonNullable<ReturnType<typeof sessionFor>> {
-  if (!session) {
-    return false;
+async function captureFile(files: FileOptions, view: LiveViewOptions,
+  capture: Capture): Promise<Result> {
+  const { computer, memberId, conversationId, fileId, uploadKey, checkAccess } = capture;
+  await checkAccess();
+  const desktop = await view.open(computer);
+  const { bytes, capturedAt, width, height } = await captureDesktop(desktop);
+  await checkAccess();
+  const details = { computerId: computer.computerId, generation: computer.generation,
+    capturedAt, width, height };
+  const input = { key: uploadKey, name: `Screenshot-${fileId.slice(0, 12)}.png`,
+    bytes, screenshot: details, checkAccess };
+  const upload = await uploadFile(files, memberId, conversationId, input);
+  const result: Result = { status: upload.status, fileId };
+  if ('sequence' in upload) {
+    result.sequence = upload.sequence;
   }
-  if (!isOrganisationSession(config, session)) {
-    return false;
+  if ('error' in upload) {
+    result.error = upload.error;
   }
-  const expectedOrigin = new URL(config.redirectUri).origin;
-  if (request.headers.origin !== expectedOrigin) {
-    return false;
-  }
-  if (request.headers['x-opencrane-view'] !== '1') {
-    return false;
-  }
-  if (files.silo !== view.silo) {
-    return false;
-  }
-  if (files.store !== view.store) {
-    return false;
-  }
-  if (files.binding.silo !== files.silo) {
-    return false;
-  }
-  return true;
-}
-
-async function captureFile(files: FileOptions, view: LiveViewOptions, context: Awaited<ReturnType<typeof authoriseCapture>>): Promise<Result> {
-  const { computer, memberId, conversationId, fileId, key, fresh } = context;
-  const captured = await captureDesktop(await view.open(computer));
-  await fresh();
-  const result = await uploadFile(files, memberId, conversationId, `screenshot-${key}`, `Screenshot-${fileId.slice(0, 12)}.png`, captured.bytes,
-    { computerId: computer.computerId, generation: computer.generation, capturedAt: captured.capturedAt, width: captured.width, height: captured.height }, fresh);
-  return { status: result.status, fileId, ...('sequence' in result ? { sequence: result.sequence } : {}), ...('error' in result ? { error: result.error } : {}) };
+  return result;
 }
 
 function captureFailure(request: FastifyRequest, reply: FastifyReply, error: unknown) {
+  const access = error instanceof FileRefusal && error.kind === 'conversation_refused';
+  const reason = access ? 'access_changed' : 'capture_failed';
+  request.log.warn({ operation: 'screenshot.capture', reason, err: error }, 'Screenshot refused');
+  if (access) {
+    return reply.code(403).send({ status: 'refused', reason,
+      error: 'You need access to this chat to take a screenshot.' });
+  }
   if (error instanceof FileRefusal) {
     return reply.code(error.statusCode).send({ status: 'refused', error: error.message });
   }
-  const reason = error instanceof Error ? error.message : '';
-  const access = ['Access changed', 'Desktop access required', 'Conversation refused', 'Wrong silo'].includes(reason);
-  request.log.warn({ operation: 'screenshot.capture', reason: access ? 'access_changed' : 'capture_failed' }, 'Screenshot refused');
-  return reply.code(error instanceof z.ZodError ? 400 : reason === 'Id reused' ? 409 : access ? 403 : 503)
-    .send({ status: 'refused', error: access ? 'Screenshot access is not available. Ask the desktop owner for access.' : 'Screenshot could not be saved. Retry.' });
+  const status = error instanceof z.ZodError ? 400 : 503;
+  return reply.code(status).send({ status: 'refused', error: 'Screenshot could not be saved. Retry.' });
 }

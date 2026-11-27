@@ -6,11 +6,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { encodeSession } from '@opencrane/auth';
-import { grantStream } from '@opencrane/authz';
 import { history } from '@opencrane/models';
 import { until } from '@opencrane/authz/testing';
 import { parseEventByType } from '@opencrane/events';
 import { viewFixture } from './support/view-fixture.ts';
+import { viewHeaders } from './support/view-requests.ts';
 
 it.each(['authority read', 'NATS replies', 'NATS outage'])('respects the existing viewer lease through delayed %s', async boundary => {
   const readable = new PassThrough();
@@ -21,9 +21,6 @@ it.each(['authority read', 'NATS replies', 'NATS outage'])('respects the existin
   let socket: WebSocket | undefined;
   const { app, append, config, nats } = fixture;
   try {
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner',
-    }, true);
     const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
       cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now() / 1000) + 120 })}` };
     const admission = await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers });
@@ -61,70 +58,101 @@ it.each(['authority read', 'NATS replies', 'NATS outage'])('respects the existin
     const displayed = nextBinaryMessage(socket); readable.write(Buffer.from('RFB 003.008\n'));
     expect(await displayed).toEqual(Buffer.from('RFB 003.008\n'));
     const closed = once(socket, 'close'), revokedAt = performance.now();
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner',
+    await append('participation-chat', 'participant.removed', {
+      conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
     });
     expect((await closed)[0]).toBe(4003);
     expect(performance.now() - revokedAt).toBeLessThan(2000);
   } finally { nats.pauseResponses(false); socket?.terminate(); vi.restoreAllMocks(); await fixture.close(); }
 }, 30_000);
 
-it.each(['recovered', 'unavailable', 'revoked'])('requires a fresh successful post-audit check when the first check is late (%s)', async mode => {
+type PostAuditMode = 'recovered' | 'unavailable' | 'revoked';
+
+async function requiresFreshPostAuditCheck(mode: PostAuditMode) {
   let opened = 0;
-  const fixture = await viewFixture(() => {
+  const greeting = Buffer.from('RFB 003.008\n');
+  function open() {
     opened++;
-    const readable = new PassThrough(), writable = new PassThrough(); writable.resume();
-    readable.write(Buffer.from('RFB 003.008\n'));
+    const readable = new PassThrough();
+    const writable = new PassThrough();
+    writable.resume();
+    readable.write(greeting);
     return Promise.resolve(Duplex.from({ readable, writable }));
-  });
-  let socket: WebSocket | undefined, audited = false, checks = 0;
+  }
+  const fixture = await viewFixture(open);
   const { app, append, config, nats } = fixture;
-  try {
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner',
-    }, true);
-    const read = nats.store.readStream.bind(nats.store), write = nats.store.append.bind(nats.store);
-    vi.spyOn(nats.store, 'append').mockImplementation(async input => {
-      const result = await write(input);
-      const event = parseEventByType(input.event);
-      if (event.success && event.event.type === 'computer.view_started') {
-        audited = true;
-        if (mode === 'revoked') await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', {
-          resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner',
+  const release = Promise.withResolvers<void>();
+  const read = nats.store.readStream.bind(nats.store);
+  const write = nats.store.append.bind(nats.store);
+  let socket: WebSocket | undefined;
+  let audited = false;
+  let checks = 0;
+  async function afterStartAudit(input: Parameters<typeof write>[0]) {
+    const result = await write(input);
+    const parsed = parseEventByType(input.event);
+    if (parsed.success && parsed.event.type === 'computer.view_started') {
+      audited = true;
+      if (mode === 'revoked') {
+        await append('participation-chat', 'participant.removed', {
+          conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
         });
       }
-      return result;
-    });
-    vi.spyOn(nats.store, 'readStream').mockImplementation(async function* (...args) {
-      if (audited && args[0] === 'conversation-chat' && (++checks === 1 || mode === 'unavailable')) await delay(1400);
-      yield* read(...args);
-    });
-    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
-      cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now() / 1000) + 120 })}` };
-    const admission = await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers });
+    }
+    return result;
+  }
+  async function* holdFirstAuthorityRead(...args: Parameters<typeof read>) {
+    if (audited && args[0] === 'conversation-chat') {
+      checks++;
+      if (checks === 1 || mode === 'unavailable') {
+        await release.promise;
+      }
+    }
+    yield* read(...args);
+  }
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  const readSpy = vi.spyOn(nats.store, 'readStream');
+  try {
+    appendSpy.mockImplementation(afterStartAudit);
+    readSpy.mockImplementation(holdFirstAuthorityRead);
+    const headers = viewHeaders(config);
+    const url = '/api/conversations/chat/view';
+    const admission = await app.inject({ method: 'POST', url, headers });
     expect(admission.statusCode).toBe(200);
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
-    socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', admission.json<{ ticket: string }>().ticket], { headers });
-    socket.on('error', () => undefined);
+    const { ticket, sessionId } = admission.json<{ ticket: string; sessionId: string }>();
+    const wsUrl = `${address.replace('http:', 'ws:')}/ws/conversations/chat/view`;
+    socket = new WebSocket(wsUrl, ['binary', ticket], { headers });
     const displayed = nextBinaryMessage(socket);
     if (mode === 'recovered') {
-      expect(await displayed).toEqual(Buffer.from('RFB 003.008\n'));
+      expect(await displayed).toEqual(greeting);
       expect(socket.readyState).toBe(WebSocket.OPEN);
       expect(opened).toBe(1);
+      expect(checks).toBeGreaterThan(1);
     } else {
       await expect(displayed).rejects.toThrow();
       expect(opened).toBe(0);
-      const sessionId = admission.json<{ sessionId: string }>().sessionId;
+      const subject = `view-${sessionId}`;
       async function stopped() {
-        return (await history(nats.store, `view-${sessionId}`, 'test')).length === 2;
+        const records = await history(nats.store, subject, 'test');
+        return records.length === 2;
       }
       await until(stopped);
-      const records = await history(nats.store, `view-${sessionId}`, 'test');
+      const records = await history(nats.store, subject, 'test');
       const reason = mode === 'unavailable' ? 'unavailable' : 'access_changed';
       expect(records[1]?.event.data).toMatchObject({ reason });
     }
-  } finally { socket?.terminate(); vi.restoreAllMocks(); await fixture.close(); }
-}, 30_000);
+  } finally {
+    release.resolve();
+    socket?.terminate();
+    appendSpy.mockRestore();
+    readSpy.mockRestore();
+    await fixture.close();
+  }
+}
+it.each(['recovered', 'unavailable', 'revoked'] as const)(
+  'requires a fresh successful post-audit check when the first check is late (%s)',
+  requiresFreshPostAuditCheck, 30_000,
+);
 
 it('admits slow authority and audit reads while a slow desktop opens and delivers fragments', async () => {
   const readable = new PassThrough();
@@ -134,11 +162,8 @@ it('admits slow authority and audit reads while a slow desktop opens and deliver
     return Duplex.from({ readable, writable });
   });
   let socket: WebSocket | undefined, readDelay = 450;
-  const { app, append, config, nats } = fixture;
+  const { app, config, nats } = fixture;
   try {
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner',
-    }, true);
     const read = nats.store.readStream.bind(nats.store), write = nats.store.append.bind(nats.store);
     vi.spyOn(nats.store, 'readStream').mockImplementation(async function* (...args) {
       if (args[0] === 'computer-assistant') await delay(readDelay);
@@ -191,9 +216,6 @@ it('keeps a valid lease when an overlapping OpenFGA reply times out', async () =
   });
   const { app, append, config } = fixture;
   try {
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner',
-    }, true);
     proxy.listen(0, '127.0.0.1'); await once(proxy, 'listening');
     const bound = proxy.address(); if (!bound || typeof bound === 'string') throw new Error('Missing proxy');
     fixture.binding.apiUrl = `http://127.0.0.1:${bound.port}`;
@@ -208,8 +230,8 @@ it('keeps a valid lease when an overlapping OpenFGA reply times out', async () =
     console.log(JSON.stringify({ scenario: 'jittered OpenFGA renewal', replyMs: times }));
     expect(socket.readyState).toBe(WebSocket.OPEN);
     const closed = once(socket, 'close'), revokedAt = performance.now();
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner',
+    await append('participation-chat', 'participant.removed', {
+      conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
     });
     expect((await closed)[0]).toBe(4003);
     expect(performance.now() - revokedAt).toBeLessThan(2000);

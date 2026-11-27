@@ -3,7 +3,6 @@ import { IncomingMessage } from 'node:http';
 import { once } from 'node:events';
 import { Duplex, PassThrough } from 'node:stream';
 import { encodeSession } from '@opencrane/auth';
-import { grantStream } from '@opencrane/authz';
 import { history } from '@opencrane/models';
 import { parseEventByType } from '@opencrane/events';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -33,11 +32,6 @@ async function admissionFixture(lifetimeSeconds = 120) {
     return Promise.resolve(Duplex.from({ readable, writable }));
   }
   const fixture = await viewFixture(openDesktop);
-  const grant = {
-    resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-    granteeKind: 'member', grantedBy: 'owner',
-  };
-  await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
   function check(...args: Parameters<typeof access.viewAccess>) {
     calls++;
     if (unavailableCalls > 0) {

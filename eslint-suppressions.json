@@ -270,11 +270,6 @@
   },
   "apps/server/src/files/commands.ts": {
     "max-params": {
-      "count": 2
-    }
-  },
-  "apps/server/src/files/routes.ts": {
-    "max-params": {
       "count": 1
     }
   },

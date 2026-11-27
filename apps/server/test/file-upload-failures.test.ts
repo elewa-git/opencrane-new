@@ -114,7 +114,8 @@ async function startUploadFixture() {
     conversationId: 'conversation', fileId: 'file', name: 'notes.txt', mime: 'text/plain',
     size: bytes.length, sha256: 'a'.repeat(64), objectKey: 'test/file', uploadedBy: 'alice',
   };
-  await fileCommand(nats.store, 'test', 'alice', 'uploaded-file', 'file.uploaded', file);
+  await fileCommand(nats.store, { silo: 'test', memberId: 'alice', eventId: 'uploaded-file',
+    type: 'file.uploaded', value: file });
   // Build the read tables used by access checks and file downloads before testing outages.
   await runner.initialise(conversations);
   await runner.run(conversations);
@@ -248,7 +249,7 @@ async function confirmedStoreOutage(code: string) {
   const failure = Object.assign(new Error('Private storage diagnostic'), { code });
   const putObject = vi.spyOn(options.objects, 'putObject');
   putObject.mockRejectedValue(failure);
-  const upload = uploadFile(options, 'alice', 'conversation', code, 'notes.txt', bytes);
+  const upload = uploadFile(options, 'alice', 'conversation', { key: code, name: 'notes.txt', bytes });
   await expect(upload).rejects.toBeInstanceOf(FileUnavailable);
   await expect(upload).rejects.toMatchObject({ kind: 'object_store', statusCode: 503 });
   const request = uploadRequest(code);
@@ -324,7 +325,8 @@ it('marks a refused scanner connection with typed 503', refusedScannerConnection
 
 async function emptyUpload() {
   const empty = Buffer.alloc(0);
-  const upload = uploadFile(options, 'alice', 'conversation', 'empty', 'notes.txt', empty);
+  const upload = uploadFile(options, 'alice', 'conversation',
+    { key: 'empty', name: 'notes.txt', bytes: empty });
   await expect(upload).rejects.toBeInstanceOf(FileRefusal);
   await expect(upload).rejects.toMatchObject({ kind: 'invalid_request', statusCode: 400 });
   const request = uploadRequest('empty', empty);
@@ -353,7 +355,8 @@ async function listsUploadsWithoutReplayingProjectedHistory() {
     size: bytes.length, sha256: 'a'.repeat(64), objectKey: 'test/projected-upload',
     uploadedBy: 'alice',
   };
-  await fileCommand(options.store, 'test', 'alice', 'projected-upload', 'file.uploaded', file);
+  await fileCommand(options.store, { silo: 'test', memberId: 'alice', eventId: 'projected-upload',
+    type: 'file.uploaded', value: file });
   await runner.run(conversations);
   const projectedThrough = await runner.checkpoint(conversations);
   const readStream = options.store.readStream.bind(options.store);
@@ -435,7 +438,8 @@ async function refusesFilesAfterRemovalAndInvitation() {
     mime: 'text/plain', size: bytes.length, sha256: 'a'.repeat(64),
     objectKey: 'test/after-removal', uploadedBy: 'alice',
   };
-  const command = fileCommand(store, 'test', 'alice', 'after-removal', 'file.uploaded', file);
+  const command = fileCommand(store, { silo: 'test', memberId: 'alice', eventId: 'after-removal',
+    type: 'file.uploaded', value: file });
   const refusedCommand = { kind: 'conversation_refused', statusCode: 403 };
   await expect(command).rejects.toMatchObject(refusedCommand);
   expect(await store.head('conversation-conversation')).toBe(before);

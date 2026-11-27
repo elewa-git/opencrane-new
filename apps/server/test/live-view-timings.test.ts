@@ -3,7 +3,6 @@ import { once } from 'node:events';
 import { Duplex, PassThrough } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { encodeSession } from '@opencrane/auth';
-import { grantStream } from '@opencrane/authz';
 import { expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
@@ -28,12 +27,7 @@ function isLeaseReceipt(timing: Timing) {
 }
 
 async function admitView(fixture: Awaited<ReturnType<typeof viewFixture>>) {
-  const { app, append, config } = fixture;
-  const grant = {
-    resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-    granteeKind: 'member', grantedBy: 'owner',
-  };
-  await append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
+  const { app, config } = fixture;
   const identity = {
     sub: 'alice', orgId: 'org-test', roles: [], authTime: 1,
     exp: Math.floor(Date.now() / 1000) + 120,
@@ -106,11 +100,8 @@ async function firstFrameDuringLateCheck() {
 
     const closed = once(socket, 'close');
     const revokedAt = performance.now();
-    const revocation = {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-      revokedBy: 'owner',
-    };
-    await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', revocation);
+    const removal = { conversationId: 'chat', participantId: 'alice', removedBy: 'owner' };
+    await append('participation-chat', 'participant.removed', removal);
     expect((await closed)[0]).toBe(4003);
     expect(performance.now() - revokedAt).toBeLessThan(2000);
 

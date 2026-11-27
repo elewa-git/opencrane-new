@@ -25,7 +25,7 @@ flowchart LR
   stack["infra/dev-stack<br/>local OpenCrane"] -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
   stack -->|starts and checks services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
-  stack -->|starts apps and checks welcome, chat and approvals| apps["Server, website and workers<br/>OpenCrane apps"]
+  stack -->|starts apps and checks welcome, chat, viewing and approvals| apps["Server, website and workers<br/>OpenCrane apps"]
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|checks reviewed tool calls through TLS| demo["Demo tool server<br/>synthetic effects"]
   stack -.->|reuses website proxy handling| package
@@ -41,7 +41,7 @@ flowchart LR
 - Prepare test sign-in and a free stand-in AI provider.
 - Preserve private survey and memory keys across restarts; chats need no key storage.
 - Apply safe background subscription changes while services are stopped.
-- Run browser journeys and keep screenshots and original results.
+- Run browser journeys and keep screenshots and measurements, including both viewer connections.
 - Check the claimed stack and protected target before private memory collection.
 - Check package hosts and require the free stand-in for fleet tasks. Record any explicit
   local host-risk exception. Update and remove only owned releases.
@@ -66,7 +66,7 @@ Not built yet:
 
 1. **A developer checks a change.** The browser signs in, sends a message and checks
    the saved reply after reloading. Separate journeys cover files, spending,
-   desktop viewing and organisation settings. The core journey finishes its browser
+   desktop viewing with chat access and organisation settings. The core journey finishes its browser
    checks and closes the browser before rebuilding the read tables. The static
    website closes a failed desktop connection without interrupting other requests.
 

@@ -20,7 +20,7 @@ rebuilt from the log.
 ```mermaid
 flowchart LR
   parent["libs/<br/>shared libraries"] --> authz["libs/authz<br/>who may use what"]
-  server["apps/server<br/>back end"] -.->|checks routine access and original run links| authz
+  server["apps/server<br/>back end"] -.->|checks chat and routine access| authz
   models["libs/models<br/>AI access and spending"] -.->|checks access, receipts and outages| authz
   ops["apps/ops<br/>background workers"] -.->|checks routine claims and run links| authz
   authz -->|checks permissions, including routine ownership| fga["OpenFGA<br/>permissions service"]
@@ -32,7 +32,8 @@ flowchart LR
 
 - Turn saved membership, ownership, conversation, group and access changes into
   permission records.
-- Answer whether a person, assistant or group may use a resource.
+- Answer whether a person, assistant or group may use a resource. The desktop viewer
+  asks whether the person can read the chat.
 - Grant ownership only after the member record confirms the appointment.
 - Give the people named in a side conversation, a child chat started from another
   chat, access to it. Keep its creator's permission to manage participants separate.

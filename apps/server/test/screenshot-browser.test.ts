@@ -5,7 +5,6 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { expect, it } from 'vitest';
 import { chromium } from 'playwright';
 import { encodeSession } from '@opencrane/auth';
-import { grantStream } from '@opencrane/authz';
 import { files, conversations } from '@opencrane/projections';
 import { until } from '@opencrane/authz/testing';
 import { buildServer } from '../src/server.ts';
@@ -33,7 +32,6 @@ it.runIf(process.env['SCREENSHOT_BROWSER'] === '1')('captures real desktop pixel
   const browser = await chromium.launch({ headless: true });
   const output = 'apps/computer/.state/p318'; await mkdir(output, { recursive: true });
   try {
-    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     await runner.initialise(files);
     app.get('/workspace', async (_request, reply) => reply.type('text/html').send(await readFile('apps/web/dist/web/browser/index.html')));
     app.get('/*', async (request, reply) => {

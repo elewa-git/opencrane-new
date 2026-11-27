@@ -200,7 +200,7 @@ export function captureView(
   if (state.phase === 'access_changed') {
     const detail = state.signIn
       ? 'Sign in again to take screenshots.'
-      : 'Ask the desktop owner for access. Check Files to see whether this screenshot was saved.';
+      : 'If you can still open this chat, check Files for the screenshot.';
     return { ...view('access_changed', 'Screenshot access changed', detail, false, false),
       timestamp: state.answeredAt };
   }

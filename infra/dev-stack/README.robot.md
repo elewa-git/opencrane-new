@@ -1370,9 +1370,10 @@ For ten instrumented live-view repetitions on a claimed secondary, run
 `node --experimental-strip-types infra/dev-stack/live-view-repeat.ts <output-directory>`.
 The directory defaults to `docs/process/i77-live-view`; choose a new directory
 to retain an earlier batch. Each run records safe server stage/lease timings
-and browser admission/connection milestones. `replyTiming.firstDeltaMs` measures
-the time from the browser's message POST to its first received `agent.message_delta`
-frame. A null value means the measurement was not reached before the run ended.
+and browser admission and connection times for both viewer sessions.
+`replyTiming.firstDeltaMs` measures the time between posting the message in the
+second chat and receiving its first `agent.message_delta` frame. A passing run
+records both viewer session IDs and this reply time.
 No message or reply text is retained by this observer.
 Run `python3 infra/dev-stack/live-view-resources.py <output-file>` during a batch
 to sample RSS, file descriptor counts and host CPU pressure every five seconds.
@@ -1385,12 +1386,15 @@ for field meanings and collection limits.
 
 For screenshot qualification on a claimed secondary, run
 `node --experimental-strip-types infra/dev-stack/screenshot-journey.ts fresh`
-after `up.sh --fresh`, then use `repeat` after plain `up.sh`. Real Zitadel sessions
-capture the deployed desktop, open the saved image from the conversation and panel,
-and reload at 1280px and 390px. Repeat also reopens the fresh run's screenshot
+after `up.sh --fresh`, then use `repeat` after plain `up.sh`. At 1280 and 390 px, a
+member captures their own computer and another participant captures the shared
+assistant's computer from a group chat's assistant chat. Both reopen the image
+from the chat and session panel and after reload. Repeat also reopens the fresh run's screenshot
 when capture passed; otherwise it records that persistence check as NOT RUN.
-A signed-in non-participant with a desktop grant is refused viewing, capture and
-file access. Receipts and screenshots go to `docs/process/p3-18-live/`.
+A second signed-in member sees the unavailable chat screen and is refused viewing,
+capture and file access. The refused page receives no desktop connection or
+pixels. Results and screenshots go to `screenshot-journey/` in
+the selected stack directory.
 
 ## Browser upload qualification
 

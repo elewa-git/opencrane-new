@@ -1,0 +1,94 @@
+{
+  "status": "PARTIAL",
+  "sourceCommit": "845ac02c193069639d38afe2b3362334269732ee",
+  "slot": 1,
+  "freshStarts": 1,
+  "startedAt": "2026-11-26T20:34:07Z",
+  "finishedAt": "2026-11-26T21:02:24Z",
+  "startup": "PASS",
+  "health": "PASS",
+  "coreBrowserJourney": "PASS",
+  "teardown": "PASS",
+  "widths": {
+    "1280": {
+      "personalCapture": {
+        "status": "PASS",
+        "captureMs": 2421,
+        "conversationAndPanel": "PASS",
+        "reload": "PASS",
+        "desktopGrantEvents": 0
+      },
+      "sharedCapture": {
+        "status": "FAIL",
+        "failure": "browser_timeout",
+        "viewTicketIssued": true,
+        "webSocketUpgradeRecorded": false
+      },
+      "sharedNonParticipant": {
+        "view": 403,
+        "capture": 403,
+        "file": "NOT RUN",
+        "desktopSockets": 0,
+        "desktopBytes": 0,
+        "desktopCanvases": 0,
+        "status": "PASS"
+      },
+      "sharedOutsider": {
+        "view": 403,
+        "capture": 403,
+        "file": "NOT RUN",
+        "desktopSockets": 0,
+        "desktopBytes": 0,
+        "desktopCanvases": 0,
+        "status": "PASS"
+      },
+      "coreRemoval": {
+        "status": "PASS",
+        "closedAndClearedInMs": 181
+      },
+      "sharedRemoval": {
+        "status": "NOT RUN",
+        "reason": "shared_view_did_not_open"
+      }
+    },
+    "390": {
+      "personalCapture": {
+        "status": "PASS",
+        "captureMs": 2624,
+        "conversationAndPanel": "PASS",
+        "reload": "PASS",
+        "desktopGrantEvents": 0
+      },
+      "sharedCapture": {
+        "status": "FAIL",
+        "failure": "browser_timeout"
+      },
+      "sharedNonParticipant": {
+        "view": 403,
+        "capture": 403,
+        "file": "NOT RUN",
+        "desktopSockets": 0,
+        "desktopBytes": 0,
+        "desktopCanvases": 0,
+        "status": "PASS"
+      },
+      "sharedOutsider": {
+        "view": 403,
+        "capture": 403,
+        "file": "NOT RUN",
+        "desktopSockets": 0,
+        "desktopBytes": 0,
+        "desktopCanvases": 0,
+        "status": "PASS"
+      },
+      "coreRemoval": {
+        "status": "PASS",
+        "closedAndClearedInMs": 470
+      },
+      "sharedRemoval": {
+        "status": "NOT RUN",
+        "reason": "shared_view_did_not_open"
+      }
+    }
+  }
+}

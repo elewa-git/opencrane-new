@@ -215,7 +215,8 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
       message: 'File too large. Maximum size is 20 MiB.',
     };
     const oversizedUpload = uploadFile(
-      options, 'alice', 'conversation', 'oversized-helper', 'notes.txt', oversizedBytes,
+      options, 'alice', 'conversation',
+      { key: 'oversized-helper', name: 'notes.txt', bytes: oversizedBytes },
     );
     await expect(oversizedUpload).rejects.toMatchObject(expectedSizeRefusal);
     let release: () => void = () => {};
@@ -393,7 +394,8 @@ it('does not resend acknowledged uploads after reconnect even when workspace byt
   await chatCommand(nats.store, { silo: 'test', memberId: 'alice' }, { id: 'create', conversationId: 'conversation', assistantId: 'assistant' });
   const bytes = Buffer.alloc(160_000, 'a'), sha256 = createHash('sha256').update(bytes).digest('hex');
   const file = { conversationId: 'conversation', fileId: 'file', name: 'notes.txt', mime: 'text/plain', size: bytes.length, sha256, objectKey: 'test/file', uploadedBy: 'alice' };
-  await fileCommand(nats.store, 'test', 'alice', 'upload', 'file.uploaded', file);
+  await fileCommand(nats.store, { silo: 'test', memberId: 'alice', eventId: 'upload',
+    type: 'file.uploaded', value: file });
   let writes = 0;
   let workspace: Buffer = Buffer.alloc(0);
   const channel = bridgeChannel(server, { journal: `${directory}/reports`, rpc: () => Promise.resolve({}), grant: () => Promise.resolve(),

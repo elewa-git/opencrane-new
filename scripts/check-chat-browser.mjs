@@ -76,7 +76,8 @@ try {
     await entry.focus(); await page.keyboard.press('Enter');
     const viewer = page.getByRole('dialog', { name: 'Computer view', exact: true });
     await viewer.getByText('Unavailable', { exact: true }).waitFor();
-    assert((await viewer.innerText()).includes('shared-desktop grant'));
+    await viewer.getByText('You can watch this computer when it is ready and you can read this chat.',
+      { exact: true }).waitFor();
     assert.equal(await viewer.locator('canvas').count(), 0);
     await page.keyboard.press('Escape');
     assert.equal(await entry.evaluate(node => node === globalThis.document.activeElement), true);

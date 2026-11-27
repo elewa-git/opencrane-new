@@ -367,7 +367,7 @@ author (`uploadedBy`), PNG MIME type, size, object key and SHA-256. Ordinary upl
 omit this metadata. Only the authenticated capture path supplies it. Capture uses
 one bounded framebuffer request on an explicit member command; replay never captures
 pixels or scans bytes again. Screenshot reads require current conversation participation
-and membership, independently of the original capture's desktop grant.
+and membership.
 
 Bridge reports describe activity and grant no authority. The separate server turn
 command binds the requested message to its Codex thread, requester, task and
@@ -867,8 +867,8 @@ These queue names and subscriptions are checked against `libs/events` by
 `check:events`. A host enables a handler explicitly. `update-members` can
 wrap the members projection; [authz](../../libs/authz/README.md) implements
 `update-openfga` for routine, provider, member, assistant, conversation, team and resource-grant
-events. Desktop admission additionally requires an explicit member
-`shared_desktop` grant. Scope promotion remains deferred.
+events. Watching a ready computer and taking a screenshot use the same access
+check as reading the chat. Taking control has its own permission check.
 
 | Handler | Subscribed events |
 | --- | --- |

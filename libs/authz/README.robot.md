@@ -114,12 +114,12 @@ Use `grantStream(resourceType, resourceId)` for both grant and revoke commands.
 The reaction refuses any other subject. This gives the existing worker one
 ordering key per resource; splitting a permission across streams is unsafe.
 
-Desktop views additionally require a `shared_desktop` member or team grant, independently
-of conversation participation. Grant events use `grantStream('shared_desktop',
-computerId)` and project the resource's `use` tuple. The viewer also checks current
-event history and receipts for an explicit member grant or current team membership.
-Assistant grants cannot admit a human viewer. Delayed revocations fail closed; a
-direct member grant stays independent of group membership.
+The desktop viewer checks chat read permission and the participant's join receipt.
+Taking control has a separate desktop permission check. Its grant events use
+`grantStream('shared_desktop', computerId)` and project the resource's `use` tuple.
+The control path checks the grant history and receipts for an explicit member grant
+or current team membership. A direct member grant stays independent of group
+membership.
 
 Flat groups reuse `team#member`, assistant `acts_for` and resource `use`; no new
 model is needed. [Group commands](../../docs/api/groups.md) append events, never

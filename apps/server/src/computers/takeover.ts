@@ -10,7 +10,8 @@ import { envelope } from '@opencrane/models';
 import { readChatFacts, type ChatFacts } from '../chat/chat-summary.ts';
 import { ChatRefused, chatAccess, writeChatAccess, type ChatOptions } from '../chat/access.ts';
 import { privateSessionCreation, writePrivateSession } from '../chat/private-session.ts';
-import { desktopAccess, viewAccess } from './view-access.ts';
+import { controlDesktopAccess } from './takeover-desktop-access.ts';
+import { viewAccess } from './view-access.ts';
 import { RequesterOnly, ControlConflict, savedControlRefusal, recordControlRefusal,
   throwControlRefusal, type ControlWriteCheck } from './takeover-refusals.ts';
 import { grantWriter, renewWriter, returnWriter, WriterSlot } from './writer-lease.ts';
@@ -164,12 +165,12 @@ async function controlAccess(options: ChatOptions, memberId: string, input: Cont
   const fresh = await writeChatAccess(options, accessRequest);
   fresh.include(`assistant-${assistantId}`, grantStream('shared_desktop', ready.computerId));
   const bounded = { ...options, deadline: fresh.deadline };
-  const desktop = await desktopAccess(bounded, memberId, input.conversationId, ready.computerId);
+  const desktop = await controlDesktopAccess(bounded, memberId, input.conversationId, ready.computerId);
   const auth = memberAuthorisation(options.binding);
   const assistantPermission = await auth.actsFor(memberId, assistantId);
   if (assistantPermission.status === 'unavailable') throw new ControlUnavailable('Control unavailable');
   if (!assistantPermission.allowed) throw new ChatRefused('Assistant refused');
-  const desktopPermission = await auth.view(
+  const desktopPermission = await auth.controlDesktop(
     memberId, input.conversationId, ready.computerId, desktop.receipts);
   if (desktopPermission.status === 'unavailable') throw new ControlUnavailable('Control unavailable');
   if (!desktopPermission.allowed) {

@@ -15,7 +15,8 @@ import { connectProjectionDb } from '@opencrane/projections';
 import { authEnv, directory, readEnv } from './config.ts';
 import { secondary, stackId } from './identity.ts';
 import { browserSessions } from './browser-signin.ts';
-import { browserViewTimings, collectViewTimings } from './live-view-timings.ts';
+import { browserViewTimings, collectViewTimings, type BrowserViewTiming }
+  from './live-view-timings.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
 import { measureFirstReplyDelta } from './live-view-reply-timing.ts';
 
@@ -72,6 +73,7 @@ function closeCodeForStopReason(reason: unknown): number | null {
 }
 type BrowserSessionMeasurement = {
   label: string;
+  conversationId: string;
   sessionId: string;
   count: number;
   durationMs: number[];
@@ -80,10 +82,19 @@ type BrowserSessionMeasurement = {
 function sessionSummary(label: string, sessionId: string,
   browserSession: BrowserSessionMeasurement | undefined,
   timingRecords: Record<string, unknown>[], revokedAtTime: string) {
-  const stop = timingRecords.find(record => record['stage'] === 'stop');
-  const upgrade = timingRecords.find(record => record['stage'] === 'websocket_upgrade');
+  function isStop(record: Record<string, unknown>) {
+    return record['stage'] === 'stop';
+  }
+  function isUpgrade(record: Record<string, unknown>) {
+    return record['stage'] === 'websocket_upgrade';
+  }
+  const stop = timingRecords.find(isStop);
+  const upgrade = timingRecords.find(isUpgrade);
   const stopReason = stop?.['outcome'] ?? upgrade?.['outcome'];
-  const leaseChecks = timingRecords.filter(record => record['stage'] === 'lease_check');
+  function isLeaseCheck(record: Record<string, unknown>) {
+    return record['stage'] === 'lease_check';
+  }
+  const leaseChecks = timingRecords.filter(isLeaseCheck);
   const checksByBoundary: Record<string, number> = {};
   for (const check of leaseChecks) {
     const boundary = typeof check['boundary'] === 'string' ? check['boundary'] : 'none';
@@ -92,13 +103,15 @@ function sessionSummary(label: string, sessionId: string,
     checksByBoundary[result] = (checksByBoundary[result] ?? 0) + 1;
   }
   const revokedAt = Date.parse(revokedAtTime);
-  const deniedBeforeRevoke = leaseChecks.filter(check => {
+  function deniedEarly(check: Record<string, unknown>) {
     if (check['outcome'] !== 'denied') return false;
     if (!Number.isFinite(revokedAt)) return true;
     const checkedAt = typeof check['time'] === 'number'
       ? check['time'] : Date.parse(String(check['time']));
     return checkedAt < revokedAt;
-  }).length;
+  }
+  const earlyDenials = leaseChecks.filter(deniedEarly);
+  const deniedBeforeRevoke = earlyDenials.length;
   const closeCode = stop ? closeCodeForStopReason(stopReason) : null;
   let upgradeStatus: number | undefined;
   if (!stop && (upgrade?.['outcome'] === 'access_changed' || upgrade?.['outcome'] === 'denied')) {
@@ -121,6 +134,45 @@ function sessionSummary(label: string, sessionId: string,
     timingRecords,
   };
 }
+function assertViewerEvidence(timings: BrowserViewTiming[],
+  sessions: BrowserSessionMeasurement[]) {
+  assert.equal(sessions.length, 2);
+  assert.notEqual(sessions[0]?.sessionId, sessions[1]?.sessionId);
+  for (const session of sessions) {
+    function isAdmission(timing: BrowserViewTiming) {
+      return timing.conversationId === session.conversationId &&
+        timing.sessionId === session.sessionId && timing.stage === 'admission_response';
+    }
+    function isSocketClose(timing: BrowserViewTiming) {
+      return timing.conversationId === session.conversationId &&
+        timing.stage === 'browser_socket_closed';
+    }
+    assert(timings.some(isAdmission), `Record admission for ${session.label}`);
+    assert(timings.some(isSocketClose), `Record socket closure for ${session.label}`);
+  }
+}
+
+async function collectSessions(run: number, timings: BrowserViewTiming[],
+  measured: BrowserSessionMeasurement[], revokedAtTime: string) {
+  const sessions: ReturnType<typeof sessionSummary>[] = [];
+  for (const timing of timings) {
+    if (timing.stage !== 'admission_response' || !timing.sessionId) continue;
+    const sessionId = timing.sessionId;
+    function isMeasured(session: BrowserSessionMeasurement) {
+      return session.sessionId === sessionId;
+    }
+    const browserSession = measured.find(isMeasured);
+    const number = sessions.length + 1;
+    const label = browserSession?.label ?? `viewer ${number}`;
+    const suffix = number === 1 ? '' : `-${number}`;
+    const timingOutput = `${output}/run-${run}-timings${suffix}.jsonl`;
+    const timingRecords = await collectViewTimings(sessionId, timingOutput);
+    const summary = sessionSummary(label, sessionId, browserSession, timingRecords, revokedAtTime);
+    sessions.push(summary);
+  }
+  return sessions;
+}
+
 async function serverRunDelay() {
   const pidLine = await readFile(`${directory}/server.pid`, 'utf8');
   const pid = pidLine.split(' ')[0];
@@ -166,8 +218,10 @@ try {
     let journeySessions: BrowserSessionMeasurement[] = [];
     let revokedAtTime = '';
     const conversationId = randomUUID();
-    const stopTimings = browserViewTimings(page, conversationId);
-    const stopReplyTiming = measureFirstReplyDelta(page, conversationId);
+    const stopTimings = browserViewTimings(page);
+    const stopReplyTiming = measureFirstReplyDelta(page);
+    let browserTimings: BrowserViewTiming[];
+    let replyTimings: ReturnType<typeof stopReplyTiming>;
     try {
       assert(cpuPressureSomeAvg10 < cpuPressureLimit,
         `CPU pressure remained at or above ${cpuPressureLimit}%`);
@@ -178,45 +232,36 @@ try {
       await page.goto(`${origin}/workspace?conversation=${conversationId}`);
       await page.getByRole('textbox', { name: 'Message your agent' }).waitFor();
       await page.waitForFunction(() => !document.querySelector('.skeleton'));
-      await browserLiveViewJourney(page, origin, computer, { member, admin, silo, store: events.store, append, until,
-        desktopAllowed: async () => (await auth.desktop(member, computer!.computer_id)).allowed });
-      const journeyReceipt = JSON.parse(await readFile(`docs/process/live-view/conversation-${width}.json`, 'utf8')) as {
-        sessions?: typeof journeySessions; revokedAtTime?: string;
-      };
+      const view = { member, admin, silo, store: events.store, append, until };
+      const journeyReceipt = await browserLiveViewJourney(page, origin, computer!, view);
+      journeySessions = journeyReceipt.sessions;
+      revokedAtTime = journeyReceipt.revokedAtTime;
+      browserTimings = stopTimings();
+      replyTimings = stopReplyTiming();
+      assertViewerEvidence(browserTimings, journeySessions);
+      const second = journeySessions[1]!;
+      const reply = replyTimings.get(second.conversationId);
+      assert(reply && reply.firstDeltaMs !== null, 'Record the reply in the second chat');
       await writeFile(`${output}/run-${run}.json`, JSON.stringify(journeyReceipt, null, 2) + '\n');
-      journeySessions = journeyReceipt.sessions ?? [];
-      revokedAtTime = journeyReceipt.revokedAtTime ?? '';
     } catch (error) {
+      browserTimings = stopTimings();
+      replyTimings = stopReplyTiming();
       if (cpuPressureSomeAvg10 >= cpuPressureLimit) {
         result = 'LOADED';
         failure = `CPU pressure some avg10 was ${cpuPressureSomeAvg10}%`;
       } else {
-        result = 'FAIL'; failure = error instanceof Error ? error.message : String(error);
+        result = 'FAIL';
+        failure = error instanceof Error ? error.message : String(error);
         await page.screenshot({ path: `${output}/run-${run}-failure.png` });
         process.exitCode = 1;
       }
     }
     const serverRunDelayAfter = await serverRunDelay();
-    const browserTimings = stopTimings();
-    const replyTiming = stopReplyTiming();
-    await writeFile(`${output}/run-${run}-browser.json`, JSON.stringify(browserTimings, null, 2) + '\n');
-    const sessions: ReturnType<typeof sessionSummary>[] = [];
-    let admittedSessionCount = 0;
-    for (const timing of browserTimings) {
-      if (timing.stage === 'admission_response' && timing.sessionId) {
-        admittedSessionCount += 1;
-        const sessionId = timing.sessionId;
-        let label = `viewer ${admittedSessionCount}`;
-        if (admittedSessionCount === 1) label = 'first view';
-        if (admittedSessionCount === 2) label = 'during turn';
-        const browserSession = journeySessions.find(session => session.sessionId === sessionId);
-        const timingOutput = admittedSessionCount === 1
-          ? `${output}/run-${run}-timings.jsonl`
-          : `${output}/run-${run}-timings-${admittedSessionCount}.jsonl`;
-        const timingRecords = await collectViewTimings(sessionId, timingOutput);
-        sessions.push(sessionSummary(label, sessionId, browserSession, timingRecords, revokedAtTime));
-      }
-    }
+    const browserJson = JSON.stringify(browserTimings, null, 2);
+    await writeFile(`${output}/run-${run}-browser.json`, browserJson + '\n');
+    const sessions = await collectSessions(run, browserTimings, journeySessions, revokedAtTime);
+    const secondChat = journeySessions[1]?.conversationId;
+    const replyTiming = secondChat ? replyTimings.get(secondChat) ?? null : null;
     const receipt = {
       conversationId, sessions, replyTiming, date: new Date().toISOString(), run, width, stackId,
       result, beforeLoad,

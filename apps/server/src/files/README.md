@@ -6,6 +6,7 @@ This folder handles files people attach to conversations. It checks the file's c
 
 - Checks the signed-in member, current conversation access and the website making a write.
 - Reads upload permission from the shared session settings in the events library.
+- Scans and saves computer screenshots for current readers of an open chat.
 - Checks file names and supported document, image and text formats against their contents.
 - Accepts well-formed SVG as an image, including files with an XML declaration.
   It refuses document type and entity declarations.

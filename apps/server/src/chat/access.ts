@@ -36,11 +36,25 @@ interface AccessRequest {
   allowApplying?: boolean;
 }
 
-// Check access once. Content reads have their own time limit.
+// Keep the access check separate from the time allowed for reading chat content.
 export async function chatAccess(options: ParticipationOptions, request: AccessRequest) {
   const deadline = request.deadline ?? performance.now() + 2000;
-  await activeChatMember(options, request.memberId);
-  return conversationAccess(options, request, deadline);
+  const member = activeChatMember(options, request.memberId, undefined, deadline);
+  const conversation = conversationAccess(options, request, deadline);
+  const [, access] = await Promise.all([member, conversation]);
+  if (request.conversationId) {
+    // Read saved membership after both permission checks for this chat have finished.
+    await requireSavedChatMember(options, request.memberId, deadline);
+  }
+  return access;
+}
+
+async function requireSavedChatMember(options: ParticipationOptions, memberId: string,
+  deadline?: number) {
+  const active = await chatMembership(options.store, options.silo, memberId, deadline);
+  if (!active) {
+    throw new ChatRefused('Active silo membership required');
+  }
 }
 
 async function readChatAccessContext(options: ChatOptions, memberId: string,
@@ -111,6 +125,14 @@ export async function writeChatAccess(options: ChatOptions, request: AccessReque
   return Object.assign(fresh, context);
 }
 
+async function requireConversationReader(options: ParticipationOptions, memberId: string,
+  access: Awaited<ReturnType<typeof participation>>, deadline: number) {
+  const { created, creation } = access;
+  if (created.mode === 'agent_session' && !('contextKind' in created)) {
+    await readPrivateSession(options, memberId, created.conversationId, creation.event, deadline);
+  }
+}
+
 async function conversationAccess(options: ParticipationOptions,
   request: AccessRequest, deadline: number) {
   const { memberId, conversationId, relation = 'read', allowApplying = false } = request;
@@ -118,6 +140,7 @@ async function conversationAccess(options: ParticipationOptions,
   let contextKind: 'shared_child' | undefined;
   let colleagueId: string | undefined;
   let createdBy: string | undefined;
+  let conversation: Awaited<ReturnType<typeof participation>>['created'] | undefined;
   let joinPosition = 0;
   let joinEventId: string | undefined;
   let participantIds: string[] = [];
@@ -125,9 +148,11 @@ async function conversationAccess(options: ParticipationOptions,
   let historyPosition = 0;
   let accessSubjects: string[] = [];
   if (conversationId) {
-    const access = await conversationParticipation(options, memberId, conversationId,
-      deadline, relation, allowApplying);
+    const readParticipation = conversationParticipationReader(options, memberId,
+      requireConversationReader);
+    const access = await readParticipation(conversationId, deadline, relation, allowApplying);
     const created = access.created;
+    conversation = created;
     createdBy = created.createdBy;
     if ('contextKind' in created) contextKind = created.contextKind;
     mode = created.mode;
@@ -143,12 +168,9 @@ async function conversationAccess(options: ParticipationOptions,
       }
       colleagueId = participantIds.find(isOtherParticipant);
     }
-    if (mode === 'agent_session' && !('contextKind' in created)) {
-      await readPrivateSession(options, memberId, conversationId);
-    }
   }
   return { mode, contextKind, colleagueId, joinPosition, joinEventId, historyPosition,
-    participantIds, accessPosition, accessSubjects, createdBy };
+    participantIds, accessPosition, accessSubjects, createdBy, conversation };
 }
 
 type ParticipationOptions = Pick<ChatOptions, 'store' | 'db' | 'silo' | 'binding'>;
@@ -163,20 +185,20 @@ export function conversationParticipation(options: ParticipationOptions,
 // Reuse membership facts within one request, then check their position after OpenFGA replies.
 function currentChatMemberReader(options: ParticipationOptions, memberId: string) {
   let checkedPosition: number | undefined;
-  let membershipRead: Promise<boolean> | undefined;
+  let membershipRead: Promise<void> | undefined;
   async function requireMember(deadline: number) {
     const position = await options.store.head(`member-${memberId}`, deadline);
     if (position !== checkedPosition || !membershipRead) {
-      membershipRead = chatMembership(options.store, options.silo, memberId, deadline);
+      membershipRead = requireSavedChatMember(options, memberId, deadline);
       checkedPosition = position;
     }
-    const active = await membershipRead;
-    if (!active) throw new ChatRefused('Active silo membership required');
+    await membershipRead;
   }
   return requireMember;
 }
 
-export function conversationParticipationReader(options: ParticipationOptions, memberId: string) {
+export function conversationParticipationReader(options: ParticipationOptions, memberId: string,
+  requireReader?: typeof requireConversationReader) {
   const requireMember = currentChatMemberReader(options, memberId);
   const auth = memberAuthorisation(options.binding);
   async function read(conversationId: string, deadline = performance.now() + 2000,
@@ -191,9 +213,13 @@ export function conversationParticipationReader(options: ParticipationOptions, m
     await requireInheritedChildAccess(options, current, memberId, deadline);
     // Read the join receipt before deciding whether a permission denial is final.
     const checkedJoinEventId = current.joinEventId;
-    let applied = await auth.applied(checkedJoinEventId);
-    const permission = await auth.conversation(memberId, conversationId, relation);
-    if (permission.status === 'unavailable') throw new Error('IAM unavailable');
+    const receiptCheck = auth.checkApplied(checkedJoinEventId);
+    const permissionCheck = auth.conversation(memberId, conversationId, relation);
+    const [firstReceipt, permission] = await Promise.all([receiptCheck, permissionCheck]);
+    let receipt = firstReceipt;
+    if (permission.status === 'unavailable') throw permission.error;
+    await requireReader?.(options, memberId, current, deadline);
+    // Check current facts after the private assistant checks too.
     await requireMember(deadline);
     // Check saved changes after OpenFGA replies so an old permission cannot hide a removal.
     const latestPosition = await options.store.head(subject, deadline);
@@ -202,10 +228,11 @@ export function conversationParticipationReader(options: ParticipationOptions, m
         memberId, legacy, deadline);
     }
     if (current.joinEventId !== checkedJoinEventId) {
-      applied = await auth.applied(current.joinEventId);
+      receipt = await auth.checkApplied(current.joinEventId);
     }
     await requireInheritedChildAccess(options, current, memberId, deadline);
-    if (!applied) {
+    if (receipt.status === 'unavailable') throw receipt.error;
+    if (!receipt.allowed) {
       if (allowApplying) return current;
       throw new ParticipationApplying('Conversation access still applying');
     }
@@ -224,13 +251,12 @@ export function conversationParticipationReader(options: ParticipationOptions, m
  * Read removals from the member stream at once, and confirm joins through OpenFGA.
  */
 export async function activeChatMember(options: ParticipationOptions, memberId: string,
-  fresh?: Fence) {
+  fresh?: Fence, deadline = fresh?.deadline) {
   fresh?.include(`member-${memberId}`);
-  const membership = await chatMembership(options.store, options.silo, memberId, fresh?.deadline);
-  if (!membership) throw new ChatRefused('Active silo membership required');
+  await requireSavedChatMember(options, memberId, deadline);
   const auth = memberAuthorisation(options.binding);
   const permission = await auth.check(memberId, 'member');
-  if (permission.status === 'unavailable') throw new Error('IAM unavailable');
+  if (permission.status === 'unavailable') throw permission.error;
   if (!permission.allowed) throw new ChatRefused('Membership unavailable');
 }
 

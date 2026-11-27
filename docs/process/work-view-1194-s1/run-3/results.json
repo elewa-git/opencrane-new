@@ -1,0 +1,99 @@
+{
+  "status": "PASS",
+  "commit": "313de777886f28bb0d2620d3fba4fba361a506ef",
+  "slot": 1,
+  "browser": "Chromium",
+  "provider": "stand-in",
+  "startedAt": "2026-11-27T01:36:30Z",
+  "finishedAt": "2026-11-27T01:54:21Z",
+  "stages": {
+    "startup": "PASS",
+    "health": "PASS",
+    "browser": "PASS",
+    "qualification": "PASS",
+    "teardown": "PASS"
+  },
+  "hostedCi": {
+    "status": "PASS",
+    "run": 45920176487,
+    "sixtySessionRegression": "PASS"
+  },
+  "widths": {
+    "1280": {
+      "personal": {
+        "status": "PASS",
+        "captureMs": 3317,
+        "reopenedFromChatAndPanelAfterReload": true,
+        "downloadDigestMatched": true,
+        "viewer": "viewer-1280.png",
+        "preview": "saved-screenshot-1280.png"
+      },
+      "non-participant": {
+        "status": "PASS",
+        "view": 403,
+        "capture": 403,
+        "file": 403,
+        "desktopSockets": 0,
+        "desktopBytes": 0,
+        "desktopCanvases": 0,
+        "picture": "non-participant-1280.png"
+      },
+      "outsider": {
+        "status": "PASS",
+        "view": 403,
+        "capture": 403,
+        "file": 403,
+        "desktopSockets": 0,
+        "desktopBytes": 0,
+        "desktopCanvases": 0,
+        "picture": "outsider-1280.png"
+      },
+      "removal": {
+        "status": "PASS",
+        "elapsedMs": 160,
+        "socketClosed": true,
+        "pictureCleared": true,
+        "readmission": 403,
+        "picture": "removed-1280.png"
+      }
+    },
+    "390": {
+      "personal": {
+        "status": "PASS",
+        "captureMs": 2398,
+        "reopenedFromChatAndPanelAfterReload": true,
+        "downloadDigestMatched": true,
+        "viewer": "viewer-390.png",
+        "preview": "saved-screenshot-390.png"
+      },
+      "non-participant": {
+        "status": "PASS",
+        "view": 403,
+        "capture": 403,
+        "file": 403,
+        "desktopSockets": 0,
+        "desktopBytes": 0,
+        "desktopCanvases": 0,
+        "picture": "non-participant-390.png"
+      },
+      "outsider": {
+        "status": "PASS",
+        "view": 403,
+        "capture": 403,
+        "file": 403,
+        "desktopSockets": 0,
+        "desktopBytes": 0,
+        "desktopCanvases": 0,
+        "picture": "outsider-390.png"
+      },
+      "removal": {
+        "status": "PASS",
+        "elapsedMs": 199,
+        "socketClosed": true,
+        "pictureCleared": true,
+        "readmission": 403,
+        "picture": "removed-390.png"
+      }
+    }
+  }
+}

@@ -1,15 +1,17 @@
 import { createHash } from 'node:crypto';
 import { inflateSync } from 'node:zlib';
-import { fileUploadedDataSchema } from '@opencrane/events';
+import { fileUploadedDataSchema, parseEventByType } from '@opencrane/events';
 import { PassThrough, Duplex } from 'node:stream';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
-import { grantStream } from '@opencrane/authz';
 import { files, conversations } from '@opencrane/projections';
+import { Client } from 'minio/dist/esm/minio.mjs';
 import { history } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { viewFixture } from './support/view-fixture.ts';
+import type { FileOptions } from '../src/files/routes.ts';
 import { uploadServices } from './support/upload-services.ts';
+import { sharedChildChat, teamViewChat, viewHeaders } from './support/view-requests.ts';
 
 // Record desktop traffic through the authenticated connection and use known red pixels.
 function desktop(width = 2, height = 2) {
@@ -32,7 +34,7 @@ function desktop(width = 2, height = 2) {
   return Promise.resolve(Duplex.from({ readable, writable }));
 }
 
-it('captures once, scans and stores a PNG whose file and preview survive replay', async () => {
+it('captures without a desktop grant and stores a PNG whose file and preview survive replay', async () => {
   const fixture = await viewFixture(() => desktop()), services = await uploadServices();
   const { config, runner, nats, binding, feed, db } = fixture;
   const options = { silo: 'test', store: nats.store, binding, feed, db };
@@ -41,7 +43,6 @@ it('captures once, scans and stores a PNG whose file and preview survive replay'
     cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+300 })}` };
   const url = '/api/conversations/chat/screenshots';
   try {
-    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     const replies = await Promise.all(Array.from({ length: 3 }, () => app.inject({ method: 'POST', url, headers })));
     const result = replies[0]!;
     expect(replies.map(reply => reply.statusCode)).toEqual([201, 201, 201]);
@@ -67,15 +68,15 @@ it('captures once, scans and stores a PNG whose file and preview survive replay'
     expect((await app.inject({ url: '/api/conversations/chat/files', headers })).json()).toEqual(list.json());
     expect((await app.inject({ url: preview, headers })).rawPayload).toEqual(image.rawPayload);
     expect((await app.inject({ url: '/api/conversations/chat/messages', headers })).body).toContain('file.uploaded');
-    const bob = { ...headers, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'bob', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+300 })}` };
+    const bob = { ...headers, ...viewHeaders(config, 'bob') };
     expect((await app.inject({ url: preview, headers: bob })).statusCode).toBe(403);
     expect((await app.inject({ method: 'POST', url, headers: bob })).statusCode).toBe(403);
-    await fixture.append('participation-chat', 'participant.added', { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' }, true);
+    const bobJoin = { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' };
+    await fixture.append('participation-chat', 'participant.added', bobJoin, true);
     await runner.run(conversations);
     expect((await app.inject({ url: preview, headers: bob })).statusCode).toBe(403);
     const oldDownload = preview.replace('&preview=true', '');
     expect((await app.inject({ url: oldDownload, headers: bob })).statusCode).toBe(403);
-    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'bob', granteeKind: 'member', grantedBy: 'owner' }, true);
     const laterHeaders = { ...bob, 'idempotency-key': 'post-join-capture' };
     const laterCapture = await app.inject({ method: 'POST', url, headers: laterHeaders });
     expect(laterCapture.statusCode, laterCapture.body).toBe(201);
@@ -88,7 +89,10 @@ it('captures once, scans and stores a PNG whose file and preview survive replay'
     expect((await app.inject({ url: laterDownload, headers: bob })).statusCode).toBe(200);
     expect((await app.inject({ url: `${laterDownload}&preview=true`, headers: bob })).statusCode)
       .toBe(200);
-    await fixture.append('participation-chat', 'participant.removed', { conversationId: 'chat', participantId: 'bob', removedBy: 'alice' });
+    const bobRemoval = { conversationId: 'chat', participantId: 'bob', removedBy: 'alice' };
+    await fixture.append('participation-chat', 'participant.removed', bobRemoval);
+    const afterRemoval = { ...bob, 'idempotency-key': 'post-removal-capture' };
+    expect((await app.inject({ method: 'POST', url, headers: afterRemoval })).statusCode).toBe(403);
     expect((await app.inject({ url: preview, headers: bob })).statusCode).toBe(403);
     const download = preview.replace('&preview=true', '');
     const foreign = `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'foreign', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+300 })}`;
@@ -114,10 +118,7 @@ it('refuses stale authority, arbitrary capture input, failed scans and oversized
   const cookie = (sub = 'alice', orgId = 'org-test', exp = Math.floor(Date.now()/1000)+300) => `${config.cookieName}=${encodeSession(config, { sub, orgId, roles: [], authTime: 1, exp })}`;
   const headers = { origin: new URL(config.redirectUri).origin, cookie: cookie(), 'x-opencrane-view': '1', 'idempotency-key': 'failure' };
   const request = (custom = {}, payload?: object) => app.inject({ method: 'POST', url: '/api/conversations/chat/screenshots', headers: { ...headers, ...custom }, ...(payload ? { payload } : {}) });
-  const grant = { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' };
   try {
-    expect((await request()).statusCode).toBe(403);
-    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
     for (const custom of [{ cookie: '' }, { cookie: cookie('alice', 'org-test', 1) }]) expect((await request(custom)).statusCode).toBe(401);
     for (const custom of [{ cookie: cookie('alice', 'foreign') }, { cookie: cookie('bob') }, { origin: 'https://foreign.test' }, { 'x-opencrane-view': '0' }]) expect((await request(custom)).statusCode).toBe(403);
     expect((await request({}, { url: 'http://metadata/', path: '/tmp/image.png' })).statusCode).toBe(400);
@@ -127,11 +128,15 @@ it('refuses stale authority, arbitrary capture input, failed scans and oversized
     fileOptions.scan = () => Promise.reject(new Error('Scanner unavailable'));
     expect((await request()).statusCode).toBe(503);
     fileOptions.scan = async () => {
-      await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
+      await fixture.append('participation-chat', 'participant.removed', {
+        conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
+      });
       return cleanVerdict;
     };
     expect((await request()).statusCode).toBe(403);
-    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
+    await fixture.append('participation-chat', 'participant.added', {
+      conversationId: 'chat', participantId: 'alice', addedBy: 'owner',
+    }, true);
     fileOptions.scan = async () => {
       await fixture.append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'desktop', generation: 2, sandboxUid: 'next', tokenId: 'token:next' });
       await fixture.append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'desktop', generation: 2, podUid: 'next' });
@@ -148,62 +153,214 @@ it('refuses stale authority, arbitrary capture input, failed scans and oversized
   } finally { await app.close(); await fixture.close(); await services.close(); }
 }, 180_000);
 
-// Use the screenshot probe to refuse a shared session before opening its desktop.
-async function refusesTeamScreenshotBeforeCapture() {
-  let captures = 0;
-  function open() {
-    captures++;
-    return desktop();
-  }
-  const fixture = await viewFixture(open);
+async function savesTeamScreenshot() {
+  const fixture = await viewFixture(openScreenshotDesktop);
   const services = await uploadServices();
-  const { config, nats, binding, feed, db } = fixture;
+  const { config, nats, binding, feed, db, runner } = fixture;
   const options = { silo: 'test', store: nats.store, binding, feed, db };
-  const files = { ...options, ...services };
-  const view = { ...options, open };
-  const app = buildServer(config, { files, liveView: view });
+  const fileOptions = { ...options, ...services };
+  const view = { ...options, open: () => desktop() };
+  const app = buildServer(config, { chat: options, files: fileOptions, liveView: view });
   try {
-    await fixture.append('team-sales', 'team.created', {
-      teamId: 'sales', name: 'Sales', createdBy: 'alice',
-    }, true);
-    await fixture.append('team-sales', 'team.member_added', {
-      teamId: 'sales', memberId: 'alice', addedBy: 'alice',
-    }, true);
-    await fixture.append('assistant-team-sales', 'assistant.created', {
-      assistantId: 'team-sales', ownerId: 'sales', kind: 'team', payingGroupId: 'sales',
-    }, true);
-    await fixture.append('computer-team-sales', 'computer.claimed', {
-      assistantId: 'team-sales', computerId: 'team-desktop', generation: 1, tokenId: 'token:test',
-    });
-    await fixture.append('computer-team-sales', 'computer.ready', {
-      assistantId: 'team-sales', computerId: 'team-desktop', generation: 1, podUid: 'pod',
-    });
-    await fixture.append('conversation-team-session', 'conversation.created', {
-      conversationId: 'team-session', assistantId: 'team-sales', createdBy: 'alice',
-      mode: 'agent_session', payingGroupId: 'sales',
-    }, true);
-    await fixture.append(grantStream('shared_desktop', 'team-desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'team-desktop', granteeId: 'alice',
-      granteeKind: 'member', grantedBy: 'alice',
-    }, true);
-    const session = { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1,
-      exp: Math.floor(Date.now() / 1000) + 300 };
-    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
-      'idempotency-key': 'team-shot',
-      cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-    const response = await app.inject({ method: 'POST',
-      url: '/api/conversations/team-session/screenshots', headers });
-    expect(response.statusCode, response.body).toBe(403);
-    expect(captures).toBe(0);
-    expect(response.body).toContain('share one workspace');
+    await teamViewChat(fixture);
+    await runner.run(conversations);
+    const headers = { ...viewHeaders(config), 'idempotency-key': 'team-shot' };
+    const chat = '/api/conversations/team-session';
+    expect((await app.inject({ url: `${chat}/messages`, headers })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: `${chat}/view`, headers })).statusCode)
+      .toBe(200);
+    const uploadHeaders = { ...headers, 'content-type': 'application/octet-stream',
+      'x-file-name': 'notes.txt', 'idempotency-key': 'ordinary-upload' };
+    const upload = await app.inject({ method: 'POST', url: `${chat}/files`,
+      headers: uploadHeaders, payload: Buffer.from('Notes') });
+    expect(upload.statusCode).toBe(403);
+    expect(upload.body).toContain('share one workspace');
+
+    const request = { method: 'POST' as const, url: `${chat}/screenshots`, headers };
+    const response = await app.inject(request);
+    expect(response.statusCode, response.body).toBe(201);
+    const result = response.json<{ status: string; fileId: string; sequence: number }>();
+    const fields = Object.keys(result).sort();
+    expect(fields).toEqual(['fileId', 'sequence', 'status']);
+    expect(result.status).toBe('appended');
+    expect(result.fileId).toMatch(/^[a-f0-9]{64}$/u);
+    expect(result.sequence).toBeGreaterThan(0);
+    const repeated = await app.inject(request);
+    expect(repeated.statusCode).toBe(201);
+    expect(repeated.json()).toEqual(response.json());
+    await runner.initialise(files);
+    await runner.run(files);
+    await runner.run(conversations);
+    const list = await app.inject({ url: `${chat}/files`, headers });
+    const saved = list.json<{ rows: { path: string }[] }>().rows;
+    expect(saved).toHaveLength(1);
+    const path = encodeURIComponent(saved[0]!.path);
+    const preview = await app.inject({ url: `${chat}/files/view?path=${path}&preview=true`, headers });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.headers['content-type']).toContain('image/png');
+    expect(preview.rawPayload.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
   } finally {
     await app.close();
     await fixture.close();
     await services.close();
   }
 }
-it('refuses a team screenshot before capturing the shared desktop',
-  refusesTeamScreenshotBeforeCapture, 120_000);
+it('lets a current team-chat reader save and reopen a screenshot', savesTeamScreenshot, 120_000);
+
+async function refusesPublicationAfterRemoval(removal: 'before recheck' | 'after recheck') {
+  const fixture = await viewFixture(openScreenshotDesktop);
+  const services = await uploadServices();
+  const { config, nats, binding, feed, db, append } = fixture;
+  const options = { silo: 'test', store: nats.store, binding, feed, db };
+  const fileOptions = { ...options, ...services };
+  const view = { ...options, open: () => desktop() };
+  const app = buildServer(config, { files: fileOptions, liveView: view });
+  const publish = nats.store.append.bind(nats.store);
+  let reachedPublication = false;
+  const publication = vi.spyOn(nats.store, 'append');
+  async function removeParticipant() {
+    await append('participation-chat', 'participant.removed', {
+      conversationId: 'chat', participantId: 'alice', removedBy: 'owner',
+    });
+  }
+  async function removeBeforePublication(input: Parameters<typeof publish>[0]) {
+    const parsed = parseEventByType(input.event);
+    if (!parsed.success || parsed.event.type !== 'file.uploaded') {
+      return publish(input);
+    }
+    reachedPublication = true;
+    const checkAccess = input.checkAccess;
+    if (removal === 'before recheck' || !checkAccess) {
+      await removeParticipant();
+      return publish(input);
+    }
+    async function removeAfterRecheck() {
+      await checkAccess!();
+      await removeParticipant();
+    }
+    return publish({ ...input, checkAccess: removeAfterRecheck });
+  }
+  publication.mockImplementation(removeBeforePublication);
+  try {
+    const headers = { ...viewHeaders(config), 'idempotency-key': 'publication' };
+    const url = '/api/conversations/chat/screenshots';
+    const response = await app.inject({ method: 'POST', url, headers });
+    expect(reachedPublication).toBe(true);
+    expect(response.statusCode, response.body).toBe(403);
+    const rows = await history(nats.store, 'conversation-chat', 'test');
+    function isFileEvent(row: (typeof rows)[number]) {
+      return row.event.type === 'file.uploaded' || row.event.type === 'file.rejected';
+    }
+    expect(rows.filter(isFileEvent)).toEqual([]);
+    expect(response.json()).toMatchObject({ reason: 'access_changed' });
+  } finally {
+    publication.mockRestore();
+    await app.close();
+    await fixture.close();
+    await services.close();
+  }
+}
+it.each(['before recheck', 'after recheck'] as const)(
+  'publishes no screenshot file event when participation ends at append (%s)',
+  refusesPublicationAfterRemoval, 120_000,
+);
+
+type CaptureBinding = 'silo' | 'store' | 'file binding';
+
+async function refusesMismatchedCaptureResources(mismatch: CaptureBinding) {
+  const open = vi.fn(function open() {
+    return desktop();
+  });
+  const fixture = await viewFixture(open);
+  const { config, nats, binding, feed, db } = fixture;
+  const chat = { silo: 'test', store: nats.store, binding, feed, db };
+  const objects = new Client({ endPoint: '127.0.0.1' });
+  function scan(): Promise<never> {
+    throw new Error('A refused capture must not reach the scanner');
+  }
+  const fileOptions: FileOptions = { ...chat, objects, scan };
+  const view = { ...chat, open };
+  if (mismatch === 'silo') {
+    fileOptions.silo = 'another';
+    fileOptions.binding = { ...binding, silo: 'another' };
+    function memberId(_silo: string, issuer: string, subject: string) {
+      return feed.memberId('test', issuer, subject);
+    }
+    fileOptions.feed = { memberId };
+  } else if (mismatch === 'store') {
+    fileOptions.store = nats.reader;
+  } else {
+    fileOptions.binding = { ...binding, silo: 'another' };
+  }
+  const app = buildServer(config, { chat, files: fileOptions, liveView: view });
+  try {
+    const headers = { ...viewHeaders(config), 'idempotency-key': 'capture-binding' };
+    const chatRead = await app.inject({ url: '/api/conversations/chat/messages', headers });
+    expect(chatRead.statusCode).toBe(200);
+    const url = '/api/conversations/chat/screenshots';
+    const refused = await app.inject({ method: 'POST', url, headers });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toMatchObject({ reason: 'access_changed' });
+    expect(open).not.toHaveBeenCalled();
+  } finally {
+    await app.close();
+    await fixture.close();
+  }
+}
+it.each(['silo', 'store', 'file binding'] as const)(
+  'refuses capture before opening the desktop when file and view resources differ by %s',
+  refusesMismatchedCaptureResources, 120_000,
+);
+
+async function savesInheritedScreenshot() {
+  const open = vi.fn(function open() {
+    return desktop();
+  });
+  const fixture = await viewFixture(open);
+  const services = await uploadServices();
+  const { config, nats, binding, feed, db, runner, append } = fixture;
+  const chat = { silo: 'test', store: nats.store, binding, feed, db };
+  const options = { chat, files: { ...chat, ...services }, liveView: { ...chat, open } };
+  const app = buildServer(config, options);
+  try {
+    await sharedChildChat(fixture);
+    await runner.run(conversations);
+    const headers = { ...viewHeaders(config, 'bob'), 'idempotency-key': 'child-shot' };
+    const path = '/api/conversations/child';
+    const readable = await app.inject({ url: `${path}/messages`, headers });
+    expect(readable.statusCode).toBe(200);
+    const capture = await app.inject({ method: 'POST', url: `${path}/screenshots`, headers });
+    expect(capture.statusCode, capture.body).toBe(201);
+    await runner.initialise(files);
+    await runner.run(files);
+    await runner.run(conversations);
+    const list = await app.inject({ url: `${path}/files`, headers });
+    const saved = list.json<{ rows: { path: string }[] }>().rows;
+    expect(saved).toHaveLength(1);
+    const file = encodeURIComponent(saved[0]!.path);
+    const reopen = { url: `${path}/files/view?path=${file}&preview=true`, headers };
+    expect((await app.inject(reopen)).statusCode).toBe(200);
+    await append('participation-parent', 'participant.removed', {
+      conversationId: 'parent', participantId: 'bob', removedBy: 'alice',
+    });
+    expect((await app.inject({ url: `${path}/messages`, headers })).statusCode).toBe(403);
+    const refused = await app.inject({ method: 'POST', url: `${path}/screenshots`, headers });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toMatchObject({ reason: 'access_changed' });
+    expect((await app.inject(reopen)).statusCode).toBe(403);
+    expect(open).toHaveBeenCalledTimes(1);
+  } finally {
+    await app.close();
+    await fixture.close();
+    await services.close();
+  }
+}
+it('lets an inherited child-chat reader save a screenshot until their parent join ends',
+  savesInheritedScreenshot, 120_000);
+
+function openScreenshotDesktop() {
+  return desktop();
+}
 
 function cleanVerdict() {
   return 'clean' as const;

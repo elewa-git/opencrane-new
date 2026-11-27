@@ -4,7 +4,7 @@ This folder lets someone watch the assistant's [computer](../../../../../GLOSSAR
 
 ## What it is responsible for
 
-- Asks the server for permission before opening the desktop connection.
+- Asks the server to check chat access before opening the desktop connection.
 - Shows connecting, viewing, disconnected and access-changed states.
 - Clears the picture when permission expires or the session closes.
 - Offers fit-to-window and actual-size views, plus a screenshot action saved through chat.
@@ -22,5 +22,5 @@ This folder lets someone watch the assistant's [computer](../../../../../GLOSSAR
 
 [Chat](../chat/README.md) opens the viewer and handles screenshot saving.
 [Shared dialogs](../ui/README.md) provide its window and focus behaviour.
-[The server](../../../../server/README.md) checks access and forwards desktop images.
-Shared-assistant participants need a separate desktop grant, meaning explicit permission.
+[The server](../../../../server/README.md) forwards desktop images to current chat
+participants with read access. Losing chat access closes the view within two seconds.

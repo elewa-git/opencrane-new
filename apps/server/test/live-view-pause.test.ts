@@ -2,7 +2,6 @@ import { once } from 'node:events';
 import { Duplex, PassThrough } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { encodeSession } from '@opencrane/auth';
-import { grantStream } from '@opencrane/authz';
 import { until } from '@opencrane/authz/testing';
 import { history } from '@opencrane/models';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -52,9 +51,6 @@ async function pauseFixture(pendingOpen = false) {
     return Promise.resolve(desktop);
   }
   const fixture = await viewFixture(open);
-  const grant = { resourceType: 'shared_desktop', resourceId: 'desktop',
-    granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' };
-  await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
   async function check(...args: Parameters<typeof access.viewAccess>) {
     const startedMode = mode;
     if (startedMode === 'deny') throw new Error('Access changed');
@@ -249,9 +245,8 @@ async function hiddenRevocation() {
     await delay(2000);
     const revokedAt = performance.now();
     fixture.setMode('unavailable');
-    const revocation = { resourceType: 'shared_desktop', resourceId: 'desktop',
-      granteeId: 'alice', revokedBy: 'owner' };
-    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', revocation);
+    const removal = { conversationId: 'chat', participantId: 'alice', removedBy: 'owner' };
+    await fixture.append('participation-chat', 'participant.removed', removal);
     await fixture.notice('paused', revokedAt);
     const pauseNotice = fixture.notices.find(function paused(entry) {
       return entry.notice.lease === 'paused' && entry.at >= revokedAt;

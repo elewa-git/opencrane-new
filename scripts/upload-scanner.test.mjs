@@ -126,8 +126,8 @@ async function cleanup() {
 beforeEach(setup);
 afterEach(cleanup);
 function upload(content = bytes, fresh) {
-  return uploadFile(options, 'alice', 'conversation', 'key', 'notes.txt', content,
-    undefined, fresh);
+  const input = { key: 'key', name: 'notes.txt', bytes: content, checkAccess: fresh };
+  return uploadFile(options, 'alice', 'conversation', input);
 }
 async function refused(content = bytes, fresh) {
   const pending = upload(content, fresh);
@@ -143,11 +143,11 @@ async function exactUpload() {
   expect(result.fileId).toMatch(/^[a-f0-9]{64}$/);
   expect(received).toEqual([bytes]);
   expect(options.objects.putObject).toHaveBeenCalledOnce();
-  const saved = fileCommand.mock.calls[0];
-  expect(saved[4]).toBe('file.uploaded');
-  expect(saved[5]).toMatchObject({ sha256: hash(bytes), size: bytes.length });
+  const [, saved] = fileCommand.mock.calls[0];
+  expect(saved.type).toBe('file.uploaded');
+  expect(saved.value).toMatchObject({ sha256: hash(bytes), size: bytes.length });
   ownConversation.mockResolvedValue([{ sequence: 1,
-    event: { id: saved[3], type: saved[4], data: saved[5] } }]);
+    event: { id: saved.eventId, type: saved.type, data: saved.value } }]);
   await upload();
   expect(options.objects.putObject).toHaveBeenCalledOnce();
   expect(requests).toHaveLength(1);
@@ -235,7 +235,8 @@ async function infected() {
   mode = infect;
   expect((await upload()).status).toBe('infected');
   expect(options.objects.putObject).not.toHaveBeenCalled();
-  expect(fileCommand.mock.calls[0][4]).toBe('file.rejected');
+  const [, saved] = fileCommand.mock.calls[0];
+  expect(saved.type).toBe('file.rejected');
 }
 test('preserves a verified infected rejection', infected);
 async function retry() {

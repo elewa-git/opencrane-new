@@ -1,6 +1,5 @@
 import { freePort } from '@opencrane/event-store/testing';
 import { nextBinaryMessage } from './support/rfb-viewer.ts';
-import { grantStream } from '@opencrane/authz';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { once } from 'node:events';
@@ -49,7 +48,6 @@ it.each(['web', 'dev-stack'])('opens the viewer through the configured %s fronte
       try { return (await fetch(origin, { signal: AbortSignal.timeout(1000) })).ok; }
       catch { return false; }
     }, 90_000).catch((cause: unknown) => { throw new Error(`Frontend did not become ready: ${output}`, { cause }); });
-    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     const cookie = encodeSession(fixture.config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 });
     const headers = { origin, cookie: `${fixture.config.cookieName}=${cookie}`, 'x-opencrane-view': '1' };
     const response = await fetch(`${origin}/api/conversations/chat/view`, { method: 'POST', headers });

@@ -17,7 +17,7 @@ The browser uses the website's own address for server connections.
 ```mermaid
 flowchart LR
   browser["Person's browser<br/>pages and controls"] -->|opens pages| web["apps/web<br/>the website"]
-  web -->|checks welcome progress and sends invitation replies, settings and messages| server["apps/server<br/>back end"]
+  web -->|checks welcome progress, joins teams, sends invitations, settings, messages and computer view requests| server["apps/server<br/>back end"]
   server -->|returns saved and live results and personal assignment updates| web
   web -.-> protocol["libs/protocol<br/>shared messages"]
 ```
@@ -33,8 +33,8 @@ flowchart LR
 - Keep private personal replies only in page memory and clear them when access ends.
 - Open recent and archived chats, load older messages and show saved action details.
 - Upload and preview files, explain refusals and show when files are ready to send.
-- Show tool approvals and the assistant's read-only desktop when permitted, including
-  in the packaged website.
+- Show tool approvals and let people watch their personal assistant's running computer
+  from the chat.
 - Show permitted memory facts and support personal saving, correction and forgetting.
 - Let members choose personal tool keys and which assistants may use them.
 - Let admins manage people, groups, assistants, model providers and tool servers.
@@ -64,8 +64,9 @@ Not built yet:
    group and allowance from their own group-chat message. The server checks the
    reviewed request before starting a private session.
 4. **A person uses files, memory or the desktop.** The website loads permitted data
-   and shows its current state. Refused uploads explain the reason and offer retry;
-   losing access clears protected content and the desktop picture.
+   and shows its current state. Refused uploads explain the reason and offer retry.
+   In a personal assistant chat, Screenshot saves a picture to the chat. Losing chat
+   access closes the viewer and clears the picture.
 5. **An admin changes settings.** They review and save a change, then follow its
    recorded result. A lost reply triggers a status read before another action is offered.
 6. **A person returns to a chat.** The website loads saved messages and catches up

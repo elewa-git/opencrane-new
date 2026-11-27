@@ -53,8 +53,8 @@ intersection, receipts and the other resource-specific checks. The projection
 can lag and is not a permission cache. Show an applying change until both
 projection statuses become current.
 
-Conversation history requires explicit participation. Desktop access needs both
-participation and a separate desktop grant. Shared work binds one group id as
+Conversation history and desktop viewing require explicit participation and
+current read access to the chat. Shared work binds one group id as
 payer at admission and validates membership; personal work continues using the
 existing installation default. Budget ceilings/spending stay on the existing
 [models interface](../../libs/models/README.md).
@@ -71,9 +71,9 @@ streams fail closed without disclosing their contents.
 Writes check exact member, assistant, resource and relevant team subjects.
 The fence starts before permission reads and retains the original two-second
 request budget. Standalone destination-authority checks create and verify their
-own fence. Lagging or unavailable IAM cannot authorise a call. Group-derived desktop sockets
-use the existing bounded lease and close within two seconds of removal. A direct
-grant remains independent of group membership.
+own fence. Lagging or unavailable IAM cannot authorise a call. When a group
+change ends someone's chat access, their computer view closes within two
+seconds.
 
 [Source qualification and remaining live work](../process/p4-1-backend-evidence.md)
 record the test seams and limits. Screens remain outside this backend change.

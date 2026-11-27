@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
 import { expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
-import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
+import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { wireSubject, type AppendCommand, type AppendResult } from '@opencrane/event-store';
@@ -28,7 +28,7 @@ import { attachWebSocketServer } from '../src/websocket.ts';
 
 import { Client } from 'minio/dist/esm/minio.mjs';
 import { ownConversation, fileCommand } from '../src/files/commands.ts';
-import { viewAccess } from '../src/computers/view-access.ts';
+import { viewAccess, ViewAccessRefused } from '../src/computers/view-access.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 import { reviewedRemoval } from './support/reviewed-removal.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -1455,10 +1455,6 @@ async function removedParticipantReaders() {
     await context.append('computer-assistant', 'computer.ready', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
     }, false);
-    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-      granteeKind: 'member', grantedBy: 'alice',
-    });
     await expect(viewAccess(context.options, 'alice', 'agent')).resolves.toMatchObject({
       computerId: 'desktop',
     });
@@ -1474,8 +1470,8 @@ async function removedParticipantReaders() {
       name: 'notes.txt', size: 5, sha256: 'a'.repeat(64), mime: 'text/plain',
       objectKey: 'test/agent/not-saved' };
     const before = await context.nats.store.head('conversation-agent');
-    const writing = fileCommand(context.nats.store, 'test', 'alice', 'file-command',
-      'file.uploaded', file);
+    const writing = fileCommand(context.nats.store, { silo: 'test', memberId: 'alice', eventId: 'file-command',
+    type: 'file.uploaded', value: file });
     await expect(writing).rejects.toMatchObject({ kind: 'conversation_refused' });
     expect(await context.nats.store.head('conversation-agent')).toBe(before);
     await expect(viewAccess(context.options, 'alice', 'agent')).rejects.toThrow();
@@ -1509,10 +1505,6 @@ async function participationVolume(sharedChild = false) {
     await context.append('computer-assistant', 'computer.ready', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
     }, false);
-    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-      granteeKind: 'member', grantedBy: 'alice',
-    });
     await context.append('conversation-volume', 'agent.native_request_refused', {
       conversationId: 'volume', turnId: 'busy-turn', nativeRequestId: '19',
       requestKind: 'shell', outcome: 'declined',
@@ -1617,10 +1609,6 @@ async function retainsFilesAfterCloseBeforeBufferedReport() {
     await context.append('computer-assistant', 'computer.ready', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
     }, false);
-    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-      granteeKind: 'member', grantedBy: 'alice',
-    });
     await context.runner.run(conversations);
     await context.append('participation-agent', 'conversation.closed', {
       conversationId: 'agent', closedBy: 'alice',
@@ -2092,10 +2080,6 @@ async function desktopWithColdFactsAndDelayedProjection() {
     await context.append('computer-assistant', 'computer.ready', {
       assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture',
     }, false);
-    await context.append(grantStream('shared_desktop', 'desktop'), 'grant.given', {
-      resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice',
-      granteeKind: 'member', grantedBy: 'alice',
-    });
     const events = [];
     const encrypted = ({ utterance: 'Long saved chat' });
     for (let index = 0; index < 1000; index++) {
@@ -2144,7 +2128,9 @@ async function requiresLegacyClosesBeforeStartup() {
     await context.runner.run(conversations);
     await expect(requireLegacyClosesProjected(context.nats.store, context.db))
       .resolves.toBeUndefined();
-    await expect(viewAccess(context.options, 'alice', 'legacy-close')).rejects.toThrow('Access changed');
+    const access = viewAccess(context.options, 'alice', 'legacy-close');
+    await expect(access).rejects.toThrow(ViewAccessRefused);
+    await expect(access).rejects.toMatchObject({ cause: { message: 'Conversation closed' } });
   } finally {
     await context.close();
   }

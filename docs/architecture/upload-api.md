@@ -9,7 +9,7 @@ OpenFGA membership and conversation permission, and the event stream must show a
 open `agent_session` created by that member. Other members' conversations and
 other organisations are refused for ordinary uploads, including when a participant
 has read access. P3-18 screenshots are the exception: current participants can
-list and reopen screenshot files, and capture also requires a shared-desktop grant.
+list and reopen screenshot files from their latest join onwards.
 
 `POST /api/conversations/:conversationId/files` takes one raw file:
 
@@ -106,8 +106,9 @@ retains its key and bytes on the page; reloading discards an uncommitted selecti
 
 `POST /api/conversations/:conversationId/screenshots` uses the session cookie,
 exact configured Origin, `X-OpenCrane-View: 1` and a stable `Idempotency-Key`.
-It takes no body or arbitrary URL/path/dimensions. Current participants also need
-the shared-desktop audience grant. Capture uses one non-incremental framebuffer
+It takes no body or arbitrary URL/path/dimensions. The server checks chat access
+and computer readiness as it does for live viewing. The existing file rules
+restrict capture to personal assistant sessions. Capture uses one non-incremental framebuffer
 request over the authenticated desktop proxy and fixed PNG encoding. The existing
 inspection/scanner and 20 MiB file limit apply. The desktop transport limits raw
 pixels to 4 MiB, each dimension to 4096, capture to ten seconds, and each server
