@@ -50,12 +50,47 @@ frame tests passed too. [The safe summary](model-input.json) records request cou
 checksums and which rules reached the model; the full bodies remain outside the
 repository.
 
-**Qualification: PARTIAL, still running.** Slot 1 remains busy and host load is
-above 6. Slot 2 is the live pilot and is excluded from the wait. No stack has been
-claimed by this task. The fresh packaged real-model journey is pending. The
-stand-in captures prove instruction delivery, but do not prove a real model's
-reply, a chat file card or the browser layout. Additional model spend is
-**0 euro cents**.
+### Round 7 local checks
+
+| Check | Result |
+| --- | --- |
+| Installed brief reaches the model on all four thread paths | PASS, twice; eight requests per run |
+| Package image and source checks | PASS, 85 tests twice |
+| Server persona ownership and turn delivery | PASS, 22 tests |
+| Typecheck | PASS, all workspaces, package and development stack; computer checked again after cleanup |
+| Event catalogue | PASS, 175 event types |
+| Knip | PASS, two existing configuration hints |
+| Changed-file ESLint | PASS, no warnings |
+| Changelog and Markdown lint | PASS |
+| Public privacy and secret scans before push | PASS |
+| Fetched main is included | PASS; no rebase needed |
+| Application and scanner approvals for `b0f109a5d` | PASS; current artifacts present |
+| Fresh packaged model and browser journey | NOT RUN; no valid startup window within 45 minutes |
+
+**Qualification: PARTIAL — authorised stand-in fallback.** The task waited at
+least 45 minutes from its first slot checks. Slot 1 first reported free at
+23:46:36 UTC. The host load then crossed 6 several times, including 6.07 at
+23:49:17, 6.11 at 23:50:22 and 6.64 at 23:50:54. The longest recorded quiet period
+was 97 seconds; the rule requires 300 seconds. The final check was at 23:53:04.
+There was no valid startup window within the wait. Slot 2 is the live pilot and
+was excluded. No slot was claimed, so no stack needed teardown.
+
+The final checks used the exact rebuilt computer image and the installed bridge
+with a stand-in model. The captured upstream bodies prove instruction delivery.
+They do not prove a real model's reply, a chat file card or the browser layout.
+The fresh packaged real-model and 1280/390 px browser checks are **NOT RUN**.
+Additional model spend is **0 euro cents**. Previous run 2 screenshots and spend
+remain historical evidence below.
+
+The approved product commit is `b0f109a5d1b39746508f01a0aace3fccbd047994`.
+Application approval [46083456844](https://github.com/elewa-git/opencrane-new/actions/runs/46083456844)
+and scanner approval [46083459643](https://github.com/elewa-git/opencrane-new/actions/runs/46083459643)
+both passed. Their approval and image artifacts were present and unexpired.
+The hosted image and browser fixture jobs passed. The remaining CI jobs were
+still running when this receipt was written; the full hosted result is **PENDING**.
+Fetched main `d592e9890742a40abf69d61f81a1c4bcb4297952` is already included, and no
+rebase is in progress. The PR remains draft. A later packaged run must use the
+approved product commit while this branch ends in receipt changes.
 
 ## Run 2 — PARTIAL
 
@@ -95,7 +130,7 @@ The member can see the assigned personal workspace shell, but cannot open a new
 session. The receipt includes the unavailable workspace at 1280 px and the earlier approved
 persona. A 390 px screenshot was not captured.
 
-## Access failure investigation
+## Run 1 access failure investigation
 
 Investigated on 27 November 2026, starting at `dac34cba7`. The fetched main commit
 was `d592e9890742a40abf69d61f81a1c4bcb4297952`, already included in this branch.
@@ -146,7 +181,7 @@ The original service logs remain outside the repository. Copies of
 `main-identity-green.log`, `web-reproduction-1.log`, `web-reproduction-2.log`
 and `main-web-reproduction.log`. These files contain the detailed local evidence.
 
-## Steps and results
+## Run 1 steps and results
 
 | Step | Result | Evidence |
 | --- | --- | --- |
@@ -166,7 +201,7 @@ and `main-web-reproduction.log`. These files contain the detailed local evidence
 
 [Workspace unavailable at 1280 px](workspace-unavailable-1280.png)
 
-## Spend and stack handling
+## Run 1 spend and stack handling
 
 Recorded spend was **1 euro cent** (`settledCents: 1`) across one settled event.
 This was provider verification/setup; no chat prompt was sent. The reserved total
@@ -182,7 +217,7 @@ No “Run interrupted”, 502, or `127.0.0.1:8080/v1/responses` error appeared. 
 ConfigMap gateway value was checked after the access failure and remained the
 service address shown above.
 
-## Checks
+## Run 1 checks
 
 | Check | Result |
 | --- | --- |

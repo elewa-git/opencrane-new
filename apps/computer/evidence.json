@@ -1,6 +1,6 @@
 {
   "date": "2026-11-27",
-  "status": "PARTIAL: installed model instructions and shell passed; fresh packaged real-model journey pending",
+  "status": "PARTIAL: stand-in model request proof passed; fresh packaged real-model journey not run after the slot wait",
   "sourceCommit": "dfa486dd86ef5a278a847bd55e4c67cf22f3c702",
   "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:23de7279a36001b3aba97de28b64c01bdff3c7cad8770d7aebb2c3542c58b271",
   "releaseDigest": "sha256:23de7279a36001b3aba97de28b64c01bdff3c7cad8770d7aebb2c3542c58b271",
@@ -27,13 +27,28 @@
       "detail": "New, loaded, changed-persona and saved threads after restart; real shell calls through the installed bridge."
     },
     "freshPackagedJourney": {
-      "result": "NOT RUN"
+      "result": "NOT RUN",
+      "reason": "No valid startup window within the 45-minute wait."
     },
     "realModel": {
-      "result": "NOT RUN"
+      "result": "NOT RUN",
+      "reason": "No valid startup window within the 45-minute wait."
     },
     "browser1280And390": {
-      "result": "NOT RUN"
+      "result": "NOT RUN",
+      "reason": "No valid startup window within the 45-minute wait."
+    },
+    "applicationApproval": {
+      "result": "PASS",
+      "runId": 46083456844,
+      "sourceCommit": "b0f109a5d1b39746508f01a0aace3fccbd047994",
+      "artifactsPresent": true
+    },
+    "scannerApproval": {
+      "result": "PASS",
+      "runId": 46083459643,
+      "sourceCommit": "b0f109a5d1b39746508f01a0aace3fccbd047994",
+      "artifactsPresent": true
     }
   },
   "additionalSpendCents": 0,
