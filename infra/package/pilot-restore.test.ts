@@ -1,5 +1,5 @@
 import { pilotBackupFixture } from './pilot-restore-fixture.ts';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { hashBackupBytes } from './backup-bytes.ts';
@@ -73,6 +73,23 @@ async function restoresAnEmptyInstallationBeforeAdmission() {
 }
 it('restores all three parts into an empty installation before opening reading',
   restoresAnEmptyInstallationBeforeAdmission);
+
+async function refusesWithoutMemberKeys() {
+  const options = await pilotBackupFixture();
+  const directory = join(options.directory, options.id);
+  const path = join(directory, 'manifest.json');
+  const manifest = JSON.parse(await readFile(path, 'utf8')) as { parts: Record<string, unknown> };
+  delete manifest.parts['member-keys'];
+  await writeFile(path, JSON.stringify(manifest), { mode: 0o600 });
+  await rm(join(directory, 'member-keys'), { force: true });
+  const runtime = emptyTarget();
+  await expect(restorePilotBackup(options, runtime.target)).rejects.toMatchObject({
+    reason: 'member_keys_unavailable', stage: 'backup',
+  });
+  expect(runtime.stages).toEqual([]);
+  expect(runtime.admitted()).toBe(false);
+}
+it('refuses a backup without member keys before restoring any data', refusesWithoutMemberKeys);
 
 async function restoresProviderCheckpointInventory() {
   const options = await pilotBackupFixture();
