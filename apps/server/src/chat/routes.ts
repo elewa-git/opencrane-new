@@ -34,7 +34,7 @@ import { chatCommand, chatInput, ChatConflict } from './commands.ts';
 import { chatGroups, chatGroupSnapshot, reviewedGroup, GroupSnapshotTooLarge } from './groups.ts';
 import { personalContext } from './context.ts';
 import { stateCommand, stateChange, listPreference } from './state.ts';
-import { closeCommand, closeChange } from './close.ts';
+import { closeCommand } from './close.ts';
 import { welcomeListChoice } from './list-welcome.ts';
 
 export type { ChatOptions } from './access.ts';
@@ -168,13 +168,10 @@ async function readChatRoute(request: FastifyRequest, reply: FastifyReply,
   const preference = await stateChange(options, memberId, conversationId,
     commandId, idSchema.parse(access.joinEventId));
   if (preference) return reply.send(preference);
-  const projected = await chatChange(options, conversationId,
+  const change = await chatChange(options, memberId, conversationId,
     commandId, access.historyPosition);
-  if (projected.status === 'appended') return reply.send(projected);
-  const close = await closeChange(options, memberId, conversationId,
-    commandId, access.historyPosition);
-  if (close) return reply.send(close);
-  return reply.code(404).send(projected);
+  if (change.status === 'appended') return reply.send(change);
+  return reply.code(404).send(change);
 }
 
 async function participantReply(request: FastifyRequest, reply: FastifyReply,

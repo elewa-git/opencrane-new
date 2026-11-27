@@ -145,7 +145,7 @@ If the native turn completes before Stop reaches it, the routine still finishes 
 
 | File | What it does |
 | --- | --- |
-| [routes.ts](routes.ts), [commands.ts](commands.ts), [groups.ts](groups.ts), [reads.ts](reads.ts) | Handle conversation creation, messages, group choices and saved results. |
+| [routes.ts](routes.ts), [commands.ts](commands.ts), [groups.ts](groups.ts), [reads.ts](reads.ts) | Handle conversation creation, messages, group choices and saved results. The sender can check a saved message while the feed catches up. |
 | [access.ts](access.ts), [participation.ts](participation.ts), [participants.ts](participants.ts), [private-session.ts](private-session.ts) | Check current access, latest joins and participant changes. |
 | [history.ts](history.ts), [display.ts](display.ts), [public-id.ts](public-id.ts), [realtime.ts](realtime.ts), [list-summary.ts](list-summary.ts), [list-cursor.ts](list-cursor.ts), [state.ts](state.ts) | Return visible messages, live updates, lists and personal choices. |
 | [bridge.ts](bridge.ts), [bridge-poll.ts](bridge-poll.ts), [bridge-conversation.ts](bridge-conversation.ts), [start.ts](start.ts) | Connect computers and deliver pending work with the message's files. |
