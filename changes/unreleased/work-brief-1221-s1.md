@@ -6,3 +6,5 @@ ordinary chat replay can charge twice.
 
 The application package includes the assistant instruction helper, templates and
 licence notices, with exact source hashes checked before image approval.
+The computer image licence review assigns both retained Codex prompt notices
+under Apache-2.0, so the package gate accepts them without relaxing its checks.
