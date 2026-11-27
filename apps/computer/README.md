@@ -3,7 +3,8 @@
 ## What this is
 
 A private cloud computer where each person's assistant does its work.
-It contains an AI agent, browser and desktop.
+It contains an AI agent, desktop and tools for files and documents.
+The assistant uses the member's approved onboarding persona in personal Memory-free chats.
 Each assistant keeps one computer across its chats, including a group's shared assistant.
 Its bridge receives work from the server and reports progress and results.
 
@@ -12,15 +13,16 @@ Its bridge receives work from the server and reports progress and results.
 This package belongs to the personal computers layer.
 [apps/ops](../ops/README.md), the background workers, starts and pauses computers in
 [Kubernetes](../../GLOSSARY.md#kubernetes).
-[apps/server](../server/README.md) sends chat turns and files and forwards the desktop view.
+[apps/server](../server/README.md) sends chat turns, approved personas and files,
+and forwards the desktop view.
 AI and reviewed tool calls go through the gateway.
 
 ```mermaid
 flowchart LR
   ops["apps/ops<br/>background workers"] -->|starts and pauses| computer["apps/computer<br/>assistant computer"]
-  server["apps/server<br/>back end"] -->|sends work and files| computer
+  server["apps/server<br/>back end"] -->|sends work, persona and files| computer
   computer -->|reports results| server
-  computer -->|runs assistant work| desktop["Codex, browser and desktop<br/>working tools"]
+  computer -->|runs assistant work| desktop["Codex, shell and desktop<br/>working tools"]
   computer -->|sends checked calls| gateway["agentgateway<br/>AI gateway"]
   computer -.-> events["libs/events<br/>session settings, IDs and digests"]
   computer -.-> models["libs/models<br/>private caller checks"]
@@ -28,7 +30,8 @@ flowchart LR
 
 ## What it is responsible for
 
-- Build the computer image with Codex, a browser, desktop and document tools.
+- Build the computer image with Codex, a desktop and document tools.
+- Give the assistant its approved identity and instructions that match its available tools.
 - Run the bridge that receives work and reports its progress.
 - Keep the assistant's files while its computer sleeps.
 - Place scanned uploads in the workspace and report new or changed published files.

@@ -41,3 +41,22 @@ function acceptsOnlyTheSharedClassOnRestrictedTurns() {
 }
 it('accepts the shared-only class only on restricted turns',
   acceptsOnlyTheSharedClassOnRestrictedTurns);
+
+function acceptsOnlyPersonalMemoryFreePersonas() {
+  const personal = { ...frame, assistantKind: 'personal', approvedPersona: 'Your name is Willow.' };
+  expect(parseTurn(personal)).toMatchObject({ assistantKind: 'personal',
+    approvedPersona: 'Your name is Willow.' });
+  const invalid = [
+    { ...personal, assistantKind: 'team' },
+    { ...personal, assistantKind: undefined },
+    { ...personal, assistantKind: 'unknown' },
+    { ...personal, executionMode: 'restricted' },
+    { ...personal, approvedPersona: '' },
+    { ...personal, approvedPersona: 'a'.repeat(4097) },
+    { ...personal, approvedPersona: '界'.repeat(1366) },
+    { ...personal, approvedPersona: 42 },
+  ];
+  for (const turn of invalid) expect(() => parseTurn(turn)).toThrow();
+}
+it('accepts a bounded approved persona only on personal Memory-free turns',
+  acceptsOnlyPersonalMemoryFreePersonas);

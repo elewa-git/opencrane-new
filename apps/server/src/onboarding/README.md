@@ -4,8 +4,9 @@
 
 This folder saves a member's welcome survey, persona revisions and scripted welcome. Reloading
 restores all three. Sign-in checks where the member left off. Private answers and persona text are encrypted. A member can
-approve one saved version for later use. Saving does not start an assistant or
-spend money.
+approve one saved version for their personal assistant's identity. The chat bridge
+loads that version for personal Memory-free turns. Saving does not start an
+assistant or spend money.
 
 ## Where it fits
 
@@ -19,6 +20,7 @@ flowchart LR
   onboarding --> events[Personal events]
   workers[Background workers] -->|confirm saved answer| events
   events --> tables[Read tables]
+  onboarding -->|loads approved persona| bridge[Chat bridge]
 ```
 
 ## What it is responsible for
@@ -34,6 +36,7 @@ flowchart LR
 - Builds the same first persona from the same saved answers and keeps every edited version.
 - Lists revision dates and opens one version for its member after an access check.
 - Approves the exact current version and shows its saved time and original receipt.
+- Opens the approved version for its owner's personal assistant after checking membership.
 - Starts one saved welcome from the member's actual assistant assignment. The
   welcome read shows the same assignment fact and the next required survey or
   persona step before the person chooses a start.
@@ -63,6 +66,7 @@ until a worker confirms the saved answer. Completion keeps the original words.
 | [commands.ts](commands.ts) | Checks step order, revision versions and repeated requests before saving. |
 | [history.ts](history.ts) | Reads saved history and opens authorised encrypted answers. |
 | [persona.ts](persona.ts) | Builds the first persona from saved survey answers. |
+| [approved-persona.ts](approved-persona.ts) | Loads the approved identity for a personal chat. |
 | [welcome.ts](welcome.ts) | Checks the assignment, start and next answer. |
 | [archive.ts](archive.ts) | Saves and checks the completed welcome's archive choice. |
 | [script.ts](script.ts) | Keeps the ordered questions for each saved script version. |

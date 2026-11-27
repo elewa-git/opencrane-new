@@ -1,4 +1,5 @@
 import { readConversationProse } from '@opencrane/events';
+import { assistantTurnIdentity } from '../onboarding/approved-persona.ts';
 import { turnToolReaders } from './turn-tool-readers.ts';
 /* eslint max-lines: ["error", { max: 520, skipBlankLines: true, skipComments: true }] */
 import type { ArtifactPublication } from '../files/artifacts.ts';
@@ -29,7 +30,7 @@ type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
 type Tokens = Parameters<typeof resumeComputer>[1];
 export type WatchOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store' | 'db'> &
-  Partial<Pick<ChatOptions, 'binding' | 'feed' | 'memoryDb'>> & {
+  Partial<Pick<ChatOptions, 'binding' | 'feed' | 'memoryDb' | 'readApprovedPersona'>> & {
     keyDirectory?: string;
     childStartUrl?: string;
     objects?: Client;
@@ -349,6 +350,8 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   if (previousDelivery?.turnId === message.event.id && !resendDue) return;
   const turn = turnMessage(conversation, rows, uploads, message, mode) as
     ReturnType<typeof turnMessage> & { tools?: Awaited<ReturnType<typeof buildTurnTools>> };
+  const identity = await assistantTurnIdentity(options.readApprovedPersona, turn, kind);
+  Object.assign(turn, identity);
   const baseMessageBytes = Buffer.byteLength(JSON.stringify(turn));
   async function buildTools() {
     if (requested.executionMode === 'memory_free') return [];

@@ -3,7 +3,8 @@ const libraries = ['libs/events', 'libs/auth', 'libs/observability', 'libs/proto
 const angularSpecPath = '^apps/web/src/.*\\.spec\\.ts$';
 const publicEntrypoints = {
   'libs/observability': '^libs/observability/(src/index|test/memory-sink)\\.ts$',
-  'libs/events': '^libs/events/src/(index|ids|digest|tool-call|command-activity-label|lossless-json|mcp-catalogue|routine-schedule|session-configuration)\\.ts$',
+  'libs/events': '^libs/events/src/(index|ids|digest|memory-text|tool-call|command-activity-label|' +
+    'lossless-json|mcp-catalogue|routine-schedule|session-configuration)\\.ts$',
   'libs/projections': '^libs/projections/(src/index|test/database)\\.ts$',
   'libs/models': '^libs/models/(src/(index|routing|private-callers)|test/(fixture|members|support/remote-mcp))\\.ts$',
   'libs/event-store': '^libs/event-store/(src/index|test/testing)\\.ts$',

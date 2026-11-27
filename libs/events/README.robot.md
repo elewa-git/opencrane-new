@@ -1,5 +1,11 @@
 # Events
 
+`@opencrane/events/memory-text` exports the existing `memoryTextSchema` without the
+event registry. The computer uses it to check an approved persona at its bridge
+boundary. Memory and onboarding keep the same schema through their existing
+exports: 1–4,096 UTF-8 bytes, exact UTF-8 round trip, and no control characters
+other than tab and newline. No event type or data shape changes.
+
 `check-hosted-image` subscribes to `mcp.server_registered` and
 `mcp.image_check_requested`. The worker checks the saved event and current attempt
 before running the private scanner. Replay creates only missing queue jobs.

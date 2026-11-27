@@ -197,7 +197,7 @@ function size(survey: Survey) {
 }
 const kind: SummaryKind<Survey> = { name: 'http-survey', keep: 32, empty, add,
   budget: { limit: 16 * 1024 * 1024, size } };
-export function surveyHistory(options: ChatOptions, memberId: string) {
+export function surveyHistory(options: Pick<ChatOptions, 'store' | 'silo'>, memberId: string) {
   function take(survey: Survey, sequence: number) {
     return { ...survey, steps: [...survey.steps], commands: new Map(survey.commands),
       revisions: [...survey.revisions],
@@ -244,12 +244,13 @@ export function decryptAnswers(options: OnboardingOptions, memberId: string, eve
   const answers: unknown = JSON.parse(text);
   return answers;
 }
-export function decryptPersona(options: OnboardingOptions, memberId: string, event: EventEnvelope) {
+export function decryptPersona(options: Pick<OnboardingOptions, 'keys' | 'silo'>,
+  memberId: string, event: EventEnvelope) {
   const data = personaRevisedDataSchema.parse(event.data);
   const encrypted = { ciphertext: data.encrypted, keyId: data.keyRef };
   return options.keys.decrypt(options.silo, `personal:${memberId}`, encrypted);
 }
-export async function personaEvent(options: ChatOptions, memberId: string,
+export async function personaEvent(options: Pick<ChatOptions, 'store' | 'silo'>, memberId: string,
   reference: PersonaReference) {
   const row = await readEventAt(options.store, `personal-${memberId}`,
     reference.sequence, performance.now() + 10_000);

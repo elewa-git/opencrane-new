@@ -9,7 +9,11 @@ import { createServer as netServer, connect, Socket } from 'node:net';
 import { createServer } from 'node:http';
 import { writeFileSync, chmodSync, readFileSync } from 'node:fs';
 import { codexConnection } from './codex-connection.ts';
-import { memoryFreeConfig, memoryFreeEnvironments } from './codex-config.ts';
+import { computerSessionInstructions, memoryFreeConfig, memoryFreeEnvironments }
+  from './codex-config.ts';
+import { writeSessionSoul } from './assistant-brief.ts';
+import { sha256Hex } from '@opencrane/events/digest';
+import type { Turn } from './turn-frame.ts';
 import { bridgeChannel } from './channel.ts';
 import { proxy } from './proxy.ts';
 import { proxyControl, proxyGrants } from './proxy-control.ts';
@@ -91,6 +95,11 @@ function privateSession() {
     initialiseParams, notification: reportNativeRequest };
   return openPrivateSession(options);
 }
+function sessionInstructions(turn: Turn) {
+  const session = sha256Hex(turn.conversationId);
+  const path = writeSessionSoul(turn.approvedPersona, `/run/codex/briefs/${session}`);
+  return computerSessionInstructions(turn, path);
+}
 // Keep the persistent Codex connection local to the computer and its image checks.
 netServer(socket => {
   if (client) { socket.destroy(); return; }
@@ -161,6 +170,7 @@ const channel = bridgeChannel(server, {
   },
   retainedCall: runtimeProxy.retainedCall,
   rpc: persistent.rpc,
+  instructions: sessionInstructions,
   privateSession,
   catalogue(loadKey, conversation, tools, thread, turnId, generations) {
     const input = { loadKey, conversation, tools, thread, turnId, ...generations };
