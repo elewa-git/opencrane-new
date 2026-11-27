@@ -1,5 +1,67 @@
 # My tools on a fresh dev stack
 
+## Fresh slot 1 journey rerun 3
+
+**Fresh-stack journey — FAIL.** Run on 27 November 2026 at
+`b72a50af9d9512506d9a416096dc9b47c4cb841a`. Slot 1 cleared the
+five-minute load check after about 58 minutes. Both viewports shared
+one fresh installation.
+
+| Shared setup | Verdict |
+| --- | --- |
+| Start the fresh stack with `DEV_OWNER_BOOTSTRAP=0` and run the slot status check | PASS |
+| Start both guarded local TLS tool fixtures | PASS |
+| Claim the installation through the API and read back the owner role | PASS |
+| Create the admin invitation through the API | FAIL |
+| Accept the admin invitation and create and accept both member invitations | NOT RUN |
+
+The claim returned HTTP 201. The ownership API then confirmed the owner role.
+The first `POST /api/invitations` returned HTTP 503 at 01:19:36 UTC. The server
+logged `Invitation command unavailable` for `member.invited`. The underlying
+exception remains unknown.
+
+| Browser step | 1280 px | 390 px |
+| --- | --- | --- |
+| Open My tools and see the empty list | NOT RUN | NOT RUN |
+| Publish the personal-key and no-key tool servers | NOT RUN | NOT RUN |
+| See Needs your account and Ready for you | NOT RUN | NOT RUN |
+| Verify and select a personal key, then see Ready for you | NOT RUN | NOT RUN |
+| See Not available to you and the access message for both tools | NOT RUN | NOT RUN |
+
+No journey screenshots were taken. Startup, service and browser logs were
+saved before teardown, including `startup.log`, `service-stage-b-server.log`
+and `browser-diagnostics.log`. Slot 1 reported free after teardown.
+
+### Previous ownership migration failure
+
+Rerun 2 stopped before the desktop browser started. The exact error lines in
+`rerun2-service-last-error.log` are:
+
+```text
+Error: Command failed: /usr/bin/node --experimental-strip-types infra/dev-stack/owner-bootstrap.ts
+Error: Ownership migration conflicted after five attempts
+```
+
+The default development startup path can abort on current `main`
+(`8b5e2dec7`). The relevant bootstrap and migration code is identical.
+The focused migration test forces an unrelated write before each of the
+five ownership appends and confirms that seeding aborts. The private trace
+records the exhausted attempts without identifying the competing writes.
+A fresh default-mode startup on `main` was **NOT RUN**.
+
+The public package chart selects token-based owner claim and skips the
+automatic development-owner bootstrap call. A pilot reinstall was
+**NOT RUN**.
+
+### Local checks
+
+**PASS** for three focused ownership migration tests, two focused claim and
+invitation tests, typecheck, Markdown lint, Knip, event catalogue,
+whole-stream reads and changelog. A separate disposable fixture also passed:
+with the owner permissions applied, a token-claimed owner could invite an
+admin. The live HTTP 503 remains unexplained. Full root tests and changed-file
+ESLint were **NOT RUN**.
+
 ## Fresh slot 1 journey rerun 2
 
 **Fresh-stack journey — PARTIAL.** Tested on 26 November 2026 at
