@@ -63,6 +63,7 @@ infra/package/*
 !infra/package/package-database.ts
 !infra/package/pilot-projections.ts
 !infra/package/pilot-backup-contract.ts
+!infra/package/pilot-member-keys.ts
 !infra/package/pilot-file-inventory.ts
 !infra/package/pilot-storage.ts
 !infra/package/pilot-restore.ts

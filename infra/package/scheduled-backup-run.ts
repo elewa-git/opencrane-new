@@ -44,6 +44,9 @@ function failed(error: unknown) {
   if (reason === 'resume' || reason === 'resume_marker') {
     message = 'Backup failed; maintenance remains active and the lock is retained';
   }
+  if (reason === 'member_keys_unavailable') {
+    message = 'Backup failed because the member keys or backup encryption key are unavailable';
+  }
   logger.error({ err, reason }, message);
   process.exitCode = 1;
 }

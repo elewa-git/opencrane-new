@@ -5,6 +5,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest, FastifyError } from
 import type { AuthConfig } from '@opencrane/auth';
 import { surveyAnswersSchema } from '@opencrane/events';
 import { isAuthorityChanged, AuthorityApplying } from '@opencrane/models';
+import { onboardingKeyIdentity } from '@opencrane/projections';
 import { chatAccess, isChatRefused, ChatAccessApplying } from '../chat/access.ts';
 import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import { surveyCommand, SurveyConflict, SurveyUnknown } from './commands.ts';
@@ -175,7 +176,7 @@ function readWelcome(options: OnboardingOptions, memberId: string, history: Hist
   let savedAnswer: string | null = null;
   if (answer) {
     const data = welcomeAnswerRecordedDataSchema.parse(answer.event.data);
-    savedAnswer = options.keys.decrypt(options.silo, `personal:${memberId}`,
+    savedAnswer = options.keys.decrypt(options.silo, onboardingKeyIdentity(memberId),
       { ciphertext: data.encrypted, keyId: data.keyRef });
   }
   let status = answer ? 'completion_pending' : 'welcome_active';

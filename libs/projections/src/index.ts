@@ -7,7 +7,8 @@ export {
   connectComputers,
   connectProjectionDb,
 } from "./pg.ts";
-export { memoryProjectionDatabaseUrl, initialiseMemoryProjectionSchema } from './memory-database.ts';
+export { memoryProjectionDatabaseUrl, initialiseMemoryProjectionSchema, memoryProjectionSchema }
+  from './memory-database.ts';
 export { pgliteDb } from "./pglite.ts";
 export {
   ProjectionRunner,
@@ -36,7 +37,7 @@ export { emptyToolPolicy, applyToolPolicy, isToolPolicyAvailable, isToolReviewCu
 export { auditTrail, readAudit, readAuditDetail, readAuditOwnershipConfirmation } from './audit.ts';
 export { rebuildAuditProjection } from './audit-rebuild.ts';
 
-export { conversationKeys } from './keys.ts';
+export { conversationKeys, onboardingKeyIdentity } from './keys.ts';
 export { files, listFiles } from './files.ts';
 
 export { groups, readGroups } from './groups.ts';

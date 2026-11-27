@@ -188,7 +188,8 @@ class ImageLayerTests(unittest.TestCase):
                 self.assertEqual(result.stderr, "FAIL packaged runtime imports\n")
 
     def test_missing_restore_import_refuses_even_with_entry_point_present(self):
-        required = ("pilot-restore.ts", "pilot-backup-contract.ts", "pilot-projections.ts",
+        required = ("pilot-restore.ts", "pilot-backup-contract.ts", "pilot-member-keys.ts",
+                    "pilot-projections.ts",
                     "pilot-file-inventory.ts",
                     "pilot-restore-database.ts", "pilot-restore-target.ts", "pilot-storage.ts",
                     "pilot-restore-kube.ts", "package-database.ts", "event-restore.ts")
@@ -211,7 +212,8 @@ class ImageLayerTests(unittest.TestCase):
                          "scheduled-backup-run.ts", "scheduled-backup.ts",
                          "scheduled-backup-source.ts", "event-backup.ts", "backup-bytes.ts",
                          "event-restore.ts", "package-database.ts", "pilot-projections.ts",
-                         "pilot-backup-contract.ts", "pilot-file-inventory.ts", "pilot-storage.ts",
+                         "pilot-backup-contract.ts", "pilot-member-keys.ts", "pilot-file-inventory.ts",
+                         "pilot-storage.ts",
                          "pilot-restore.ts",
                          "pilot-restore-database.ts", "pilot-restore-kube.ts",
                          "pilot-restore-target.ts", "pilot-restore-run.ts"}

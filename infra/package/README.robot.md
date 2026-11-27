@@ -79,8 +79,8 @@ only `opencrane-package-$DEV_STACK_ID` and records its Kubernetes UID, cluster,
 release name, worktree and heartbeat in the slot's private directory. An operator
 cannot prepare a package while that slot's Compose processes or containers run. The
 slot lock keeps these checks and the following operation together. An operator
-then runs `prepare.ts` with the private values file. It creates the eight
-standard Kubernetes Secrets from the slot’s private files. Public-address
+then runs `prepare.ts` with the private values file. It creates the standard
+Kubernetes Secrets and the separate backup encryption Secret. Public-address
 mode also creates the server’s sign-in Secret. Preparation uses the
 development sign-in app inside the OpenCrane 2 Dev organisation. Secret
 values stay in private files and Kubernetes Secrets.
@@ -245,8 +245,8 @@ storage is content, and the upload command remains the only business write.
 
 Normal installs create two 1 GiB claims, `personal-secrets` and `memory-secrets`.
 The server uses `PERSONAL_KEY_DIRECTORY=/var/lib/opencrane/personal-secrets/keys`
-and `MEMORY_KEY_DIRECTORY=/var/lib/opencrane/memory-secrets/keys`. Only the server
-mounts the personal keys. The Memory projection mounts its keys read-only. The
+and `MEMORY_KEY_DIRECTORY=/var/lib/opencrane/memory-secrets/keys`. The server
+reads and writes personal keys. The Memory projection mounts its keys read-only. The
 dispatcher can remove retired Memory keys. The setup containers check the
 directories before these processes start. They set mode 0700 and uid 1000.
 Processes create files with mode 0600. The setup containers check that existing
@@ -263,13 +263,13 @@ Sandbox ownership, container and storage. Installing these policies needs Kubern
 Projection workers have no Kubernetes role or mounted account token.
 The Memory worker builds its read tables and checkpoint in `opencrane_memory`.
 The server and dispatcher use that schema for Memory and keep their ordinary
-read tables in `public`. The existing restore check can still compare and
-rebuild the public tables while Memory stays off in the read-only installation.
+read tables in `public`. Restore compares the public tables and rebuilds the
+Memory tables from the saved events and keys.
 
 Helm values, logs and saved events do not carry these key bytes. The database
-backup contains readable text from the Memory search table. Backup does not include
-the key folders yet. The read-only restore mode leaves both folders
-unmounted and the Memory worker stopped.
+backup contains readable text from the Memory search table. The backup Job reads
+both folders and encrypts them in the set. The restore Job writes both folders
+before the server can mount them for reading. The Memory worker remains stopped.
 
 ## Default render regression
 
@@ -1058,6 +1058,8 @@ created a successful Job after the latest scheduled time. The
 manual run and catalogue commands. Check `show` for the chosen `BACKUP_ID`
 before using it. The archive's companion file records the source cluster ID,
 namespace name and namespace ID so import can refuse the source installation.
+The backup encryption key has its own copy in the operator's secret store.
+The exported archive contains only the encrypted member keys.
 
 ```sh
 (
@@ -1084,7 +1086,9 @@ For a recovery drill, prepare an empty package with the same approved images,
 `models.mode`, silo and sign-in identity settings. The recovery listener stays
 on loopback. For an HTTPS sign-in
 drill use a private test origin with its own registered callback and the same
-issuer and account subjects. Set `pilotRestore` to
+issuer and account subjects. Set `PACKAGE_BACKUP_KEY_FILE` to the absolute
+name of a private file containing the original backup encryption key during
+secret preparation. Set `pilotRestore` to
 `{"enabled": true, "backupId": "BACKUP_ID"}` with the real ID. After
 `package-up`, set `DEV_STACK_ID` to the recovery slot. The import uses the
 connection and namespace recorded for that slot for both the rollout check
@@ -1101,8 +1105,9 @@ read -r source_cluster source_namespace source_namespace_uid < "$archive.source"
 ```
 
 Follow [Restore one pilot backup](#restore-one-pilot-backup) to stop the
-catalogue and run the restore Job. Confirm the saved chat is readable and
-`restore_read_only` refuses writes. Never point the live pilot route at a
+catalogue and run the restore Job. Confirm the saved chat, survey answers,
+persona and memory facts are readable and `restore_read_only` refuses writes.
+Never point the live pilot route at a
 drill install. Clear the drill through the guarded package cleanup after
 retaining its evidence.
 
@@ -2650,8 +2655,8 @@ the dispatcher is stopped. Operators must not change workloads, write directly t
 stores or run Helm concurrently with this maintenance window.
 
 While writers stay stopped, the Job calls `collectEventBackup`, dumps databases
-without role passwords, and copies every object in `files` through the existing
-short-lived storage lease. It checks the stream identity, retained range and
+without role passwords, copies objects in `files` through the short-lived lease,
+and encrypts the member key folders. It checks the stream identity, retained range and
 checkpoints again before resuming through normal service startup. The file read
 table lists the objects named by the events. The Job checks it while writers
 are stopped. Every saved object must have a matching reference, byte count and
@@ -2659,12 +2664,34 @@ SHA-256. A reference without its object also fails the backup. PostgreSQL's
 LSN identifies the start of this stopped interval; background WAL maintenance can
 continue, so it is not a promise that the physical WAL bytes remain unchanged.
 `backup-bytes.ts` supplies the shared SHA-256 rule for scheduled, component and
-object capture. All three parts share the backup id and event sequence. Their manifest includes
+object capture. All four parts share the backup id and event sequence. Their manifest includes
 integer byte counts, SHA-256, capture timestamps, image pins, chart version,
 event stream configuration and positions, database names, LSN and the saved OpenFGA
 store and model references, and an object
 inventory with each key, size and checksum. The `files` part is UTF-8 JSON lines;
 each line adds base64 `data` to that object's inventory entry.
+
+The `member-keys` part includes the personal and Memory key files and the empty
+markers for erased Memory revisions. It uses AES-256-GCM with a random nonce
+and binds the ciphertext to the silo, backup ID and event sequence. The catalogue
+checks its size and SHA-256 without the encryption key. Restore also checks its
+authentication tag before it writes any key file. Each folder is limited to
+50,000 entries and its encrypted archive to 16 MiB. A failed key check prevents
+publication. A backup taken before a member erased a fact can still contain
+that fact and its key. Protect and retire older sets under the pilot's retention rules.
+
+The Jobs get a separate key from the `pilot-backup-key` Kubernetes Secret, field
+`credential`. For a retained pilot, the operator supplies a raw 32-byte key in
+an owner-only mode-0600 file via `PACKAGE_BACKUP_KEY_FILE` at private preparation
+and retains it in the secret store. Local preparation generates a private key
+in the claimed slot when no file is supplied. Slot teardown discards that
+file. Before updating an existing pilot from an older package, create this
+Secret in its namespace from the operator's file:
+
+```sh
+kubectl --kubeconfig "$SOURCE_KUBECONFIG" --context "$SOURCE_CONTEXT" -n "$source_namespace" \
+  create secret generic pilot-backup-key --from-file="credential=$PACKAGE_BACKUP_KEY_FILE"
+```
 
 Only after all parts succeed and every restored deployment is ready does an atomic
 directory rename publish the set. Publication and the catalogue both enforce a
@@ -2707,8 +2734,8 @@ kubectl -n "$namespace" get jobs
 
 `list` and `show` return the checked manifest JSON. Failed commands log only a safe
 stage classification. Neither manifest nor logs include credentials, database role
-passwords or Secret contents. Connection settings and object-owner credentials
-come from existing Kubernetes Secret references; the backup volume needs no key.
+passwords or Secret contents. Connection settings, object-owner credentials and
+the backup encryption key come from separate Kubernetes Secret references.
 Treat backup bytes as private operator data, including the uploaded file content.
 
 No image or runtime dependency is added. The existing licence inventory covers
@@ -2735,9 +2762,9 @@ load capture clients or require connections to running services.
 Restore only a completed scheduled pilot set into a new, empty installation.
 Use the same chart and all eight immutable images recorded by that set, its model
 mode, silo identity, sign-in issuer and organisation, and original person subject mappings.
-Supply fresh service credentials and the retained secret-store references.
-Memory facts and survey answers still require their existing separate key custody.
-Conversation reads require no chat key. Computer homes are outside this backup.
+Supply fresh service credentials and the original backup encryption key.
+The encrypted key part returns access to the saved survey answers, personas
+and memory facts. Computer homes are outside this backup.
 Checksums detect changed bytes; manifests are unsigned. Keep the entire set in
 trusted private operator storage. Older package versions require their own software.
 
@@ -2776,28 +2803,34 @@ file recorded for the recovery slot. `DEV_STACK_ID` is the recovery slot.
 
 The Job reads the set through a read-only mount and validates private regular files,
 part checksums, exact package versions, timestamps and complete inventories before
-mutation. It requires no event stream, application databases, application roles or
-uploaded objects. An advisory database lock excludes concurrent runners. A durable
+mutation. A missing key part, a missing encryption key or an authentication failure
+reports `member_keys_unavailable`. The Job requires empty member key folders and
+no event stream, application databases, application roles or uploaded objects.
+An advisory database lock excludes concurrent runners. A durable
 mode-0600 journal in `/restore/state` on `pilot-restore` binds the manifest digest
 to the service-account and volume identities before any data is loaded. Keep the volume root group-managed
 and its state directory private. This lets Kubernetes skip recursive permission
 changes on remount, so journal files keep mode 0600. The ten-minute Job deadline bounds
 an eight-minute operation; native events retain their 60-second and 64 MiB limits.
 
-Recovery first transfers the native event snapshot and verifies event identities,
-subjects, positions and retained range. It then loads all four databases with SQL
+Recovery first installs the two private key folders, then transfers the native event
+snapshot and verifies event identities, subjects, positions and retained range.
+It then loads all four databases with SQL
 errors fatal and renews application role credentials. It rebuilds the fourteen
 base projections and, in provider mode, the routines projection in a separate
 database. Backup and restore use the same projection list. Restore checks that
-the set has exactly those checkpoints and compares every content table with the dump.
-Only replayed content becomes readable. The saved dispatcher checkpoint stays held.
+the set has exactly those checkpoints, plus Memory and the dispatcher, and compares
+public content tables with the dump. It authenticates saved onboarding data and
+rebuilds Memory using the restored keys. Only replayed content becomes readable.
+The saved dispatcher checkpoint stays held.
 OpenFGA is rebuilt from events and checked against the saved rights. The source LSN
 must match the manifest; logical restore does not recreate a physical WAL position.
 Finally, the Job checks the exact event-backed file inventory, uploads original
 object keys and reads every size and SHA-256 back. It does not rescan historical files.
 New uploads on ordinary installations keep the normal scanner checks.
 
-Final verification repeats native history, projection, rights and file comparisons.
+Final verification checks both private key folders again and repeats native history,
+projection, rights and file comparisons.
 Only then does the Job open the server for authenticated reads and mark completion.
 The server refuses API writes, including owner claims, with `restore_read_only`.
 Its NATS identity cannot append. The restore account can scale only server and

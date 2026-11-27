@@ -24,7 +24,7 @@ flowchart LR
   tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
   package --> services["Private databases, event log,<br/>keys, file store and scanner"]
   apps --> models["Model gateway"]
-  package -->|verified backup| recovery["Empty recovery install"]
+  package -->|verified backup with encrypted keys| recovery["Empty recovery install"]
 ```
 
 ## What it is responsible for
@@ -41,7 +41,7 @@ flowchart LR
 - Keep the encryption keys for the welcome survey, persona and Memory on private storage.
 - Set the installation's public organisation name.
 - Give assistant computers the private gateway address and short-lived passes.
-- Save scheduled backups of events, databases and uploaded files together.
+- Save scheduled backups of events, databases, uploaded files and encrypted member keys together.
 - Restore one complete pilot backup into empty storage, then open authenticated reading.
   Recovery uses the same model mode as the source so it rebuilds the same tables.
 - Update an owned pilot release and keep its storage and sign-in.
@@ -90,12 +90,14 @@ Not built yet:
    that saved events account for every stored file. It checks that writers stayed
    stopped before services restart. It publishes the backup only after the stopped
    services are ready again; a failed restart keeps maintenance active.
-   The backup includes readable text from the Memory search tables, so operators
-   keep it in private backup storage. It leaves out the survey, persona and Memory
-   keys. A new installation needs those keys to open the original records.
+   It encrypts the survey, persona and Memory keys with a separate backup key.
+   The database backup includes readable text from the Memory search tables, so
+   operators keep the full set in private backup storage.
 8. **A developer restores a pilot.** A separate empty installation checks the matching
-   backup, rebuilds tables and permissions, and restores files. Reading opens only
-   after verification. Workers and effects remain stopped.
+   backup, returns the keys to private storage and rebuilds the read tables and
+   permissions. The restored installation shows saved survey answers, personas,
+   memory facts and files. Missing keys stop recovery before it opens the site
+   for reading. Workers and effects remain stopped.
 9. **An operator updates a pilot.** The new approved images replace the running
    images. The pilot keeps the same storage and sign-in.
 10. **A developer checks or removes an install.** Fresh-install checks use new storage

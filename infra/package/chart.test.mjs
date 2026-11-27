@@ -237,6 +237,9 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
   }
   const key = Buffer.alloc(32, 0x41);
   key[3] = 0;
+  function randomFixtureBytes() {
+    return Buffer.from(key);
+  }
   settings.set('postgres', { POSTGRES_PASSWORD: 'test-only' });
   settings.set('nats', { NATS_LISTEN: '4222' });
   const generateFixture = generatePreparationFixture.bind(undefined, directory);
@@ -299,7 +302,7 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
     '../../apps/server/src/bootstrap-token.ts': { readBootstrapToken },
     './public-settings.mjs': { readPublicSettings: publicSettingsFixture },
     'node:child_process': { execFile: executeFixture },
-    'node:crypto': { ...crypto, randomBytes: () => key },
+    'node:crypto': { ...crypto, randomBytes: randomFixtureBytes },
     '../../libs/event-store/src/certificates.ts': { issueCertificate: async () => {} },
     '@opencrane/auth': { tokenIssuer: async () => ({ jwks: { keys: [] } }) },
     '../dev-stack/config.ts': {
@@ -326,17 +329,23 @@ async function preparedSecretsFixture(withOwner = true, isolated = false, loseTa
       writeFileSync(valuesFile, JSON.stringify(values), { mode: 0o600 });
       const fixtureProcess = { argv: ['node', 'infra/package/prepare.ts'],
         env: { ...fixtureEnvironment, PACKAGE_SKIP_PROVIDER_SETUP: '1', PACKAGE_VALUES_FILE: undefined } };
+      let backupKey = key;
       if (mainValuesSource === 'environment') {
         fixtureProcess.env.PACKAGE_VALUES_FILE = valuesFile;
+        const backupKeyFile = join(directory, 'external-backup-key');
+        backupKey = Buffer.alloc(32, 0x42);
+        writeFileSync(backupKeyFile, backupKey, { mode: 0o600 });
+        fixtureProcess.env.PACKAGE_BACKUP_KEY_FILE = backupKeyFile;
       } else {
         fixtureProcess.argv.push(valuesFile);
       }
       const main = loadPrivateFunction('infra/package/prepare.ts', 'main', replacements,
         fixtureProcess);
       await main();
-      assert.deepEqual(commands.map(commandProgram), ['node', 'node',
-        'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl', 'kubectl']);
-      assert.equal(secrets.size, 8);
+      const kubernetesCommands = Array(9).fill('kubectl');
+      assert.deepEqual(commands.map(commandProgram), ['node', 'node', ...kubernetesCommands]);
+      assert.equal(secrets.size, 9);
+      assert.deepEqual(secrets.get('pilot-backup-key'), { credential: backupKey });
       return { key, settings, secrets, files: readdirSync(directory) };
     }
     const prepareSettings = loadPrivateFunction('infra/package/prepare.ts',

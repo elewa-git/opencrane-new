@@ -7,6 +7,7 @@ import { surveyAnswersSchema, parseEventByType, personaRevisedDataSchema,
   personaApprovedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import { isAuthorityChanged, groupMembership } from '@opencrane/models';
+import { onboardingKeyIdentity } from '@opencrane/projections';
 import { chatAccess, isChatRefused, writeChatAccess }
   from '../chat/access.ts';
 import { idSchema } from '../members/guard.ts';
@@ -29,7 +30,7 @@ export class SurveyConflict extends Error {}
 export class SurveyUnknown extends Error {}
 
 function encrypt(options: OnboardingOptions, memberId: string, value: string) {
-  const encrypted = options.keys.encrypt(options.silo, `personal:${memberId}`, value);
+  const encrypted = options.keys.encrypt(options.silo, onboardingKeyIdentity(memberId), value);
   return { ...encrypted, ciphertextDigest: sha256Hex(Buffer.from(encrypted.ciphertext, 'base64')) };
 }
 function eventData(options: OnboardingOptions, memberId: string, input: z.infer<typeof commandSchema>,
@@ -55,7 +56,7 @@ function eventData(options: OnboardingOptions, memberId: string, input: z.infer<
   // Create the key on the first save, including for members who joined before setup was enabled.
   // Leave a missing key visible as a failure once any answer has used it.
   if (!history.hasSavedAnswers) {
-    options.keys.provision(options.silo, `personal:${memberId}`);
+    options.keys.provision(options.silo, onboardingKeyIdentity(memberId));
   }
   return { ...identity, step: input.answers.step,
     ...encrypt(options, memberId, JSON.stringify(input.answers)) };

@@ -1,10 +1,10 @@
-import { createDecipheriv, createHash } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { NatsConnection } from '@nats-io/transport-node';
 import { z } from 'zod';
-import { hashBackupBytes } from './backup-bytes.ts';
+import { beginBackupDecryption, hashBackupBytes } from './backup-bytes.ts';
 import { captureBounds, descriptorSchema, infoSchema, readIdentities,
   eventBackupMaximumBytes } from './event-backup.ts';
 
@@ -207,12 +207,8 @@ export function readBackupObject(directory: string, keyFile: string,
     key = readBackupKey(keyFile);
     const bytes = readPrivateFile(join(directory, reference.identity), reference.byteCount + 28);
     if (bytes.length !== reference.byteCount + 28) throw new Error('Invalid encrypted length');
-    const nonce = bytes.subarray(0, 12);
-    const tag = bytes.subarray(bytes.length - 16);
-    const ciphertext = bytes.subarray(12, bytes.length - 16);
-    const decipher = createDecipheriv('aes-256-gcm', key, nonce);
-    decipher.setAAD(Buffer.from(JSON.stringify([reference.identity, reference.sha256])));
-    decipher.setAuthTag(tag);
+    const identity = Buffer.from(JSON.stringify([reference.identity, reference.sha256]));
+    const { ciphertext, decipher } = beginBackupDecryption(key, identity, bytes);
     plaintext = decipher.update(ciphertext);
     const final = decipher.final();
     const restored = Buffer.concat([plaintext, final]);

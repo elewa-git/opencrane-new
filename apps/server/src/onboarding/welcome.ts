@@ -9,6 +9,7 @@ import { memberJoinedDataSchema, siloOwnerBootstrappedDataSchema,
   type EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { currentMembership, isAuthorityChanged, personalAssistantId } from '@opencrane/models';
+import { onboardingKeyIdentity } from '@opencrane/projections';
 import { chatAccess, isChatRefused, writeChatAccess }
   from '../chat/access.ts';
 import { idSchema } from '../members/guard.ts';
@@ -131,7 +132,7 @@ function checkInput(input: Input, history: History) {
 }
 
 function encryptedAnswer(options: OnboardingOptions, memberId: string, value: string) {
-  const encrypted = options.keys.encrypt(options.silo, `personal:${memberId}`, value);
+  const encrypted = options.keys.encrypt(options.silo, onboardingKeyIdentity(memberId), value);
   const bytes = Buffer.from(encrypted.ciphertext, 'base64');
   const encryptedDigest = sha256Hex(bytes);
   return { encrypted: encrypted.ciphertext, encryptedDigest, keyRef: encrypted.keyId };
@@ -199,7 +200,7 @@ function matchesAnswer(options: OnboardingOptions, memberId: string,
       data.data.stepId !== input.stepId || data.data.stepNumber !== input.stepNumber) {
     return false;
   }
-  const savedAnswer = options.keys.decrypt(options.silo, `personal:${memberId}`,
+  const savedAnswer = options.keys.decrypt(options.silo, onboardingKeyIdentity(memberId),
     { ciphertext: data.data.encrypted, keyId: data.data.keyRef });
   return savedAnswer === input.answer;
 }

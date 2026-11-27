@@ -1,4 +1,4 @@
-import { surveyCanBeSkipped } from '@opencrane/projections';
+import { onboardingKeyIdentity, surveyCanBeSkipped } from '@opencrane/projections';
 import type { OnboardingOptions } from './options.ts';
 import { parseEventByType, surveyGenerationDataSchema, surveyStepSavedDataSchema,
   personaRevisedDataSchema, personaApprovedDataSchema,
@@ -240,14 +240,14 @@ export async function savedCommand(options: ChatOptions, memberId: string, comma
 }
 export function decryptAnswers(options: OnboardingOptions, memberId: string, event: EventEnvelope) {
   const data = surveyStepSavedDataSchema.parse(event.data);
-  const text = options.keys.decrypt(options.silo, `personal:${memberId}`, data);
+  const text = options.keys.decrypt(options.silo, onboardingKeyIdentity(memberId), data);
   const answers: unknown = JSON.parse(text);
   return answers;
 }
 export function decryptPersona(options: OnboardingOptions, memberId: string, event: EventEnvelope) {
   const data = personaRevisedDataSchema.parse(event.data);
   const encrypted = { ciphertext: data.encrypted, keyId: data.keyRef };
-  return options.keys.decrypt(options.silo, `personal:${memberId}`, encrypted);
+  return options.keys.decrypt(options.silo, onboardingKeyIdentity(memberId), encrypted);
 }
 export async function personaEvent(options: ChatOptions, memberId: string,
   reference: PersonaReference) {

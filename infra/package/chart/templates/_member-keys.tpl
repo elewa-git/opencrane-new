@@ -5,6 +5,12 @@
 {{- end }}
 {{- end }}
 
+{{- define "opencrane.memberKeyMounts" -}}
+{{- range .volumes }}
+- { name: {{ . }}, mountPath: /var/lib/opencrane/{{ . }}, readOnly: {{ $.readOnly }} }
+{{- end }}
+{{- end }}
+
 {{- define "opencrane.memberKeyInit" -}}
 - name: {{ .name }}
   image: {{ .image | quote }}

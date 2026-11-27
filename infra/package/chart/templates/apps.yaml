@@ -142,10 +142,8 @@ spec:
             - { name: NATS_INBOX_PREFIX, value: _INBOX.projection }
             {{- end }}
             - { name: PILOT_RESTORE_READ_ONLY, value: {{ .Values.pilotRestore.enabled | quote }} }
-            {{- if not .Values.pilotRestore.enabled }}
             - { name: PERSONAL_KEY_DIRECTORY, value: /var/lib/opencrane/personal-secrets/keys }
             {{- include "opencrane.memoryKeyEnvironment" . | nindent 12 }}
-            {{- end }}
 {{- if eq (toString .Values.models.mode) "provider" }}
             - { name: PROVIDER_SECRETS_DIR, value: "/var/lib/opencrane/provider-secrets/keys" }
 {{- end }}
@@ -167,10 +165,9 @@ spec:
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
-            {{- if not .Values.pilotRestore.enabled }}
-            - { name: personal-secrets, mountPath: /var/lib/opencrane/personal-secrets }
-            - { name: memory-secrets, mountPath: /var/lib/opencrane/memory-secrets }
-            {{- end }}
+            {{- $keyMounts := dict "volumes" (list "personal-secrets" "memory-secrets")
+              "readOnly" .Values.pilotRestore.enabled }}
+            {{- include "opencrane.memberKeyMounts" $keyMounts | nindent 12 }}
             {{- if .Values.exposure.public.enabled }}
             - { name: bootstrap-token, mountPath: /var/lib/opencrane/bootstrap, readOnly: true }
             {{- end }}
@@ -266,9 +263,7 @@ spec:
         - name: provider-secrets
           persistentVolumeClaim: { claimName: provider-secrets }
 {{- end }}
-        {{- if not .Values.pilotRestore.enabled }}
         {{- include "opencrane.memberKeyVolumes" (list "personal-secrets" "memory-secrets") | nindent 8 }}
-        {{- end }}
         - name: model-state
           emptyDir: {}
         - name: kubeconfig
