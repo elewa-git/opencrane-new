@@ -5,7 +5,7 @@ import { Pool } from 'pg';
 import { connectEventStore, type StoredEvent } from '@opencrane/event-store';
 import { getEventDefinition, memberInvitedDataSchema, memberJoinedDataSchema, parseEventByType } from '@opencrane/events';
 import { memberAuthorisation } from '@opencrane/authz';
-import { currentMembership, seedOwnership } from '@opencrane/models';
+import { currentMembership, seedDevelopmentOwnership } from '@opencrane/models';
 import { readEnv, readOwnerEmail, root } from './config.ts';
 
 // Create the development owner when a fresh local stack has no owner yet.
@@ -93,7 +93,7 @@ try {
   });
   await waitFor(async () => (await authz.check(memberId, 'owner')).allowed);
   // Apply ownership permissions before startup lets the owner send commands.
-  await seedOwnership(events.store, settings['SILO_ID']!);
+  await seedDevelopmentOwnership(events.store, settings['SILO_ID']!);
   await waitFor(ownershipApplied);
   const row = await member();
   console.log(`PASS dev-only owner bootstrap: ${row?.member_id} ${row?.role}; OpenFGA owner=true`);

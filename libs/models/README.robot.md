@@ -2216,9 +2216,12 @@ price-table fields. It sends no provider request.
 
 `currentMembership` accepts a separate history deadline for reads before a write access check.
 
-[`seedOwnership`](../../docs/api/ownership.md#migration-and-replay) shares one
-ten-second limit across reads, waits and writes. After a competing write, it
-pauses briefly and reads the owners again before trying to save them.
+[`seedOwnership`](../../docs/api/ownership.md#migration-and-replay) uses up to
+five attempts at server startup and after a token claim. Each attempt starts a
+new ten-second read limit and uses the event store's own append limit.
+`seedDevelopmentOwnership` shares one ten-second limit across reads, waits and
+writes. It waits up to 100 milliseconds after a competing write, then reads the
+owners again before trying to save them.
 
 New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).
 

@@ -1,5 +1,5 @@
 import { registerHandler } from '@opencrane/handlers';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import type { AppendCommand, EventStore, StoredEvent } from '@opencrane/event-store';
 import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
   ownershipSteppedDownSchema, ownershipConfirmedSchema } from '@opencrane/events';
 import { envelope } from './budget-migration.ts';
@@ -78,10 +78,22 @@ function confirmOwner(event: StoredEvent['event'], pending: Map<string, string>,
   owners.add(confirmed.memberId);
 }
 
+const ownershipSeedMs = 10_000;
+
 export async function seedOwnership(store: EventStore, silo: string) {
-  const deadline = store.clock.now() + 10_000;
-  while (store.clock.now() < deadline) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const deadline = store.clock.now() + ownershipSeedMs;
     if (await seedAttempt(store, silo, deadline)) {
+      return;
+    }
+  }
+  throw new Error('Ownership migration conflicted after five attempts');
+}
+
+export async function seedDevelopmentOwnership(store: EventStore, silo: string) {
+  const deadline = store.clock.now() + ownershipSeedMs;
+  while (store.clock.now() < deadline) {
+    if (await seedAttempt(store, silo, deadline, deadline)) {
       return;
     }
     // Give startup writes time to finish before reading the member list again.
@@ -93,16 +105,18 @@ export async function seedOwnership(store: EventStore, silo: string) {
   }
   throw new Error('Timed out waiting for ownership migration conflicts to settle');
 }
-async function seedAttempt(store: EventStore, silo: string, deadline: number) {
+async function seedAttempt(store: EventStore, silo: string, readDeadline: number,
+  appendDeadline?: number) {
   const subject = ownershipSubject(silo);
-  const head = await store.head(undefined, deadline);
-  const existing = await history(store, subject, silo, deadline);
+  // Capture the log position first so later changes cannot enter this owner list.
+  const logPosition = await store.head(undefined, readDeadline);
+  const existing = await history(store, subject, silo, readDeadline);
   if (existing.length) {
     return true;
   }
   const roles = new Map<string, string>();
-  for await (const row of store.readStream('member-*', 1, deadline)) {
-    if (row.sequence > head) {
+  for await (const row of store.readStream('member-*', 1, readDeadline)) {
+    if (row.sequence > logPosition) {
       break;
     }
     if (row.event.silo !== silo) {
@@ -130,7 +144,11 @@ async function seedAttempt(store: EventStore, silo: string, deadline: number) {
   ownerIds.sort();
   const event = envelope(silo, subject, 'ownership.seeded', { ownerIds },
     `ownership-seed-${silo}`);
-  const command = { event, expectedSequence: 0, expectedGlobalSequence: head, deadline };
+  // Refuse the save if a later write could have changed the owner list.
+  const command: AppendCommand = { event, expectedSequence: 0, expectedGlobalSequence: logPosition };
+  if (appendDeadline !== undefined) {
+    command.deadline = appendDeadline;
+  }
   const result = await store.append(command);
   if (result.status === 'unavailable') {
     throw new Error('Ownership migration unavailable', { cause: result.cause });

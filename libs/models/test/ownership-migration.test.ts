@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import type { AppendResult, EventStore } from '@opencrane/event-store';
 import { event, manualClock, natsFixture } from '@opencrane/event-store/testing';
-import { history, seedOwnership as seedDevelopmentOwnership, ownershipSeedHandler } from '../src/index.ts';
+import { history, seedDevelopmentOwnership, ownershipSeedHandler } from '../src/index.ts';
 import { competeWithOwnershipSeed, joinOwners, watchOwnershipWaits } from './support/ownership-migration.ts';
 
 const silo = 'test';
@@ -163,7 +163,7 @@ async function doesNotWaitAfterExpiry() {
     await nats.close();
   }
 }
-function isRetryWait([, signal]: [number, AbortSignal?]) {
+function isRetryWait([, signal]: Parameters<EventStore['clock']['sleep']>) {
   return signal === undefined;
 }
 it('does not start another wait when the last conflict uses the full budget', doesNotWaitAfterExpiry);

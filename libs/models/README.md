@@ -45,8 +45,8 @@ flowchart LR
 - Prepare gateway settings while unchanged tool checks run, and check that the running
   gateway has accepted them.
 - Record ownership and model grants, and provide safe spending and account records.
-  Startup rereads the owners if another event is saved while it prepares the
-  first ownership record.
+  Ownership setup rereads the owners if another event arrives before the first
+  ownership record is saved. This covers both development startup and token claims.
 - Check private image scan results and support cleanup of stored credentials.
 
 Not built yet:
