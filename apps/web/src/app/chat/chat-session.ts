@@ -72,7 +72,9 @@ export class ChatSession implements OnDestroy {
   readonly olderLoading = signal(false);
   readonly olderFailure = signal(false);
   readonly denied = signal(false);
-  readonly queued = signal(false);
+  private readonly sendFailure = signal<'unsent' | 'unknown' | undefined>(undefined);
+  readonly queued = computed(() => this.sendFailure() !== undefined);
+  readonly messageOutcomeUnknown = computed(() => this.sendFailure() === 'unknown');
   readonly connected = this.socket.isConnected;
   private readonly stopState: ChatSessionStop = new ChatSessionStop(this.stopScreen());
   readonly turns = computed(() =>
@@ -275,7 +277,7 @@ export class ChatSession implements OnDestroy {
     try {
       await this.deliver(revision);
       if (revision !== this.revision) return false;
-      this.queued.set(false);
+      this.sendFailure.set(undefined);
       this.uploadBatch.sent();
       this.executionMode.set('restricted');
       return true;
@@ -286,13 +288,12 @@ export class ChatSession implements OnDestroy {
     finally { if (revision === this.revision) this.busy.set(false); }
   }
   private sendFailed(error: unknown): void {
-    if (error instanceof MessageUnconfirmed) this.queued.set(true);
-    if (this.queued() || isChatAccessFailure(error)) {
-      this.fail(error);
-      return;
+    if (error instanceof MessageUnconfirmed) {
+      this.sendFailure.set('unknown');
+    } else if (!this.queued()) {
+      this.sendFailure.set('unsent');
     }
-    this.pending = undefined;
-    this.error.set('× Could not send the message. Your draft is still on this page.');
+    this.fail(error);
   }
   private canSend(text: string): boolean {
     const hasContent = Boolean(text.trim() || this.uploadBatch.readyIds().length);
@@ -470,7 +471,7 @@ export class ChatSession implements OnDestroy {
     const command = this.pending!;
     await this.ensureConversation(command.conversationId);
     if (revision !== this.revision) return;
-    const confirmed = this.queued() && await savedChatChange(command);
+    const confirmed = this.messageOutcomeUnknown() && await savedChatChange(command);
     if (revision !== this.revision) return;
     if (!confirmed) {
       await sendChatMessage(command);
@@ -750,7 +751,7 @@ export class ChatSession implements OnDestroy {
     this.readMarker.purge();
     this.pending = undefined;
     this.stopState.reset();
-    this.queued.set(false);
+    this.sendFailure.set(undefined);
     this.busy.set(false);
     this.announcement.set('');
     this.reconnectedAt.set('');
