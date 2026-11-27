@@ -1,9 +1,38 @@
 # Fresh development stack journey
 
-**PARTIAL** on 27 November 2026. The rebased source was
-`5e76409198cbd17950dddcf99564ce28a2c2ba73`, based on `f70213d5f`.
+## Fresh CORE rerun
+
+**PASS** on 27 November 2026 at `495a4b475fabde9ebf7774a9db27b07d359ee24f`.
+
+Slot 1 was free and one-minute load stayed below 6 for five minutes before
+reservation. The one default `infra/dev-stack/up.sh --fresh --id 1` run started
+at 06:31:55 UTC with the stand-in model. Default owner setup and website
+readiness passed. The run took 15 minutes 53 seconds including teardown.
+
+| Browser width | First reply streamed | First reply completed | CORE |
+| --- | ---: | ---: | --- |
+| 1280 px | 5.562 s | 8.312 s | PASS |
+| 390 px | 12.838 s | 15.112 s | PASS |
+
+The one-minute load peaked at 33.40 during the run. The earlier 30-second
+streaming-indicator timeout did not recur. Both widths passed chat and
+reload, stopping a reply, PDF upload and preview, and desktop access
+and removal. The launcher also passed private history, spending, sign-out,
+scanner refusal and projection replay checks. Slot 1 reported healthy,
+then free after `infra/dev-stack/down.sh --id 1`.
+
+| Evidence | 1280 px | 390 px |
+| --- | --- | --- |
+| Saved and stopped replies | [Workspace](screenshots/core-workspace-1280.png) | [Workspace](screenshots/core-workspace-390.png) |
+| Desktop access removed | [Cleared view](screenshots/core-conversation-revoked-1280.png) | [Cleared view](screenshots/core-conversation-revoked-390.png) |
+
+Private run records include `slot-wait.log`, `host-load.log`, `startup.log`,
+`status.log` and `down.log`. A separate token-claim run was **NOT RUN**.
 
 ## Rebased run
+
+**PARTIAL** on 27 November 2026. The rebased source was
+`5e76409198cbd17950dddcf99564ce28a2c2ba73`, based on `f70213d5f`.
 
 1. The one-minute host load stayed below 6 for five minutes before slot 1 was
    reserved with `infra/dev-stack/claim.sh --id 1` at 05:24 UTC.
