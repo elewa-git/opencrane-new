@@ -1,0 +1,64 @@
+{
+  "journey": "NOT RUN",
+  "sourceCommit": "267a650b368e41764854819cfa20c11d055b55b7",
+  "slot": 1,
+  "wait": {
+    "startedAt": "2026-11-27T18:06:00Z",
+    "deadline": "2026-11-27T20:06:00Z",
+    "limitMinutes": 120,
+    "limitReached": true,
+    "samples": 194,
+    "freeSamples": 58,
+    "busySamples": 136,
+    "lastSampleAt": "2026-11-27T20:05:33Z",
+    "lastSlotFree": false,
+    "lastLoad": 10.09,
+    "loadWindowCompleted": true
+  },
+  "claimAttempts": 1,
+  "claimsAcquired": 0,
+  "installStarted": false,
+  "browserWidths": {
+    "1280": "NOT RUN",
+    "390": "NOT RUN"
+  },
+  "realFailureMessage": "NOT RUN",
+  "approvals": {
+    "application": {
+      "runId": 46046864660,
+      "result": "PASS"
+    },
+    "scanner": {
+      "runId": 46046869143,
+      "result": "PASS"
+    }
+  },
+  "productCi": {
+    "runId": 46046823012,
+    "result": "PASS"
+  },
+  "localChecks": {
+    "serverSharedDatabase": {
+      "runs": 2,
+      "testsPerRun": 1,
+      "result": "PASS"
+    },
+    "workspace": {
+      "runs": 2,
+      "testsPerRun": 119,
+      "result": "PASS"
+    },
+    "chromiumFixtures": {
+      "runs": 2,
+      "result": "PASS"
+    },
+    "typecheck": "PASS",
+    "eventCatalogue": "PASS",
+    "knip": "PASS",
+    "changedCodeEslint": "PASS",
+    "markdown": "PASS",
+    "readmes": "PASS",
+    "changelog": "PASS",
+    "wholeStreamReads": "PASS"
+  }
+}
