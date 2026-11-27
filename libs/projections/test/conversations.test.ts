@@ -38,6 +38,9 @@ async function replaysToolFeed() {
     const finished = { ...started, status: 'completed', durationMs: 75 };
     await append('agent.tool_call_started', 'conversation-chat', started);
     await append('agent.tool_call_finished', 'conversation-chat', finished);
+    await append('agent.file_publication_started', 'conversation-chat', {
+      conversationId: 'chat', turnId: 'turn', digest: 'a'.repeat(64),
+    });
     await append('agent.private_exited', 'conversation-chat', {
       conversationId: 'chat', turnId: 'turn',
     });
@@ -63,4 +66,5 @@ async function replaysToolFeed() {
     await nats.close();
   }
 }
-it('copies only safe MCP decision fields and rebuilds the same tool feed from events', replaysToolFeed);
+it('keeps internal file publication out of the readable tool feed, including replay',
+  replaysToolFeed);
