@@ -1,12 +1,12 @@
 # Chat link journey
 
 Date: 27 November 2026.
-Source: `446ea3490e1e57efba3e5be6cb7e628a661fbd19`.
+Source: `5b9a55243246e811dc2908e13e7736c60a773ea5`.
 
-Journey on a fresh dev stack: **NOT RUN** for the corrected source.
-The first attempt on the earlier source failed. Its root cause is fixed and tested,
-but the repeat run could not claim the only available secondary slot within the
-permitted two-hour availability wait. The capability still needs live qualification.
+Focused chat-links journey on a fresh dev stack: **PASS** at 390 px and 1280 px.
+The bundled startup journey also passed. A separate standard `journey.sh` run
+failed with only a generic failure available in its saved log; it does not replace
+the focused journey result.
 
 ## Local checks
 
@@ -75,43 +75,54 @@ it. A real PostgreSQL and NATS test reproduced the extra feed row before the
 projection rule was corrected. The corrected test and the server display checks
 then passed twice: 21 checks per run. A repeat attempt must use another fresh stack.
 
-## Corrected-source availability wait
+## Corrected-source live run
 
-1. Repeated the local checks after correcting the publication projection.
-2. Waited for slot 1 again. Slot 2 is the live pilot and was excluded.
-3. Kept the total availability wait within two hours across both attempts.
-   The box was reserved until 18:00 UTC; availability checks began after that.
-4. Tried to claim slot 1 when it was free and the load had stayed below 6 for
-   five minutes. The slot lock refused the claim. An attempt at 21:08 UTC was
-   followed by the required two-minute wait.
-5. Another task started a package in slot 1 and held its lock. The read-only status
-   check then waited for that lock. Ended only this task's wait helper and its
-   pending status check at the availability deadline. No second stack was claimed,
-   started or stopped by this task.
+Source: `5b9a55243246e811dc2908e13e7736c60a773ea5`.
 
-The refusal came from the secondary slot lock in `infra/dev-stack/run.sh`.
-No guard was changed or bypassed. No link-specific screenshot was captured, so
-neither width, keyboard activation nor file-opening behaviour has a live PASS.
-The first stack was already torn down before this wait. No stack remains owned
-by this task.
+The permitted availability wait began at 21:17 UTC. Load first stayed below 6
+for five minutes, but the slot 1 claim helper kept refusing because its directory
+was not owned by this worktree. At 23:06 UTC the helper returned slot 1. The stack
+was started with `up.sh --fresh --id 1` and `DEV_STACK_ID=1`. No command was run
+against slot 2, the live pilot. Fresh startup passed; its bundled core browser
+journey also passed. The stack was healthy before the focused run.
 
-## Remaining live work
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Fresh secondary stack startup, slot 1 | PASS | Startup completed and service health checks were green. |
+| Bundled core browser journey | PASS | Startup checked sign-in, uploads, chat, permissions and both widths. |
+| Separate standard `journey.sh` run | FAIL | Launcher returned a generic failure; safe failure category was not recoverable from its log. |
+| Chat links, 390 px | PASS | Member and assistant links, punctuation, code, unsafe schemes, keyboard, wrapping, shared files, app navigation, history, reload and refusal. |
+| Chat links, 1280 px | PASS | Same checks as at 390 px. |
 
-Run `chat-links-journey.ts` against this corrected source on a fresh secondary stack
-at 1280 px and 390 px. It must check both message types, keyboard use, file access,
-unsafe addresses, code, wrapping, app navigation, Back, reload and unshared-file
-refusal. Capture the screenshots and release the claimed stack.
+The focused driver was `nice -n 10 node --experimental-strip-types
+infra/dev-stack/chat-links-journey.ts` with `DEV_STACK_ID=1`. It passed all
+requested cases at both widths. The member and assistant messages each linked
+bare HTTPS and `www` addresses, an email address, and shared `/workspace/artifacts`
+paths. The driver also checked same-origin navigation, Back, reload, keyboard
+activation, wrapping and unshared-file refusal. It left `javascript:`, `http:`,
+`file:`, `data:`, unknown schemes and code unlinked. Screenshots and the small
+result JSON are beside this receipt. Startup and service logs from the failed
+separate standard journey are retained in the private task receipt on the box.
 
-Existing installations whose read tables contain publication-start records need
-the documented offline conversation rebuild with readers and the worker stopped.
-No existing installation or pilot was rebuilt here.
+The pilot was not inspected. The rebuild condition applies to an installation
+only when its conversation read tables contain publication-start records; this
+run cannot establish whether the pilot has those rows. If an operator confirms
+the pilot has affected rows, stop conversation readers and workers, set the documented
+`DATABASE_URL` and projection-reader NATS settings, then run:
+
+```sh
+npm run replay -- conversations --confirm-conversations-stopped
+```
+
+Keep readers stopped until replay succeeds, then reapply any separately configured
+table grants before restarting them. The command takes the conversations advisory
+lock and rebuilds feed, metadata and participant intervals through a fixed event
+position. See [the operator runbook](../../../apps/ops/README.robot.md#rebuild-conversations-offline).
 
 The driver is `infra/dev-stack/chat-links-journey.ts`. It uses real sign-in,
 chat commands, computer file publication and file reads with the free model
 stand-in. Only the external example website has a browser fixture. It writes
 screenshots directly to this receipt folder, outside the slot directory.
 
-Raw command output and availability samples stay in the private task receipt.
-The availability file is `slot-wait.jsonl` and `slot-wait-second.jsonl`; gate outputs are named
-`links-1225-*.log`. They are not committed. Independent review is left to the
-orchestrator.
+Raw command output and service logs stay in the private task receipt. Independent
+review is left to the orchestrator.
