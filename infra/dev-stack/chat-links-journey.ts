@@ -42,7 +42,8 @@ async function remotePage(route: Route): Promise<void> {
 }
 
 async function checkMessage(message: Locator): Promise<void> {
-  const links = message.locator('a');
+  const markdown = message.locator('oc-assistant-markdown');
+  const links = markdown.locator('a');
   assert.equal(await links.count(), 5);
   const external = message.locator('a[target="_blank"]');
   assert.equal(await external.count(), 4);
