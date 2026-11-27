@@ -358,6 +358,41 @@ async function readsAsNewOwner() {
   }
 }
 
+async function waitsForOwnershipSavedDuringRead() {
+  vi.stubEnv('LOG_LEVEL', 'error');
+  await saveFirstOwner();
+  const reader = await memberReader();
+  try {
+    await reader.applyMember(firstOwnerId);
+    const readEvents = nats.store.readStream.bind(nats.store);
+    let ownership: Awaited<ReturnType<typeof saveOwnershipSeed>> | undefined;
+    let saving = false;
+
+    async function* readStream(filter: string, from?: number, deadline?: number) {
+      yield* readEvents(filter, from, deadline);
+      if (filter === 'ownership-acme' && !saving) {
+        // Save ownership after this read has seen the empty stream.
+        saving = true;
+        ownership = await saveOwnershipSeed(firstOwnerId);
+      }
+    }
+
+    vi.spyOn(nats.store, 'readStream').mockImplementation(readStream);
+    const applying = await reader.read('/api/members');
+    expect(applying.statusCode, reader.logs.join('')).toBe(425);
+    expect(applying.json()).toEqual({ status: 'access_applying' });
+    if (!ownership) throw new Error('Expected the ownership worker to save the seed');
+    await reader.apply(ownership);
+
+    const ready = await reader.read('/api/members');
+    expect(ready.statusCode).toBe(200);
+    const directory = memberDirectorySchema.parse(ready.json());
+    expect(directory.permissions.invite).toBe(true);
+  } finally {
+    await reader.close();
+  }
+}
+
 type GuardCase = 'issuer' | 'subject' | 'pending' | 'legacy' | 'superseded' | 'removed'
   | 'wrong stream';
 const guardCases: GuardCase[] = [
@@ -558,6 +593,8 @@ function firstMemberReads() {
     checksIndependentOwnershipReceipt);
   it('checks live permission even after the join receipt is present', checksLivePermissionAfterJoinReceipt);
   it('lets the first owner wait for their saved claim and then open People', readsAsNewOwner);
+  it('lets the first owner wait when ownership is saved during the read',
+    waitsForOwnershipSavedDuringRead);
   it('logs a safe cause and returns 503 when the first owner’s ownership receipt is unavailable',
     checksFirstOwnerReceiptOutage);
 }

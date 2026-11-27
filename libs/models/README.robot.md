@@ -1970,7 +1970,9 @@ The server owns the [bound invitation checks](../../apps/server/README.robot.md#
 `readActiveMember(..., requiredRole = 'member')` checks events, ownership and IAM once.
 `'admin'` requires Owner/Admin; reads use no `authorityFence` or conversation activity.
 `readActiveMember` and `groupMembership` accept an optional last argument that checks
-whether OpenFGA has applied a saved event. Memory reads use it to avoid asking about
+whether OpenFGA has applied a saved event. `readActiveMember` passes the event type
+as well as its ID, so the server can recognise a pending first-owner ownership event.
+Memory reads use the check to avoid asking about
 the same event twice in one request. The next request checks again. Other callers
 ask OpenFGA directly; spending and write deadlines remain unchanged.
 

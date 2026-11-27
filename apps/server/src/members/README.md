@@ -31,7 +31,9 @@ An admin checks an invitation email without looking the person up in the sign-in
 A lost invitation reply can be checked by its original caller; another admin cannot read that command's confirmation. Refusal records keep a fixed-length hash of the request id. Organisation replies tell browsers and caches not to save private information.
 
 Owners and admins receive the member directory, including emails and current management choices. Ordinary members receive only a small header for one person. After an invitation is accepted or the first owner claims the installation, reads can tell
-the website that access is still being set up. The server checks saved membership changes
+the website that access is still being set up. This includes the short wait when
+the worker saves the first owner's ownership change and OpenFGA is still applying it.
+The server checks saved membership changes
 so a removed member ID or two active IDs for one account cannot grant access. Active non-owner targets can have their role changed or be removed, including the caller; owners use ownership requests instead. An appointment remains pending until the successor confirms. Competing appointments stay applying until permissions catch up. Group and ownership reads load history before checking current access: removal during a slow read prevents the reply, while unrelated chat activity does not interrupt it. The website exposes these settings in People & groups.
 
 Access reviews use an index of saved grants, groups and assistants. They check new indexed history without rereading for unrelated read acknowledgements. Removed access stays incomplete until permission confirmations arrive. Reviews stop above 100 groups or 500 distinct people, and remain incomplete after an upgrade until the index has been rebuilt. Private retained history appears only as counts and dates. A complete review permits removal. Other people can keep posting messages while departure cleanup proceeds; a lost removal reply can be recovered from saved changes.

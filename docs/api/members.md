@@ -10,7 +10,9 @@ Reads use `no-store`, verified session identity, current events and IAM; they ap
 
 For 30 seconds after a saved invitation join or first-owner claim, these reads may
 return HTTP 425 with `{ "status": "access_applying" }`. This means the member table
-or OpenFGA is still applying the caller's access. The reply contains no member data.
+or OpenFGA is still applying the caller's access. For the first owner it covers
+a pending ownership event, including one saved while the read is in progress.
+The reply contains no member data.
 A signed-in person who lacks the required role or permission receives 403. The
 directory also returns 403 for an ordinary member whose join is applying, an
 account with two active memberships or an account that cannot be confirmed within
@@ -26,7 +28,9 @@ The access and departure reads are described below.
 The Members tab uses the directory read for search and bounded pages. It shows
 only current counts. It clears earlier rows and hides **Invite people** on a 425
 with the `access_applying` body. It retries that reply up to ten times, 500 ms apart
-and within ten seconds. Leaving the page cancels the read. The tab also clears
+and within ten seconds. If the last reply still says access is applying, the tab
+shows that it is waiting and offers **Check access**. Leaving the page cancels the read.
+The tab also clears
 rows on 401 or 403 and keeps them after an ordinary temporary failure. Each
 member name opens the detail page. That page reads
 the member first and reads access separately only for a full admin detail. A

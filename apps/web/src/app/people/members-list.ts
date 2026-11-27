@@ -7,7 +7,7 @@ import { checkTimeLabel } from './group-wording';
 import { searchMembers, type MemberDirectory } from './member-search-api';
 
 type Member = MemberDirectory['rows'][number];
-type State = 'loading' | 'ready' | 'failed' | 'access';
+type State = 'loading' | 'ready' | 'failed' | 'access' | 'applying';
 
 @Component({
   selector: 'oc-members-list',
@@ -113,6 +113,10 @@ export class MembersList implements OnInit, OnDestroy {
     if (generation !== this.generation) return;
     this.readInFlight = false;
     this.loadingMore.set(false);
+    if (result.kind === 'access_applying') {
+      this.state.set('applying');
+      return;
+    }
     if (result.kind !== 'ok') {
       this.state.set('failed');
       return;

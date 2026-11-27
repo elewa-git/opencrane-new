@@ -23,7 +23,7 @@ class InvalidMemberRequest extends Error {
   }
 }
 
-class MemberJoinApplying extends Error {}
+class MemberAdmissionApplying extends Error {}
 class MemberPermissionsUnavailable extends Error {
   constructor(cause: Error) {
     super('IAM unavailable', { cause });
@@ -82,7 +82,7 @@ export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
       if (reply.sent) return reply;
       if (error instanceof InvalidMemberRequest) return reply.code(400).send({ status: 'refused' });
       if (error instanceof MemberAccessRefused) return reply.code(403).send({ status: 'refused' });
-      if (error instanceof MemberJoinApplying) {
+      if (error instanceof MemberAdmissionApplying) {
         return reply.code(425).send({ status: 'access_applying' });
       }
       const reason = memberReadFailure(error);
@@ -114,13 +114,13 @@ async function authoriseRead(options: GroupOptions, account: MemberAccount,
   if (!identity.projectedJoined) {
     // Trust a recent saved admission to ask for a wait while the member table is behind it.
     if (admission && admission.sequence > identity.projectedSequence) {
-      throw new MemberJoinApplying();
+      throw new MemberAdmissionApplying();
     }
     throw new MemberAccessRefused('Active membership required');
   }
 
   const requiredRole = management ? 'admin' : 'member';
-  const applied = await requireAdmissionApplied(options, admission, membership);
+  const applied = await requireAdmissionApplied(options, admission);
   const role = await readActiveMember(store, binding, caller, requiredRole, applied);
   return { role, management };
 }
@@ -152,29 +152,25 @@ function recentAdmission(membership: Membership, caller: string, now: Date) {
 }
 
 async function requireAdmissionApplied(options: GroupOptions,
-  admission: ReturnType<typeof recentAdmission>, membership: Membership) {
+  admission: ReturnType<typeof recentAdmission>) {
   if (!admission) {
     return undefined;
   }
   const auth = memberAuthorisation(options.binding);
   const admissionId = admission.event.id;
   await requireReceipt(auth, admissionId);
+  const firstOwnerClaim = admission.event.type === 'silo.owner_bootstrapped';
 
-  let ownerSeedId: string | undefined;
-  if (admission.event.type === 'silo.owner_bootstrapped') {
-    const seed = membership.ownership.find(isOwnershipSeed);
-    ownerSeedId = seed?.event.id;
-  }
-
-  async function applied(eventId: string) {
+  async function applied(eventId: string, eventType: string) {
     // Reuse only this receipt. Ownership and other changes have their own receipts.
     if (eventId === admissionId) {
       return true;
     }
-    if (eventId !== ownerSeedId) {
-      return auth.applied(eventId);
+    // Check the ownership seed seen by the final read. The worker may have just saved it.
+    if (firstOwnerClaim && eventType === 'ownership.seeded') {
+      return requireReceipt(auth, eventId);
     }
-    return requireReceipt(auth, eventId);
+    return auth.applied(eventId);
   }
   return applied;
 }
@@ -185,13 +181,9 @@ async function requireReceipt(auth: ReturnType<typeof memberAuthorisation>, even
     throw new MemberPermissionsUnavailable(receipt.error);
   }
   if (!receipt.allowed) {
-    throw new MemberJoinApplying();
+    throw new MemberAdmissionApplying();
   }
   return true;
-}
-
-function isOwnershipSeed(row: Membership['ownership'][number]) {
-  return row.event.type === 'ownership.seeded';
 }
 
 function permissionDiagnostic(error: unknown) {
