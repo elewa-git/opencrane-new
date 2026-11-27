@@ -86,6 +86,12 @@ describe('loadAuthConfig', () => {
     expect(local).toMatchObject({ cookieName: 'custom_session_v2', legacyCookieName: 'custom_session' });
   });
 
+  it('keeps an HTTPS session cookie name that already starts with __Host-', function hostCookie() {
+    const config = loadAuthConfig({ ...requiredEnv, OIDC_COOKIE_NAME: '__Host-custom_session' });
+    expect(config.cookieName).toBe('__Host-custom_session');
+    expect(config.legacyCookieName).toBeUndefined();
+  });
+
   it('reads the step-up window and the expected organisation', () => {
     const config = loadAuthConfig({ ...requiredEnv, OIDC_STEP_UP_MAX_AGE_SECONDS: '90', OIDC_EXPECTED_ORG_ID: 'org-9' });
     expect(config.stepUpMaxAgeSeconds).toBe(90);

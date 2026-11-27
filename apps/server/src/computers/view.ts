@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket, type RawData } from 'ws';
 import type { FastifyInstance } from 'fastify';
-import { decodeSession, isOrganisationSession, parseCookieHeader, type AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, readSessionCookie, type AuthConfig } from '@opencrane/auth';
 import type { connectMemberFeed } from '@opencrane/projections';
 import { envelope } from '@opencrane/models';
 import { viewAccess, ViewCheckUnavailable, type ViewAccessOptions } from './view-access.ts';
@@ -69,12 +69,10 @@ type ViewRefusalReason = 'admission' | 'upgrade' | 'capacity' | 'unavailable';
 
 // Check sign-in separately so an Origin refusal still records a signed-in attempt.
 function readViewSession(app: FastifyInstance, config: AuthConfig, headers: IncomingHttpHeaders) {
-  const cookie = parseCookieHeader(headers.cookie)[config.cookieName];
-  if (!cookie) return undefined;
   try {
-    const session = decodeSession(config, cookie);
-    if (!isOrganisationSession(config, session)) return undefined;
-    return { session, cookie };
+    const selected = readSessionCookie(config, headers.cookie);
+    if (!selected || !isOrganisationSession(config, selected.session)) return undefined;
+    return selected;
   } catch (error) {
     app.log.debug({ operation: 'view.session', err: error }, 'Invalid view session');
     return undefined;

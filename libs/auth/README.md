@@ -55,6 +55,7 @@ flowchart LR
 
 1. **A person signs in.** The server gets a sign-in link and sends the browser to
    Zitadel. The library checks the response and prepares a protected session cookie.
+   On HTTPS, the browser restricts this cookie to the whole website at that host.
 2. **A person signs out.** The server clears the cookie and sends the browser to
    Zitadel to end its session.
 3. **A person confirms a sensitive action.** If their sign-in is too old, the

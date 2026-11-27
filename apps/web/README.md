@@ -25,6 +25,7 @@ flowchart LR
 ## What it is responsible for
 
 - Show sign-in, first-owner setup, invitation acceptance, the welcome survey and private persona review.
+  If a session expires during acceptance, offer sign-in with a return link to the invitation.
 - Show the installation's name and provide sign-out from desktop and phone menus.
 - Offer Settings to owners and admins.
 - Support assistant sessions and direct or group chats with colleagues.

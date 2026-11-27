@@ -50,6 +50,7 @@ Not built yet:
 ## Processes it handles
 
 1. **A person joins.** The sign-in service checks their identity.
+   A fresh sign-in gives the browser a session for the current installation.
    The server records their first-owner claim or accepted invitation.
 2. **A person sends a message.** The server saves readable prose in the event log and sends assistant work to the
    right computer. Replies arrive as live updates, and the person can stop the work.

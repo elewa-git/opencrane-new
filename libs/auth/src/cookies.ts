@@ -33,21 +33,21 @@ export function clearCookie(name: string, attrs: Pick<CookieAttributes, 'path' |
   return serializeCookie(name, '', { ...attrs, maxAgeSeconds: 0 });
 }
 
-/** Parses a request's `Cookie` header into a name -> value map. */
-export function parseCookieHeader(header: string | undefined): Record<string, string> {
-  const cookies: Record<string, string> = {};
+/** Reads every value of a named cookie in the order the browser sent them. */
+export function cookieValues(header: string | undefined, name: string): string[] {
+  const values: string[] = [];
   if (!header) {
-    return cookies;
+    return values;
   }
   for (const part of header.split(';')) {
-    const eq = part.indexOf('=');
-    if (eq === -1) continue;
-    const name = part.slice(0, eq).trim();
-    const rawValue = part.slice(eq + 1).trim();
-    if (!name) continue;
-    cookies[name] = safeDecode(rawValue);
+    const separator = part.indexOf('=');
+    if (separator === -1) continue;
+    const cookieName = part.slice(0, separator).trim();
+    if (cookieName !== name) continue;
+    const rawValue = part.slice(separator + 1).trim();
+    values.push(safeDecode(rawValue));
   }
-  return cookies;
+  return values;
 }
 
 // A tampered-with cookie can contain a stray "%" that is not a valid escape
