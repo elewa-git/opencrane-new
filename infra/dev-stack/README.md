@@ -4,7 +4,7 @@
 
 This package starts a full local copy of OpenCrane for development and testing.
 It brings the apps and services together and checks product journeys.
-The checks use a browser to sign in, chat and reload saved replies.
+The browser checks sign in, skip setup for a test member, chat and reload replies.
 Developers can also check files, spending and organisation settings.
 The focused tool approval driver asks the free model to use a reviewed demo tool
 in a long chat, through the published connection and guarded local TLS transport.
@@ -25,7 +25,7 @@ flowchart LR
   stack["infra/dev-stack<br/>local OpenCrane"] -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
   stack -->|starts and checks services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
-  stack -->|starts apps, checks browser and approvals| apps["Server, website and workers<br/>OpenCrane apps"]
+  stack -->|starts apps and checks welcome, chat and approvals| apps["Server, website and workers<br/>OpenCrane apps"]
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|checks reviewed tool calls through TLS| demo["Demo tool server<br/>synthetic effects"]
   stack -.->|reuses website proxy handling| package
@@ -92,6 +92,8 @@ infra/dev-stack/up.sh --fresh
 infra/dev-stack/status.sh
 infra/dev-stack/down.sh
 ```
+
+`claim.sh --id 1` checks only slot 1 when the other slot needs to stay available.
 
 A fresh start replaces that stack's data and credentials. Always stop the claimed
 stack when finished, including after a failure.

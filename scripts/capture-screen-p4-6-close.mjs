@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
-import { serveWebBuild } from './serve-web-build.mjs';
+import { serveWebBuild, usesApiFixture } from './serve-web-build.mjs';
 import { pageHasNoOverflow, waitForFonts } from './visual-helpers.mjs';
 
 const output = resolve('docs/process/screen-p4-6-close');
@@ -85,7 +85,7 @@ async function serve(kind, closed, commands, checks, route) {
     await route.fulfill({ status: 404, json: {} });
     return;
   }
-  if (url.pathname.startsWith('/api/')) {
+  if (usesApiFixture(url.pathname)) {
     assert.fail(`Unexpected API route: ${url.pathname}`);
   }
   await serveWebBuild(route, build);

@@ -92,7 +92,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
 
   // The auth routes log through app.log, the observability logger above, so
   // the callback URL's entire query is dropped from logs.
-  registerAuthRoutes(app, authConfig);
+  registerAuthRoutes(app, authConfig, options.onboarding);
   registerMemberRoutes(app, authConfig, options.membership);
   registerGroupRoutes(app, authConfig, options.groups);
   registerMemberReads(app, authConfig, options.memberReads);

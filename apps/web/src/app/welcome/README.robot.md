@@ -2,8 +2,14 @@
 
 For people, read [README.md](README.md) first.
 
+Sign-in, invitation acceptance and direct workspace visits read the saved next
+step through `/api/onboarding/entry`. The workspace keeps the requested address
+once setup is finished or skipped.
+
 `/welcome/survey` reads `/api/onboarding` and saves each step with
-`POST /api/onboarding/survey`. The completed survey links to `/welcome/persona`.
+`POST /api/onboarding/survey`. Skip welcome setup uses the same endpoint and
+checks the original command status after an uncertain reply. A confirmed skip
+opens `/workspace`. The completed survey links to `/welcome/persona`.
 When all four steps are saved but `currentRevision` is null, the review route
 sends `POST /api/onboarding/persona` with `operation: revise`, `mode: generate`,
 the survey generation and expected position. A confirmed creation reloads progress.

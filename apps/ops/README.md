@@ -56,7 +56,9 @@ Not built yet:
 3. **A member leaves.** The dispatcher removes groups and personal grants, disables
    their assistant and waits for busy work to finish. It records completion only
    after checking saved outcomes and applied permissions.
-4. **A computer sits idle.** The worker pauses it after the idle period.
+4. **A computer sits idle.** The worker pauses it after the idle period. A new
+   member's computer stays awake while they set up, for up to an hour after joining.
+   Their first chat message ends that extra time, wherever they send it.
    A later message wakes the same computer with its saved files; image changes take
    effect when a paused computer starts again.
 5. **Private data needs cleanup.** Saved corrections, forgetting and connection

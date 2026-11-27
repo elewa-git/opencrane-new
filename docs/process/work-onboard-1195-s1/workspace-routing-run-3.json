@@ -1,0 +1,179 @@
+{
+  "sourceCommit": "1b7e277c591c37c5d09910101f20b4e63443bb06",
+  "steps": [
+    "slot 1 test owner claims the fresh stack through the installation API",
+    "signed-out visitor is asked to sign in before seeing survey answers at 1280 px",
+    "creates an invitation through the API at 1280 px",
+    "accepts an invitation and opens the survey on first sign-in at 1280 px",
+    "saves the first answer and sees the running personal computer during the survey at 1280 px",
+    "signed-in member opens the Conversations bookmark at 1280 px",
+    "reloads the Conversations document with the survey unfinished at 1280 px",
+    "reloads the survey and keeps the saved step at 1280 px",
+    "saves the remaining survey answers at 1280 px",
+    "reviews and approves the saved persona at 1280 px",
+    "reaches and completes the welcome chat at 1280 px",
+    "finished member opens the Conversations bookmark at 1280 px",
+    "finished member stays in Conversations after reload at 1280 px",
+    "signs in again and reaches the requested workspace at 1280 px",
+    "sends the first ordinary chat at 1280 px on an already running computer",
+    "saves and lists a personal fact at 1280 px",
+    "signed-out visitor is asked to sign in before seeing survey answers at 390 px",
+    "creates an invitation through the API at 390 px",
+    "accepts an invitation and opens the survey on first sign-in at 390 px",
+    "saves the first answer and sees the running personal computer during the survey at 390 px",
+    "signed-in member opens the Conversations bookmark at 390 px",
+    "reloads the Conversations document with the survey unfinished at 390 px",
+    "reloads the survey and keeps the saved step at 390 px",
+    "saves the remaining survey answers at 390 px",
+    "reviews and approves the saved persona at 390 px",
+    "reaches and completes the welcome chat at 390 px",
+    "finished member opens the Conversations bookmark at 390 px",
+    "finished member stays in Conversations after reload at 390 px",
+    "signs in again and reaches the requested workspace at 390 px",
+    "sends the first ordinary chat at 390 px on an already running computer",
+    "saves and lists a personal fact at 390 px"
+  ],
+  "failedSteps": [],
+  "results": [
+    {
+      "width": 1280,
+      "signedOutStatus": 401,
+      "invitationApi": {
+        "status": 200,
+        "recorded": true,
+        "eligibilityWaits": 0
+      },
+      "unfinishedBookmark": {
+        "documentStatus": 200,
+        "entryStatus": 200,
+        "next": "survey",
+        "finalPath": "/welcome/survey",
+        "surveyStep": 2
+      },
+      "unfinishedReload": {
+        "documentStatus": 200,
+        "entryStatus": 200,
+        "next": "survey",
+        "finalPath": "/welcome/survey",
+        "surveyStep": 2
+      },
+      "surveyReload": {
+        "finalPath": "/welcome/survey",
+        "surveyStep": 2
+      },
+      "surveySteps": 4,
+      "personaApproved": true,
+      "welcome": "completed",
+      "finishedBookmark": {
+        "documentStatus": 200,
+        "entryStatus": 200,
+        "next": "workspace",
+        "finalPath": "/workspace/conversations"
+      },
+      "finishedReload": {
+        "documentStatus": 200,
+        "entryStatus": 200,
+        "next": "workspace",
+        "finalPath": "/workspace/conversations"
+      },
+      "ordinaryChat": {
+        "reply": "Hello from your computer.",
+        "duringSurvey": {
+          "computerId": "computer-a768a1385dff67ebb7553f36e91a9b0a",
+          "generation": 1,
+          "pod": "4e4ec0509359270f",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-27T00:26:36Z"
+        },
+        "before": {
+          "computerId": "computer-a768a1385dff67ebb7553f36e91a9b0a",
+          "generation": 1,
+          "pod": "4e4ec0509359270f",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-27T00:26:36Z"
+        },
+        "after": {
+          "computerId": "computer-a768a1385dff67ebb7553f36e91a9b0a",
+          "generation": 1,
+          "pod": "4e4ec0509359270f",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-27T00:26:36Z"
+        }
+      },
+      "savedFacts": 1
+    },
+    {
+      "width": 390,
+      "signedOutStatus": 401,
+      "invitationApi": {
+        "status": 200,
+        "recorded": true,
+        "eligibilityWaits": 0
+      },
+      "unfinishedBookmark": {
+        "documentStatus": 200,
+        "entryStatus": 200,
+        "next": "survey",
+        "finalPath": "/welcome/survey",
+        "surveyStep": 2
+      },
+      "unfinishedReload": {
+        "documentStatus": 200,
+        "entryStatus": 200,
+        "next": "survey",
+        "finalPath": "/welcome/survey",
+        "surveyStep": 2
+      },
+      "surveyReload": {
+        "finalPath": "/welcome/survey",
+        "surveyStep": 2
+      },
+      "surveySteps": 4,
+      "personaApproved": true,
+      "welcome": "completed",
+      "finishedBookmark": {
+        "documentStatus": 200,
+        "entryStatus": 200,
+        "next": "workspace",
+        "finalPath": "/workspace/conversations"
+      },
+      "finishedReload": {
+        "documentStatus": 200,
+        "entryStatus": 200,
+        "next": "workspace",
+        "finalPath": "/workspace/conversations"
+      },
+      "ordinaryChat": {
+        "reply": "Hello from your computer.",
+        "duringSurvey": {
+          "computerId": "computer-92c646f2e6935066650f9ba27d3db438",
+          "generation": 1,
+          "pod": "c128ce4148074adc",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-27T00:27:56Z"
+        },
+        "before": {
+          "computerId": "computer-92c646f2e6935066650f9ba27d3db438",
+          "generation": 1,
+          "pod": "c128ce4148074adc",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-27T00:27:56Z"
+        },
+        "after": {
+          "computerId": "computer-92c646f2e6935066650f9ba27d3db438",
+          "generation": 1,
+          "pod": "c128ce4148074adc",
+          "phase": "Running",
+          "restartCount": 0,
+          "startedAt": "2026-11-27T00:27:56Z"
+        }
+      },
+      "savedFacts": 1
+    }
+  ]
+}

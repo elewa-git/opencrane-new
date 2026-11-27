@@ -12,12 +12,12 @@ export async function messageAccess(options: MemoryOptions, requester: string,
   const deadline = performance.now() + 1000;
   const subject = `conversation-${source.conversationId}`;
   const position = await options.store.head(subject, deadline);
-  const checkpoint = await options.db.query<{ sequence: string }>(
+  const checkpoint = await options.chat.db.query<{ sequence: string }>(
     "SELECT sequence FROM projection_checkpoints WHERE name='conversations'");
   if (Number(checkpoint.rows[0]?.sequence ?? -1) < position) {
     throw new Error('Source messages are still being updated');
   }
-  const result = await options.db.query<{ position: string }>(`
+  const result = await options.chat.db.query<{ position: string }>(`
     SELECT position FROM conversation_feed WHERE silo=$1 AND conversation_id=$2
       AND position >= $4
       AND ((type='message.posted' AND event_id=$3)

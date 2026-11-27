@@ -7,6 +7,7 @@ export {
   connectComputers,
   connectProjectionDb,
 } from "./pg.ts";
+export { memoryProjectionDatabaseUrl, initialiseMemoryProjectionSchema } from './memory-database.ts';
 export { pgliteDb } from "./pglite.ts";
 export {
   ProjectionRunner,
@@ -58,7 +59,7 @@ export { delegations } from './delegations.ts';
 
 export { egressPolicy, readEgressRule, egressRulesAllow, egressGrantStream } from './egress-policy.ts';
 
-export { personalSettings, readSurvey } from './personal-settings.ts';
+export { personalSettings, readSurvey, surveyCanBeSkipped } from './personal-settings.ts';
 export { readInventoryReferences, inventoryCategoryPositions, inventoryIndexState,
   inventoryHistoryInputs, inventoryCategories } from './inventory-inputs.ts';
 

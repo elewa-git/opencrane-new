@@ -1,0 +1,1 @@
+{"fileWorker":{"createPods":"denied","createServerExec":"denied","getServerExec":"denied"},"dispatcher":{"postServerExec":"denied","getServerExec":"denied","postFileWorkerExec":"denied","getFileWorkerExec":"denied"},"reservedComputerName":"denied"}

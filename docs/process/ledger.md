@@ -177,6 +177,12 @@ Fresh-stack qualification is recorded in the [journey receipt](work-clean-255-s1
 | --- | --- | --- | --- | --- |
 | First chat default on a later connection | [#1190](https://github.com/elewa-git/opencrane-new/issues/1190) | This PR, `8bd4f6907` | PASS 2026-11-26 `8bd4f6907` (dev stack and free stand-in) | [Receipt](work-bug-1190-s1/journey.md) |
 
+## Packaged onboarding
+
+| Capability | Issue | Source merged | Proven live on a fresh install | Receipt |
+| --- | --- | --- | --- | --- |
+| Packaged onboarding, first chat and saved Memory | [#1195](https://github.com/elewa-git/opencrane-new/issues/1195) | No | PASS 2026-11-26 `464989640` | [Receipt](work-onboard-1195-s1/journey.md) |
+
 ## Still NOT RUN
 
 The evidence does not qualify these conditions yet:

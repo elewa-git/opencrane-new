@@ -9,6 +9,7 @@ import type { ModelAccessOptions } from '../models/access-routes.ts';
 
 export type MemoryOptions = ModelAccessOptions & {
   keyDirectory?: string;
+  scopeDb?: ModelAccessOptions['db'];
   dispatchGeneration?: string;
   db: ModelAccessOptions['db'] & Partial<Pick<Db, 'lock'>>;
   chat?: import('../chat/access.ts').ChatOptions;
@@ -24,7 +25,8 @@ export function scopeFor(silo: string, scopeKind: Scope['scopeKind'], ownerId: s
 const ownerIdentifier = recordIdSchema;
 
 async function requireScopeTables(options: MemoryOptions, deadline: number) {
-  const result = await options.db.query<{ name: string; sequence: string }>(`
+  const scopeDb = options.scopeDb ?? options.db;
+  const result = await scopeDb.query<{ name: string; sequence: string }>(`
     SELECT name, sequence FROM projection_checkpoints WHERE name IN ('groups', 'computers')`,
   [], { deadline });
   const checkpoints = new Map<string, number>();

@@ -1,0 +1,13 @@
+{{- if not .Values.pilotRestore.enabled }}
+{{- range list "personal-secrets" "memory-secrets" }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ . }}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests: { storage: 1Gi }
+{{- end }}
+{{- end }}

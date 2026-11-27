@@ -1,11 +1,14 @@
-import { ChangeDetectionStrategy, Component, input, signal, type OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, signal, type OnDestroy, type OnInit }
+  from '@angular/core';
 import { recordIdPattern } from '@opencrane/protocol';
 import { z } from 'zod';
 import { SignOut } from '../sign-in/sign-out';
+import { NAVIGATE } from '../core/navigate';
+import { onboardingEntry, reportEntryFailure } from '../welcome/entry';
 
 type InvitationLink = { memberId: string; invitationId: string };
 type JoinState = 'loading' | 'signin' | 'fresh-signin' | 'ready' | 'joined' |
-  'wrong-account' | 'unavailable';
+  'opening' | 'entry-failed' | 'access-denied' | 'wrong-account' | 'unavailable';
 type JoinAttempt = { displayName: string; commandId: string };
 
 const sessionSchema = z.object({ authenticated: z.boolean() });
@@ -30,7 +33,9 @@ export function invitationLink(pathname: string): InvitationLink | undefined {
   styleUrl: '../sign-in/entry-form.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class InvitationJoin implements OnInit {
+export class InvitationJoin implements OnInit, OnDestroy {
+  private readonly navigate = inject(NAVIGATE);
+  private readonly entryRequest = new AbortController();
   readonly invitation = input.required<InvitationLink>();
   protected readonly state = signal<JoinState>('loading');
   protected readonly sending = signal(false);
@@ -39,6 +44,10 @@ export class InvitationJoin implements OnInit {
 
   ngOnInit(): void {
     void this.checkSession();
+  }
+
+  ngOnDestroy(): void {
+    this.entryRequest.abort();
   }
 
   protected signInLink(fresh = false): string {
@@ -77,7 +86,7 @@ export class InvitationJoin implements OnInit {
       });
       const reply = replySchema.parse(await response.json());
       if (response.ok && (reply.status === 'joined' || reply.status === 'already_joined')) {
-        this.state.set('joined');
+        await this.openEntry();
       } else if (reply.status === 'refused') {
         this.refuse(reply.reason);
       } else {
@@ -87,6 +96,37 @@ export class InvitationJoin implements OnInit {
       this.message.set(uncertain);
     } finally {
       this.sending.set(false);
+    }
+  }
+
+  protected async openEntry(): Promise<void> {
+    this.state.set('opening');
+    const signal = this.entryRequest.signal;
+    try {
+      const entry = await onboardingEntry(signal, true);
+      if (signal.aborted) {
+        return;
+      }
+      switch (entry.kind) {
+        case 'destination':
+          this.navigate(entry.path);
+          break;
+        case 'disabled':
+          this.state.set('joined');
+          break;
+        case 'signed-out':
+          this.state.set('signin');
+          this.message.set('Your session has expired. Sign in again to continue.');
+          break;
+        case 'denied':
+          this.state.set('access-denied');
+          break;
+      }
+    } catch (error) {
+      if (!signal.aborted) {
+        reportEntryFailure(error, 'invitation');
+        this.state.set('entry-failed');
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { z } from 'zod';
+import { NAVIGATE } from '../core/navigate';
 import { SurveyScreen } from './survey';
 
 const emptyProgress = {
@@ -44,6 +45,7 @@ describe('welcome survey', () => {
   });
 
   function open(progress: unknown = emptyProgress) {
+    const navigate = vi.fn();
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((url) => {
       if (url === '/auth/me') return json({ authenticated: true, user: { name: 'Alex' } });
       if (url === '/api/onboarding') {
@@ -53,12 +55,14 @@ describe('welcome survey', () => {
       if (url === '/api/chat/groups?limit=16') return json({ rows: [], next: null });
       return json({ status: 'unknown' }, 503);
     });
-    TestBed.configureTestingModule({ imports: [SurveyScreen] });
+    TestBed.configureTestingModule({
+      imports: [SurveyScreen], providers: [{ provide: NAVIGATE, useValue: navigate }],
+    });
     const fixture = TestBed.createComponent(SurveyScreen);
     fixture.detectChanges();
     const element: unknown = fixture.nativeElement;
     if (!(element instanceof HTMLElement)) throw new Error('Missing survey root');
-    return { fixture, element, fetchSpy };
+    return { fixture, element, fetchSpy, navigate };
   }
 
   async function ready(fixture: ReturnType<typeof open>['fixture'], element: HTMLElement) {
@@ -124,6 +128,40 @@ describe('welcome survey', () => {
     });
     expect(fetchSpy.mock.calls.filter(([url]) => url === '/api/onboarding/survey')).toHaveLength(1);
   });
+
+  async function remembersAnUncertainSkip() {
+    const progress = { ...emptyProgress, allowedActions: ['skip'] };
+    const { fixture, element, fetchSpy, navigate } = open(progress);
+    await ready(fixture, element);
+    fetchSpy.mockResolvedValueOnce(Response.json({ status: 'unknown' }, { status: 503 }));
+    buttonNamed(element, 'Skip welcome setup').click();
+    function offersStatus() {
+      fixture.detectChanges();
+      expect(element.textContent).toContain('Check status');
+    }
+    await vi.waitFor(offersStatus);
+    expect(navigate).not.toHaveBeenCalled();
+    function wasSurveyCommand([url]: Parameters<typeof fetch>) {
+      return url === '/api/onboarding/survey';
+    }
+    const sent = fetchSpy.mock.calls.find(wasSurveyCommand);
+    const body = sent?.[1]?.body;
+    if (typeof body !== 'string') throw new Error('Missing skip command');
+    const skipSchema = z.object({ operation: z.literal('skip'), commandId: z.string(),
+      generation: z.literal(1), expectedPosition: z.literal(0) });
+    const parsed = skipSchema.parse(JSON.parse(body));
+    fetchSpy.mockResolvedValueOnce(Response.json({ status: 'confirmed' }));
+    buttonNamed(element, 'Check status').click();
+    function opensWorkspace() {
+      expect(navigate).toHaveBeenCalledExactlyOnceWith('/workspace');
+    }
+    await vi.waitFor(opensWorkspace);
+    expect(fetchSpy).toHaveBeenLastCalledWith(
+      `/api/personal/changes/${parsed.commandId}`, expect.any(Object));
+    expect(fetchSpy.mock.calls.filter(wasSurveyCommand)).toHaveLength(1);
+  }
+  it('opens the workspace after checking an uncertain skip without resending it',
+    remembersAnUncertainSkip);
 
   it('treats a lost network reply as unknown and does not resend', async () => {
     const { fixture, element, fetchSpy } = open();

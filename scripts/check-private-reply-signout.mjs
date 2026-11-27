@@ -36,6 +36,9 @@ function privateText() {
 }
 function connected() {
   const element = globalThis.document.querySelector('oc-workspace');
+  if (!element) {
+    return false;
+  }
   const component = globalThis.ng?.getComponent(element);
   return component?.chat.connected() ?? false;
 }
@@ -59,6 +62,13 @@ async function sessionFixture(context, broadcast) {
     if (path === '/auth/me') {
       authenticationReads += 1;
       body = { authenticated, user: { name: 'Alex' } };
+    } else if (path === '/api/onboarding/entry') {
+      if (!authenticated) {
+        const signedOut = { status: 401 };
+        await route.fulfill(signedOut);
+        return;
+      }
+      body = { next: 'workspace' };
     } else if (path === '/auth/logout') {
       assert.equal(request.method(), 'POST');
       authenticated = false;

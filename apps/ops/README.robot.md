@@ -256,6 +256,10 @@ dispatcher NATS credentials for delivery and `COMMAND_NATS_*` credentials for th
 single conditional appends made by reactions. `KUBECONFIG`, `KUBE_NAMESPACE`,
 `TOKEN_SIGNING_KEY_FILE` and `TOKEN_ISSUER` are required; the signing key is read by
 path and token values never enter events. `COMPUTER_IDLE_MS` defaults to 15 minutes.
+A new member's personal computer stays awake for up to an hour from joining.
+Survey and persona saves do not move that deadline. The member's first ordinary chat message
+ends the extra time on their personal computer. Personal, shared assistant and people-only
+conversations all count. The ordinary idle rule still applies to the computer handling a turn.
 Run one active lifecycle reconciler per silo. Commands append intent before any
 Kubernetes effect; restart retries claims, modes and credential delivery from events.
 The Kubernetes identity can create/get claims, get/patch/update Sandboxes, get
@@ -538,9 +542,12 @@ identity `personal:<memberId>`; keys are never returned to events or computers.
 Duplicate delivery retains the same key. Current membership is checked from events
 before old joins/bootstrap records prepare custody, including `personalAssistant: none`.
 The reaction appends nothing and provisions no assistant. Enable/backfill its two
-subscriptions through the existing handler upgrade procedure. Missing configuration
-leaves the reaction disabled; future survey commands must refuse unavailable custody.
-Offline survey replay uses ProjectionRunner with reactions off; no replay CLI is added.
+subscriptions through the existing handler upgrade procedure. The package leaves this
+reaction disabled and the server prepares the key when it first saves an answer.
+Replaying a join for an active member can recreate a missing key. The new key
+cannot open answers saved with the old one. The packaged server refuses a missing
+key once an answer has used it. Offline survey replay uses ProjectionRunner with
+reactions off.
 
 `complete-welcome` subscribes to `onboarding.welcome_answer_recorded`. It reads
 personal history with a ten-second limit before the two-second access check.

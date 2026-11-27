@@ -1,4 +1,5 @@
 import type { OnboardingOptions } from './options.ts';
+import { onboardingDestination } from './entry.ts';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest, FastifyError } from 'fastify';
 import type { AuthConfig } from '@opencrane/auth';
@@ -8,7 +9,7 @@ import { chatAccess, isChatRefused, ChatAccessApplying } from '../chat/access.ts
 import { requireMember, MemberRefusal, idSchema } from '../members/guard.ts';
 import { surveyCommand, SurveyConflict, SurveyUnknown } from './commands.ts';
 import { surveyHistory, savedCommand, decryptAnswers, decryptPersona,
-  personaEvent, personaReceipt, surveyReceipt } from './history.ts';
+  personaEvent, personaReceipt, surveyReceipt, canSkipSurvey } from './history.ts';
 import { welcomeAssistantAssigned, welcomeCommand, welcomeReceipt,
   welcomeRequiredStep } from './welcome.ts';
 import { welcomeScripts } from './script.ts';
@@ -20,6 +21,7 @@ const revisionParameters = z.strictObject({ revisionId: idSchema });
 const pageParameters = z.strictObject({ limit: z.coerce.number().int().min(1).max(50).optional(),
   before: z.coerce.number().int().positive().optional() });
 export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, options?: OnboardingOptions) {
+  registerEntryRoute(app, config, options);
   app.get('/api/onboarding', handler);
   app.get('/api/personal/changes/:commandId', handler);
   app.get('/api/onboarding/persona/revisions', handler);
@@ -54,35 +56,26 @@ export function registerSurveyRoutes(app: FastifyInstance, config: AuthConfig, o
       }
       const special = await readSpecial(request, configured, memberId, history);
       if (special !== undefined) return special;
-      function readStep(row: typeof history.steps[number]) {
-        const answers = surveyAnswersSchema.parse(decryptAnswers(configured, memberId, row.event));
-        return { ...surveyReceipt(row), answers };
-      }
-      const steps = history.steps.map(readStep);
-      let state = 'survey';
-      if (history.position === 0) state = 'not_started';
-      if (steps.length === 4) state = 'review';
-      if (history.welcome) {
-        if (history.welcome.completion) state = 'completed';
-        else state = history.welcome.answers.length ? 'completion_pending' : 'welcome_active';
-      }
-      let nextStep: number | null = steps.length + 1;
-      if (steps.length === 4) nextStep = null;
-      const references = [...history.commands.values()];
-      function receiptFor(reference: typeof references[number]) {
-        const { sequence: _sequence, previousPosition: _previous, generation: _generation,
-          ...receipt } = reference;
-        return receipt;
-      }
-      const recentReferences = references.slice(-20);
-      const recentReceipts = recentReferences.map(receiptFor);
-      const survey = { generation: history.generation, position: history.position, nextStep, steps };
-      const allowedActions = ['save_step', 'restart'];
-      if (history.currentRevision !== null) allowedActions.push('approve');
-      return { state, allowedActions, recentReceipts, survey,
-        currentRevision: history.currentRevision, approval: history.approval };
+      return readProgress(configured, memberId, history);
     } catch (error) {
-      return surveyRefusal(reply, error);
+      return surveyRefusal(request, reply, error);
+    }
+  }
+}
+
+function registerEntryRoute(app: FastifyInstance, config: AuthConfig, options?: OnboardingOptions) {
+  app.get('/api/onboarding/entry', entry);
+  async function entry(request: FastifyRequest, reply: FastifyReply) {
+    reply.header('cache-control', 'no-store');
+    if (!options) {
+      return reply.code(204).send();
+    }
+    try {
+      const context = await requireMember(request, reply, config, options, { write: false });
+      const next = await onboardingDestination(context.options, context.memberId);
+      return { next };
+    } catch (error) {
+      return surveyRefusal(request, reply, error);
     }
   }
 }
@@ -102,6 +95,41 @@ function writeOnboardingRoute(request: FastifyRequest, options: OnboardingOption
 }
 
 type History = Awaited<ReturnType<typeof surveyHistory>>;
+function readProgress(options: OnboardingOptions, memberId: string, history: History) {
+  function readStep(row: typeof history.steps[number]) {
+    const answers = surveyAnswersSchema.parse(decryptAnswers(options, memberId, row.event));
+    return { ...surveyReceipt(row), answers };
+  }
+  const steps = history.steps.map(readStep);
+  let state = 'survey';
+  if (history.position === 0) state = 'not_started';
+  if (steps.length === 4) state = 'review';
+  if (history.welcome) {
+    if (history.welcome.completion) state = 'completed';
+    else state = history.welcome.answers.length ? 'completion_pending' : 'welcome_active';
+  }
+  let nextStep: number | null = steps.length + 1;
+  if (steps.length === 4) nextStep = null;
+  const references = [...history.commands.values()];
+  function receiptFor(reference: typeof references[number]) {
+    const { sequence: _sequence, previousPosition: _previous, generation: _generation,
+      ...receipt } = reference;
+    return receipt;
+  }
+  const recentReferences = references.slice(-20);
+  const recentReceipts = recentReferences.map(receiptFor);
+  const survey = { generation: history.generation, position: history.position, nextStep, steps };
+  const allowedActions = ['save_step', 'restart'];
+  if (canSkipSurvey(history)) {
+    allowedActions.push('skip');
+  }
+  if (history.currentRevision !== null) {
+    allowedActions.push('approve');
+  }
+  return { state, allowedActions, recentReceipts, survey,
+    currentRevision: history.currentRevision, approval: history.approval };
+}
+
 async function readWelcomeAssignment(request: FastifyRequest, options: OnboardingOptions,
   memberId: string, history: History): Promise<boolean | null> {
   if (request.routeOptions.url !== '/api/onboarding/welcome' || history.welcome) return null;
@@ -203,8 +231,11 @@ async function readRevision(request: FastifyRequest, reply: FastifyReply,
       history.approval.time : null, replacement };
 }
 
-function surveyRefusal(reply: FastifyReply, error: unknown) {
+function surveyRefusal(request: FastifyRequest, reply: FastifyReply, error: unknown) {
   if (error instanceof MemberRefusal) {
+    if (error.statusCode === 503) {
+      request.log.error({ err: error }, 'Could not check onboarding access');
+    }
     return reply.code(error.statusCode).send({ status: error.status });
   }
   if (error instanceof z.ZodError) return reply.code(422).send({ status: 'invalid' });
@@ -218,6 +249,7 @@ function surveyRefusal(reply: FastifyReply, error: unknown) {
   if (error instanceof ChatAccessApplying || error instanceof AuthorityApplying) {
     return reply.code(425).send({ status: 'access_applying' });
   }
+  request.log.error({ err: error }, 'Could not read or save onboarding');
   if (error instanceof SurveyUnknown) return reply.code(503).send({ status: 'unknown' });
   return reply.code(503).send({ status: 'unavailable' });
 }

@@ -5,6 +5,9 @@
 {{- end -}}
 {{- range $mode := $modes }}
 {{- $dispatcher := eq $mode "dispatcher" }}
+{{- $memoryReader := and (eq $mode "members") (not $root.Values.pilotRestore.enabled) }}
+{{- $memoryWriter := and $dispatcher (not $root.Values.pilotRestore.enabled) }}
+{{- $memory := or $memoryReader $memoryWriter }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -18,9 +21,19 @@ spec:
     metadata:
       labels: { app: worker-{{ $mode }} }
     spec:
-      serviceAccountName: package-worker
+      {{- if $dispatcher }}
+      serviceAccountName: package-dispatcher
+      {{- else }}
+      serviceAccountName: package-projection
+      automountServiceAccountToken: false
+      {{- end }}
+      {{- if $memory }}
+      securityContext: { fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch }
+      {{- else }}
       securityContext: { fsGroup: 1000 }
+      {{- end }}
       initContainers:
+        {{- if $dispatcher }}
         - name: kubeconfig
           image: {{ $root.Values.images.server | quote }}
           command: [node, infra/package/kubeconfig.mjs]
@@ -29,6 +42,7 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 50m, memory: 64Mi }
+        {{- end }}
         - name: wait-for-binding
           image: {{ $root.Values.images.server | quote }}
           command: [sh, -c, 'until [ "$(cat /run/opencrane/OPENFGA_STORE_ID)" != pending ]; do sleep 2; done']
@@ -55,6 +69,10 @@ spec:
           resources:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 50m, memory: 64Mi }
+        {{- if $memory }}
+        {{- $init := dict "name" "private-memory-keys" "image" $root.Values.images.server "volumes" (list "memory-secrets") }}
+        {{- include "opencrane.memberKeyInit" $init | nindent 8 }}
+        {{- end }}
       containers:
         - name: worker
           image: {{ $root.Values.images.server | quote }}
@@ -78,20 +96,59 @@ spec:
             - { name: NATS_KEY_FILE, value: "/run/opencrane/files/{{ if $dispatcher }}dispatcher{{ else }}projection{{ end }}.key" }
             - { name: NATS_NKEY_SEED_FILE, value: "/run/opencrane/files/{{ if $dispatcher }}dispatcher{{ else }}projection{{ end }}.seed" }
             - { name: NATS_INBOX_PREFIX, value: "_INBOX.{{ if $dispatcher }}dispatcher{{ else }}projection{{ end }}" }
+            {{- if $memoryWriter }}
+            {{- include "opencrane.memoryKeyEnvironment" . | nindent 12 }}
+            {{- end }}
             - { name: MODEL_DECISION_URL, value: "http://server:43001" }
+            {{- if $dispatcher }}
             - { name: KUBECONFIG, value: "/run/kubeconfig/config.json" }
             - name: KUBE_NAMESPACE
               valueFrom:
                 fieldRef: { fieldPath: metadata.namespace }
+            {{- end }}
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
+            {{- if $dispatcher }}
             - { name: kubeconfig, mountPath: /run/kubeconfig, readOnly: true }
+            {{- end }}
+            {{- if $memoryWriter }}
+            - { name: memory-secrets, mountPath: /var/lib/opencrane/memory-secrets }
+            {{- end }}
           resources:
             # Keep time for computer checks while reaction queues are busy.
             requests: { cpu: {{ ternary "100m" "20m" $dispatcher }}, memory: 64Mi }
             limits: { cpu: {{ ternary "1000m" "300m" $dispatcher }}, memory: 384Mi }
+        {{- if $memoryReader }}
+        {{- /* Stop the Memory projection with the other readers during an existing backup. */}}
+        - name: memory
+          image: {{ $root.Values.images.server | quote }}
+          command: [node, infra/package/worker.mjs, memory]
+          envFrom:
+            - secretRef: { name: {{ $root.Values.secrets.runtime | quote }} }
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.secrets.runtime | quote }}
+                  key: PROJECTION_DATABASE_URL
+            - { name: NATS_CERT_FILE, value: /run/opencrane/files/projection.crt }
+            - { name: NATS_KEY_FILE, value: /run/opencrane/files/projection.key }
+            - { name: NATS_NKEY_SEED_FILE, value: /run/opencrane/files/projection.seed }
+            - { name: NATS_INBOX_PREFIX, value: _INBOX.projection }
+            {{- include "opencrane.memoryKeyEnvironment" . | nindent 12 }}
+          volumeMounts:
+            - { name: runtime, mountPath: /run/opencrane, readOnly: true }
+            - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
+            - { name: memory-secrets, mountPath: /var/lib/opencrane/memory-secrets, readOnly: true }
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { cpu: 300m, memory: 384Mi }
+        {{- end }}
       volumes:
+        {{- if $memory }}
+        {{- include "opencrane.memberKeyVolumes" (list "memory-secrets") | nindent 8 }}
+        {{- end }}
         - name: runtime
           secret: { secretName: {{ $root.Values.secrets.runtime | quote }} }
         - name: runtime-files
@@ -100,6 +157,8 @@ spec:
           secret:
             secretName: {{ $root.Values.secrets.runtimeFiles | quote }}
             defaultMode: 256
+        {{- if $dispatcher }}
         - name: kubeconfig
           emptyDir: { medium: Memory }
+        {{- end }}
 {{- end }}

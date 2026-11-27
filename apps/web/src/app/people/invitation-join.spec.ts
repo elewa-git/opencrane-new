@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { App } from '../app';
+import { NAVIGATE } from '../core/navigate';
 
 const path = '/join/a-member/an-invitation';
+const navigate = vi.fn();
 
 function reply(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
@@ -13,7 +15,9 @@ function applicationElement(value: unknown): HTMLElement {
 }
 
 async function openInvitation(control: string) {
-  TestBed.configureTestingModule({ imports: [App] });
+  TestBed.configureTestingModule({
+    imports: [App], providers: [{ provide: NAVIGATE, useValue: navigate }],
+  });
   await TestBed.compileComponents();
   const fixture = TestBed.createComponent(App);
   fixture.detectChanges();
@@ -35,6 +39,7 @@ function accept(element: HTMLElement): void {
 }
 
 beforeEach(function openLink() {
+  navigate.mockReset();
   globalThis.history.replaceState({}, '', path);
 });
 
@@ -57,12 +62,13 @@ it('accepts the invitation as the signed-in person', async function acceptInvita
   const fetchSpy = vi.spyOn(globalThis, 'fetch');
   fetchSpy.mockResolvedValueOnce(reply({ authenticated: true }));
   fetchSpy.mockResolvedValueOnce(reply({ status: 'joined' }));
-  const { element, fixture } = await openInvitation('input[name=displayName]');
+  fetchSpy.mockResolvedValueOnce(reply({ next: 'survey' }));
+  const { element } = await openInvitation('input[name=displayName]');
   accept(element);
-  await vi.waitFor(function showsWorkspace() {
-    fixture.detectChanges();
-    expect(element.querySelector('a[href="/workspace"]')?.textContent?.trim()).toBe('Open workspace');
-  });
+  function opensSurvey() {
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('/welcome/survey');
+  }
+  await vi.waitFor(opensSurvey);
   const request = fetchSpy.mock.calls[1];
   expect(request?.[0]).toBe('/members/join');
   expect(request?.[1]?.method).toBe('POST');
@@ -121,16 +127,19 @@ function stallRequest(_resource: RequestInfo | URL, options?: RequestInit): Prom
 
 function controlDeadline() {
   const deadline = new AbortController();
-  vi.spyOn(AbortSignal, 'timeout').mockImplementation(function timeout(milliseconds) {
+  function timeout(milliseconds: number) {
     expect(milliseconds).toBeGreaterThan(0);
     expect(milliseconds).toBeLessThanOrEqual(15_000);
     return deadline.signal;
-  });
-  return deadline;
+  }
+  const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+  timeoutSpy.mockImplementation(timeout);
+  function restore() { timeoutSpy.mockRestore(); }
+  return { deadline, restore };
 }
 
 it('ends the session check when the reply stalls', async function boundSessionCheck() {
-  const deadline = controlDeadline();
+  const { deadline } = controlDeadline();
   const fetchSpy = vi.spyOn(globalThis, 'fetch');
   fetchSpy.mockImplementationOnce(stallRequest);
   const { element, fixture } = await openInvitation('[role=status]');
@@ -145,11 +154,12 @@ it('ends the session check when the reply stalls', async function boundSessionCh
 });
 
 it('retries a lost join reply with the original command', async function retryJoin() {
-  const deadline = controlDeadline();
+  const { deadline, restore } = controlDeadline();
   const fetchSpy = vi.spyOn(globalThis, 'fetch');
   fetchSpy.mockResolvedValueOnce(reply({ authenticated: true }));
   fetchSpy.mockImplementationOnce(stallRequest);
   fetchSpy.mockResolvedValueOnce(reply({ status: 'already_joined' }));
+  fetchSpy.mockResolvedValueOnce(reply({ next: 'workspace' }));
   const { element, fixture } = await openInvitation('input[name=displayName]');
   accept(element);
   const sent = fetchSpy.mock.calls[1]?.[1];
@@ -161,11 +171,12 @@ it('retries a lost join reply with the original command', async function retryJo
     expect(element.querySelector<HTMLButtonElement>('button[type=submit]')?.disabled).toBe(false);
   });
 
+  restore();
   accept(element);
-  await vi.waitFor(function showsWorkspace() {
-    fixture.detectChanges();
-    expect(element.querySelector('a[href="/workspace"]')).not.toBeNull();
-  });
+  function opensWorkspace() {
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('/workspace');
+  }
+  await vi.waitFor(opensWorkspace);
   const repeated = fetchSpy.mock.calls[2]?.[1];
   expect(typeof sent?.body).toBe('string');
   expect(repeated?.body).toBe(sent?.body);

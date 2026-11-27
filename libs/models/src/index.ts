@@ -141,3 +141,5 @@ export { assistantMayUsePersonalKey, savedAssistantConsent } from './personal-ke
 
 export { readStoredApprovalReview } from './approvals.ts';
 export { decisionConversationReader } from './decision-conversation.ts';
+
+export { personalAssistantId } from './personal-assistant-id.ts';

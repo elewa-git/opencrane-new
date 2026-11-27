@@ -66,6 +66,9 @@ vi.mock('pg', function databaseBoundary() {
         }
         return { rows: [{ count: String(count) }] };
       }
+      if (sql.includes('FROM pg_database')) {
+        return { rows: [{ datname: 'projections' }] };
+      }
       if (sql.includes('pg_current_wal_lsn')) {
         return { rows: [{ lsn: '0/123' }] };
       }
@@ -174,6 +177,7 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
     return { bucket: 'files', objects: [] };
   }
   vi.spyOn(runtime.source, 'kube').mockImplementation(kube);
+  const captureDatabase = runtime.source.parts.database;
   runtime.source.parts.database = databasePart;
   if (!captureFiles) runtime.source.parts.files = filesPart;
   async function close() {
@@ -182,7 +186,8 @@ if (args[0] === 'rollout' && process.env.BACKUP_TEST_READY === 'no') process.exi
     await rm(directory, { recursive: true, force: true });
   }
   onTestFinished(close);
-  return { directory: backupDirectory, options, source: runtime.source, calls, kube, nats };
+  return { directory: backupDirectory, options, source: runtime.source,
+    calls, kube, nats, captureDatabase };
 }
 
 const upload = {
@@ -370,3 +375,26 @@ async function refusesLaggingProviderProjection() {
 }
 it('provider backups wait for the routines checkpoint before stopping its reader',
   refusesLaggingProviderProjection);
+
+async function keepsMemorySearchTextInDatabaseBackup() {
+  const test = await backupFixture();
+  vi.stubEnv('OPENFGA_STORE_ID', 'saved-store');
+  vi.stubEnv('OPENFGA_MODEL_ID', 'saved-model');
+  const fact = 'synthetic text stored for Memory search';
+  const dump = `COPY opencrane_memory.memory_facts (search_text) FROM stdin;\n${fact}\n\\.\n`;
+  function runKube(args: string[]) {
+    if (args[0] !== 'exec') {
+      return test.kube(args);
+    }
+    expect(args).toEqual(['exec', 'postgres-0', '--', 'pg_dumpall', '-U', 'postgres',
+      '--no-role-passwords', '--no-password']);
+    return Promise.resolve(dump);
+  }
+  vi.spyOn(test.source, 'kube').mockImplementation(runKube);
+  test.source.parts.database = test.captureDatabase;
+  await captureScheduledBackup(test.options, test.source);
+  const archived = join(test.directory, test.options.id, 'database');
+  expect(await readFile(archived, 'utf8')).toContain(fact);
+}
+it('includes readable Memory search text in the database backup',
+  keepsMemorySearchTextInDatabaseBackup);

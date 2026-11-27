@@ -28,7 +28,6 @@ let stage = 'browser launch';
 let browser;
 
 async function completeChatTurn(page, width) {
-  await page.getByRole('link', { name: 'Open workspace', exact: true }).click();
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   await composer.waitFor({ timeout: 60_000 });
   await page.waitForFunction(() => !document.querySelector('.skeleton'));
@@ -56,7 +55,8 @@ try {
     const page = await context.newPage();
     await page.goto(origin);
     stage = `${width}px SSO button`;
-    await page.getByRole('button', { name: 'Continue with single sign-on' }).click();
+    const signIn = page.getByRole('button', { name: 'Continue with single sign-on' });
+    await signIn.click();
     stage = `${width}px provider sign-in`;
     const password = await readFile(owner.passwordFile, 'utf8');
     await completeProviderSignIn(page, owner.login, password, origin, setup.issuer);
@@ -66,7 +66,9 @@ try {
     assert.equal(session.authenticated, true);
     assert.equal(session.user?.sub, owner.id);
     stage = `${width}px signed-in page`;
-    await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
+    await page.goto(`${origin}/workspace`);
+    const workspace = page.locator('oc-workspace');
+    await workspace.waitFor();
     await page.screenshot({ path: `${output}/${prefix}signed-in-${width}.png`, fullPage: true });
     stage = `${width}px chat turn`;
     const conversation = await completeChatTurn(page, width);

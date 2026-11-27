@@ -11,7 +11,7 @@ import { chatAccess, isChatRefused, writeChatAccess }
   from '../chat/access.ts';
 import { idSchema } from '../members/guard.ts';
 import { surveyHistory, savedCommand, decryptAnswers, decryptPersona,
-  surveyReceipt, personaReceipt } from './history.ts';
+  surveyReceipt, personaReceipt, canSkipSurvey } from './history.ts';
 import { checkedPersona, renderPersona } from './persona.ts';
 
 const common = { commandId: idSchema, generation: z.int().positive(),
@@ -19,11 +19,12 @@ const common = { commandId: idSchema, generation: z.int().positive(),
 const save = z.strictObject({ ...common, operation: z.literal('save_step'),
   answers: surveyAnswersSchema });
 const restart = z.strictObject({ ...common, operation: z.literal('restart') });
+const skip = z.strictObject({ ...common, operation: z.literal('skip') });
 const revise = z.strictObject({ ...common, operation: z.literal('revise'),
   mode: z.enum(['generate', 'replace']), replacement: z.string().optional() });
 const approve = z.strictObject({ ...common, operation: z.literal('approve'),
   revision: z.int().positive(), revisionId: idSchema });
-const commandSchema = z.discriminatedUnion('operation', [save, restart, revise, approve]);
+const commandSchema = z.discriminatedUnion('operation', [save, restart, skip, revise, approve]);
 export class SurveyConflict extends Error {}
 export class SurveyUnknown extends Error {}
 
@@ -34,7 +35,12 @@ function encrypt(options: OnboardingOptions, memberId: string, value: string) {
 function eventData(options: OnboardingOptions, memberId: string, input: z.infer<typeof commandSchema>,
   history: Awaited<ReturnType<typeof surveyHistory>>) {
   const identity = { schemaVersion: 1, memberId, generation: input.generation };
-  if (input.operation === 'restart') return { ...identity, generation: input.generation + 1 };
+  if (input.operation === 'restart') {
+    return { ...identity, generation: input.generation + 1 };
+  }
+  if (input.operation === 'skip') {
+    return identity;
+  }
   if (input.operation === 'approve') {
     return { ...identity, revision: input.revision, revisionId: input.revisionId };
   }
@@ -45,6 +51,11 @@ function eventData(options: OnboardingOptions, memberId: string, input: z.infer<
       rendererVersion: 'persona-v1', mode: input.mode,
       encrypted: encrypted.ciphertext, encryptedDigest: encrypted.ciphertextDigest,
       keyRef: encrypted.keyId };
+  }
+  // Create the key on the first save, including for members who joined before setup was enabled.
+  // Leave a missing key visible as a failure once any answer has used it.
+  if (!history.hasSavedAnswers) {
+    options.keys.provision(options.silo, `personal:${memberId}`);
   }
   return { ...identity, step: input.answers.step,
     ...encrypt(options, memberId, JSON.stringify(input.answers)) };
@@ -61,6 +72,9 @@ function personaValue(options: OnboardingOptions, memberId: string,
 function checkProgress(input: z.infer<typeof commandSchema>,
   history: Awaited<ReturnType<typeof surveyHistory>>) {
   if (input.expectedPosition !== history.position || input.generation !== history.generation) {
+    throw new SurveyConflict();
+  }
+  if (input.operation === 'skip' && !canSkipSurvey(history)) {
     throw new SurveyConflict();
   }
   if (input.operation === 'save_step' && input.answers.step > history.steps.length + 1) {
@@ -95,6 +109,9 @@ function eventType(input: z.infer<typeof commandSchema>) {
   if (input.operation === 'save_step') return 'onboarding.survey_step_saved';
   if (input.operation === 'revise') return 'onboarding.persona_revised';
   if (input.operation === 'approve') return 'onboarding.persona_approved';
+  if (input.operation === 'skip') {
+    return 'onboarding.survey_skipped';
+  }
   return 'onboarding.survey_restarted';
 }
 export async function surveyCommand(options: OnboardingOptions, memberId: string, body: unknown,
@@ -148,7 +165,7 @@ async function appendSurvey(options: OnboardingOptions, memberId: string,
     if (error instanceof SurveyConflict || isAuthorityChanged(error) || isChatRefused(error)) {
       throw error;
     }
-    throw new SurveyUnknown();
+    throw new SurveyUnknown(undefined, { cause: error });
   }
 }
 
@@ -173,7 +190,7 @@ function matchesSavedCommand(options: OnboardingOptions, memberId: string,
     return row.event.type === 'onboarding.persona_approved' && data.success &&
       data.data.revision === input.revision && data.data.revisionId === input.revisionId;
   }
-  return row.event.type === 'onboarding.survey_restarted';
+  return row.event.type === eventType(input);
 }
 
 async function checkedReceipt(options: OnboardingOptions, memberId: string,

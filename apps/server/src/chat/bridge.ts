@@ -36,7 +36,7 @@ import { resumeBridgeReports } from './bridge-resume.ts';
 import type { ChatOptions } from './routes.ts';
 
 type BridgeOptions = ArtifactPublication & Pick<ChatOptions, 'silo' | 'store'> &
-  Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed'>> & { keyDirectory?: string } &
+  Partial<Pick<ChatOptions, 'binding' | 'db' | 'feed' | 'memoryDb'>> & { keyDirectory?: string } &
   { childStartUrl?: string } &
   Pick<Parameters<typeof bridgeControl>[0], 'stopExecution'>;
 type RoutineStart = NonNullable<Parameters<typeof turnCommand>[1]['routineStart']>;

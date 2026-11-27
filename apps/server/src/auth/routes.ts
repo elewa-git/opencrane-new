@@ -8,6 +8,9 @@ import { closeSessionSockets } from './session-sockets.ts';
 // `state` from callback URLs, and does not record headers or cookies. Do not log
 // errors, because the identity provider's reply may contain credentials.
 import { sessionFor } from '../members/routes.ts';
+import { requireMemberSession } from '../members/guard.ts';
+import { onboardingDestination } from '../onboarding/entry.ts';
+import type { OnboardingOptions } from '../onboarding/options.ts';
 import { URL } from 'node:url';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
@@ -61,7 +64,27 @@ const loginQuery = z.object({
   fresh: z.literal('1').optional(),
 });
 
-export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): void {
+async function workspaceEntry(options: OnboardingOptions, config: AuthConfig,
+  session: SessionData, returnTo: string, logger: FastifyRequest['log']) {
+  try {
+    const member = await requireMemberSession(session, config, options, { write: false });
+    const next = await onboardingDestination(member.options, member.memberId);
+    if (next === 'workspace') {
+      return returnTo;
+    }
+    if (next === 'welcome') {
+      return '/welcome';
+    }
+    return `/welcome/${next}`;
+  } catch (error) {
+    logger.warn({ err: error }, 'Could not check welcome progress after sign-in');
+    // Let the sign-in page show a refusal or wait while permissions catch up.
+    return '/';
+  }
+}
+
+export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig,
+  onboarding?: OnboardingOptions): void {
   app.get('/auth/login', async (request, reply) => {
     const query = request.query;
     const returnTo = sanitizeReturnTo(
@@ -155,7 +178,15 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
       clearCookie(config.flowCookieName, cookieAttrs(config)),
     ]);
     request.log.info('sign-in completed');
-    reply.redirect(flow.returnTo, 302);
+    let destination = flow.returnTo;
+    // Keep invitation acceptance and approval step-up on their own return paths.
+    const path = new URL(flow.returnTo, config.redirectUri).pathname;
+    const workspace = path === '/workspace' || path.startsWith('/workspace/');
+    if (onboarding && !flow.stepUp && workspace) {
+      destination = await workspaceEntry(onboarding, config, result.session, flow.returnTo,
+        request.log);
+    }
+    reply.redirect(destination, 302);
   });
 
   app.post('/auth/logout', async (request, reply) => {

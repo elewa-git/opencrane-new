@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { parseEventByType, surveyAnswersSchema } from '../src/index.ts';
+import { parseEventByType, surveyAnswersSchema, surveyGenerationDataSchema,
+  surveyRestartedDataSchema } from '../src/index.ts';
 
 function savedStep() {
   const encryptedBytes = Buffer.alloc(100);
@@ -89,3 +90,8 @@ function taskName(_value: unknown, index: number) {
   return `task-${index}`;
 }
 it('treats survey text as bounded data and validates all four answer shapes', boundsAnswers);
+
+function keepsRestartSchemaExport() {
+  expect(surveyRestartedDataSchema).toBe(surveyGenerationDataSchema);
+}
+it('keeps the published survey restart schema name', keepsRestartSchemaExport);

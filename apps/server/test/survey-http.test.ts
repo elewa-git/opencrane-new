@@ -3,7 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { encodeSession } from '@opencrane/auth';
+import { encodeSession, type AuthConfig } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -16,6 +16,8 @@ import { createLogger } from '@opencrane/observability';
 import { chatListWithWelcomeSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { welcomeCompletionHandler } from '@opencrane/models';
+import { DEFAULT_MOCK_USER, startMockOidcProvider } from './support/mock-oidc-provider.ts';
+import { loginWithReturnPath } from './support/onboarding-login.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
@@ -25,7 +27,7 @@ let runner: ProjectionRunner;
 let directory: string;
 let keys: ReturnType<typeof conversationKeys>;
 let binding: Awaited<ReturnType<typeof createStore>>;
-let restartServer: () => Promise<void>;
+let restartServer: (auth?: AuthConfig, silo?: string) => Promise<void>;
 const config = testAuthConfig({ expectedOrgId: 'org-test' });
 const session = { sub: 'alice', orgId: 'org-test', roles: [], authTime: 0, exp: 2000000000 };
 const headers = { origin: 'https://app.example.test',
@@ -40,10 +42,13 @@ type RevisionReceipt = { position: number; revision: number; revisionId: string 
 type RevisionDetail = RevisionReceipt & { replacement: string; current: boolean };
 type RevisionList = { revisions: { revision: number }[]; nextBefore: number | null };
 type PositionReceipt = { position: number };
+let identityLookups = 0;
 function memberId(_silo: string, _issuer: string, sub: string) {
+  identityLookups += 1;
   return Promise.resolve(sub);
 }
 async function start() {
+  headers.cookie = `${config.cookieName}=${encodeSession(config, session)}`;
   nats = await natsFixture();
   fga = await openfga();
   dbs = await databases();
@@ -62,9 +67,9 @@ async function start() {
     binding, feed: { memberId } };
   const onboarding = { ...chat, keys };
   app = buildServer(config, { chat, onboarding });
-  restartServer = async function restartOnboardingServer() {
+  restartServer = async function restartOnboardingServer(auth = config, silo = onboarding.silo) {
     await app.close();
-    app = buildServer(config, { chat, onboarding });
+    app = buildServer(auth, { chat, onboarding: { ...onboarding, silo } });
   };
   const logger = createLogger('survey-http', { level: 'silent' });
   runner = new ProjectionRunner(db, nats.reader, logger);
@@ -322,8 +327,8 @@ async function removalDuringHistory(method: 'GET' | 'POST') {
 it.each(['GET', 'POST'] as const)('refuses %s when membership is removed during history loading',
   removalDuringHistory);
 
-async function completeSurvey() {
-  for (let step = 1; step <= 4; step++) {
+async function completeSurvey(startStep = 1) {
+  for (let step = startStep; step <= 4; step++) {
     const current = await progress();
     expect((await save(step, current.survey.position)).statusCode).toBe(200);
   }
@@ -624,6 +629,9 @@ async function approvalRaceAndReplay() {
   const first = (await revise('approval-r1', surveyPosition, 'First')).json<RevisionReceipt>();
   const second = (await revise('approval-r2', first.position, 'Private second'))
     .json<RevisionReceipt>();
+  const wrongRevision = { ...second, revision: 1 };
+  expect((await approve('wrong-approval-number', second.position, wrongRevision)).statusCode)
+    .toBe(409);
   const append = nats.store.append.bind(nats.store);
   const bothReady = Promise.withResolvers<void>();
   let waiting = 0;
@@ -808,10 +816,12 @@ async function welcomeStartReadiness() {
   const current = await progress();
   expect((await welcome({ ...early, commandId: 'before-approval',
     expectedPosition: current.survey.position, variant: 'assistant' })).statusCode).toBe(409);
+  await readsEntry('persona');
   const revision = (await revise('readiness-revision', current.survey.position,
     'Private welcome persona')).json<RevisionReceipt>();
   const approval = (await approve('readiness-approval', revision.position,
     revision)).json<PositionReceipt>();
+  await readsEntry('welcome');
   expect((await app.inject({ url: '/api/onboarding/welcome', headers })).json())
     .toMatchObject({ status: 'not_started', requiredStep: null,
       assistantAssigned: true });
@@ -1134,12 +1144,14 @@ async function completedWelcomeFromSavedAnswer() {
   const projected = await readSurvey(pgDb(dbs.queue), 'test', 'alice');
   expect(projected).toMatchObject({ welcome: { status: 'completed', answered: 1 } });
   expect(await nats.store.head('personal-alice')).toBe(finalAnswer.sequence + 3);
+  await readsEntry('workspace');
+  await refusesReplayedSkip(2);
 }
 it('keeps the final answer pending until its saved intent completes exactly once',
   completedWelcomeFromSavedAnswer, 60_000);
 
-async function completedWelcomeForArchive() {
-  const position = await completeSurvey();
+async function completedWelcomeForArchive(startStep = 1) {
+  const position = await completeSurvey(startStep);
   const started = (await welcome({ operation: 'start', commandId: 'archive-start',
     generation: 1, expectedPosition: position, scriptVersion: 'welcome-v1',
     variant: 'no_assistant' })).json<{ position: number; welcomeId: string }>();
@@ -1169,6 +1181,10 @@ function listed(section = 'recent', q = '') {
 
 async function welcomeArchiveAndList() {
   const welcomeId = await completedWelcomeForArchive();
+  const completedSurvey = await progress();
+  const skip = { operation: 'skip', commandId: 'skip-after-completion', generation: 1,
+    expectedPosition: completedSurvey.survey.position };
+  expect((await post(skip)).statusCode).toBe(409);
   const ordinary = { ...event('ordinary-list', 'conversation-ordinary',
     'conversation.created'), source: 'opencrane-server',
   principal: { kind: 'human' as const, id: 'alice' },
@@ -1404,3 +1420,127 @@ async function completionPausesForRemovedMember() {
 }
 it('does not complete a saved welcome after membership removal',
   completionPausesForRemovedMember, 60_000);
+
+async function readsEntry(next: string) {
+  const response = await app.inject({ url: '/api/onboarding/entry', headers });
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toEqual({ next });
+}
+
+async function remembersSkip() {
+  await readsEntry('survey');
+  expect((await save(1, 0)).statusCode).toBe(200);
+  const before = await progress();
+  const skip = { operation: 'skip', commandId: 'skip-welcome',
+    generation: before.survey.generation, expectedPosition: before.survey.position };
+  const wrongGeneration = { ...skip, commandId: 'wrong-skip-generation', generation: 2 };
+  expect((await post(wrongGeneration)).statusCode).toBe(409);
+  const saved = await post(skip);
+  expect(saved.statusCode).toBe(200);
+  expect(saved.json()).toMatchObject({ operation: 'onboarding.survey_skipped' });
+  const retry = await post(skip);
+  expect(retry.json()).toEqual(saved.json());
+  expect((await post({ ...skip, commandId: 'stale-skip' })).statusCode).toBe(409);
+  const stored = await progress();
+  const repeat = { ...skip, commandId: 'repeated-skip', expectedPosition: stored.survey.position };
+  expect((await post(repeat)).statusCode).toBe(409);
+  expect(stored.survey.nextStep).toBe(2);
+  await restartServer();
+  await readsEntry('workspace');
+  await runner.rebuild(personalSettings);
+  const projected = await readSurvey(pgDb(dbs.queue), 'test', 'alice');
+  expect(projected).toMatchObject({ skipped: true, nextStep: 2 });
+  await refusesReplayedSkip(1);
+}
+it('keeps the member in the workspace after a saved skip, even after replay', remembersSkip);
+
+async function workspaceLoginUsesSavedProgress(finish: 'completed' | 'skipped') {
+  const user = { ...DEFAULT_MOCK_USER, sub: 'alice', orgId: 'org-test' };
+  const provider = await startMockOidcProvider({ user });
+  const auth = { ...config, issuerUrl: provider.url, clientId: provider.clientId,
+    allowInsecureRequests: true };
+  const workspacePaths = ['/workspace?tab=chat', '/workspace/', '/workspace/conversations',
+    '/workspace/direct?conversation=example', '/workspace/shared', '/workspace/future-page'];
+  try {
+    await restartServer(auth);
+    headers.cookie = `${auth.cookieName}=${encodeSession(auth, session)}`;
+    const invitation = '/join/alice/invitation';
+    expect(await loginWithReturnPath(app, auth, invitation)).toBe(invitation);
+    const neighbouringPath = '/workspace-example';
+    expect(await loginWithReturnPath(app, auth, neighbouringPath)).toBe(neighbouringPath);
+    await checksWorkspaceReturnPaths(auth, workspacePaths, '/welcome/survey');
+    expect((await save(1, 0)).statusCode).toBe(200);
+    await checksWorkspaceReturnPaths(auth, workspacePaths, '/welcome/survey');
+    if (finish === 'skipped') {
+      const before = await progress();
+      const skip = { operation: 'skip', commandId: 'skip-before-login',
+        generation: 1, expectedPosition: before.survey.position };
+      expect((await post(skip)).statusCode).toBe(200);
+    } else {
+      await completedWelcomeForArchive(2);
+    }
+    await checksWorkspaceReturnPaths(auth, workspacePaths);
+  } finally {
+    await provider.close();
+  }
+}
+
+async function checksWorkspaceReturnPaths(auth: AuthConfig, paths: string[], destination?: string) {
+  for (const path of paths) {
+    expect(await loginWithReturnPath(app, auth, path), path).toBe(destination ?? path);
+  }
+}
+it.each(['skipped', 'completed'] as const)(
+  'checks onboarding after a workspace login and returns there once setup is %s',
+  workspaceLoginUsesSavedProgress, 60_000);
+
+function memberHeaders(sub: string, orgId = 'org-test') {
+  const cookie = encodeSession(config, { ...session, sub, orgId });
+  return { ...headers, cookie: `${config.cookieName}=${cookie}` };
+}
+
+async function entryChecksSessionAndMembership() {
+  const route = '/api/onboarding/entry';
+  const joined = event('bob-joined', 'member-bob', 'member.joined');
+  const auth = memberAuthorisation(binding);
+  await nats.seed([joined]);
+  await auth.handler.handle(joined, pgDb(dbs.queue));
+  const skip = { operation: 'skip', commandId: 'alice-skips', generation: 1, expectedPosition: 0 };
+  expect((await post(skip)).statusCode).toBe(200);
+  const bobHeaders = memberHeaders('bob');
+  const bob = await app.inject({ url: route + '?memberId=alice', headers: bobHeaders });
+  expect(bob.statusCode).toBe(200);
+  expect(bob.json()).toEqual({ next: 'survey' });
+  await readsEntry('workspace');
+  expect((await app.inject({ url: route })).statusCode).toBe(401);
+  const wrongOrg = memberHeaders('bob', 'another-organisation');
+  expect((await app.inject({ url: route, headers: wrongOrg })).statusCode).toBe(403);
+  await restartServer(config, 'another-silo');
+  const lookupsBeforeRefusal = identityLookups;
+  expect((await app.inject({ url: route, headers: bobHeaders })).statusCode).toBe(403);
+  expect(identityLookups).toBe(lookupsBeforeRefusal);
+  await restartServer();
+  const removed = event('bob-removed', 'member-bob', 'member.removed');
+  await nats.seed([removed]);
+  expect((await app.inject({ url: route, headers: bobHeaders })).statusCode).toBe(403);
+  await readsEntry('workspace');
+}
+it('checks the entry session, organisation, silo and active member before reading their own progress',
+  entryChecksSessionAndMembership);
+
+async function refusesReplayedSkip(generation: number) {
+  const fixture = event('replayed-invalid-skip', 'personal-alice', 'onboarding.survey_skipped');
+  const principal = { kind: 'human' as const, id: 'alice' };
+  const data = { ...fixture.data, memberId: 'alice', generation };
+  const invalid = { ...fixture, source: 'opencrane-server', principal, data };
+  const position = await nats.store.head('personal-alice');
+  await expect(personalSettings.apply(pgDb(dbs.queue), invalid, position + 1))
+    .rejects.toThrow('Invalid survey skip');
+  await nats.seed([invalid]);
+  const entry = await app.inject({ url: '/api/onboarding/entry', headers });
+  expect(entry.statusCode).toBe(503);
+}
+async function refusesReplayedSkipGeneration() {
+  await refusesReplayedSkip(2);
+}
+it('refuses a skip of the wrong generation in both survey readers', refusesReplayedSkipGeneration);

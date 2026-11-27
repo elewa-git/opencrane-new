@@ -1,0 +1,40 @@
+{
+  "sourceCommit": "13c6ea3e157361801d836865aa4a5f1c9d7f56e5",
+  "stack": { "type": "Compose", "slot": 1, "fresh": true },
+  "verdict": "PARTIAL",
+  "ownerClaim": { "verdict": "PASS", "claimStatus": 201, "computerListStatus": 200 },
+  "viewports": [
+    {
+      "width": 1280,
+      "height": 900,
+      "signedOutSurveyStatus": 401,
+      "invitation": { "verdict": "FAIL", "peopleStatus": 503, "reason": "membership_applying" },
+      "surveyStepTwoAndRunningComputer": "NOT RUN",
+      "unfinishedBookmark": "NOT RUN",
+      "unfinishedReload": "NOT RUN",
+      "surveyPersonaAndWelcomeComplete": "NOT RUN",
+      "finishedBookmarkAndReload": "NOT RUN",
+      "firstOrdinaryChat": "NOT RUN",
+      "memoryFactAfterReload": "NOT RUN"
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "signedOutSurveyStatus": 401,
+      "invitation": { "verdict": "PASS", "peopleStatus": 200, "joinStatus": 200 },
+      "surveyStepTwoAndRunningComputer": "PASS",
+      "unfinishedBookmark": {
+        "verdict": "PARTIAL",
+        "documentStatus": 200,
+        "entryStatus": 200,
+        "finalPageVerified": false
+      },
+      "unfinishedReload": "NOT RUN",
+      "surveyPersonaAndWelcomeComplete": "NOT RUN",
+      "finishedBookmarkAndReload": "NOT RUN",
+      "firstOrdinaryChat": "NOT RUN",
+      "memoryFactAfterReload": "NOT RUN"
+    }
+  ],
+  "cleanup": { "verdict": "PASS", "slotStatus": "free" }
+}

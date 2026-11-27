@@ -1,7 +1,17 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import type { PoolClient } from 'pg';
 
 const image = 'mirror.gcr.io/library/postgres:17.6-alpine';
+const packageRolesLock = 'pilot_restore_tests';
+
+export async function lockPackageTestRoles(connection: PoolClient) {
+  await connection.query('SELECT pg_advisory_lock(hashtext($1))', [packageRolesLock]);
+}
+
+export async function unlockPackageTestRoles(connection: PoolClient) {
+  await connection.query('SELECT pg_advisory_unlock(hashtext($1))', [packageRolesLock]);
+}
 
 export function postgresFixtureCommand(command: 'pg_dump' | 'psql', database: string,
   input?: Buffer): Promise<Buffer> {

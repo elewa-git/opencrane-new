@@ -1,9 +1,10 @@
 import { By } from '@angular/platform-browser';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryEdit } from './memory-edit';
 import { isObject, type Fact } from './memory-panel-data';
 import { MemoryPanel } from './memory-panel';
+import { memoryDialogFixture } from './memory-dialog-fixture';
 
 const fact: Fact = { memoryId: 'one', revision: 7, text: 'Private original text', kind: 'preference',
   pinned: true, expiresAt: '2027-01-01T00:00:00Z', savedAt: '2026-10-02T10:00:00Z' };
@@ -26,9 +27,6 @@ function deferred() {
   const promise = new Promise<Response>(rememberResolver);
   return { promise, resolve };
 }
-function showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); }
-function closeModal(this: HTMLDialogElement): void { this.removeAttribute('open'); }
-Object.assign(HTMLDialogElement.prototype, { showModal, close: closeModal });
 let fixture: ComponentFixture<MemoryPanel>;
 let root: HTMLElement;
 let calls: { url: string; init?: RequestInit | undefined }[];
@@ -127,11 +125,18 @@ function noPrivateAnnouncements(): void {
     expect(region.textContent).not.toMatch(/Private original text|New private text|My draft/);
   }
 }
+const dialogs = memoryDialogFixture();
+beforeEach(dialogs.install);
+
 function cleanupTest(): void {
-  TestBed.resetTestingModule();
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
+  try {
+    TestBed.resetTestingModule();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  } finally {
+    dialogs.restore();
+  }
 }
 afterEach(cleanupTest);
 

@@ -482,10 +482,12 @@ infra/dev-stack/status.sh
 infra/dev-stack/down.sh
 ```
 
-By default, `up` runs the core journey. CORE completes its browser logout and token
-exposure checks, then closes the browser before its final members and MCP catalogue
-replay checks. Completed pages therefore stop polling during replay. The replay
-commands retain their 60-second limits and verification assertions.
+By default, `up` runs the core journey. If the browser opens the welcome survey,
+the ordinary chat check saves a skip for its test member before sending a message.
+CORE completes its browser logout and token exposure checks, then closes the
+browser before its final members and MCP catalogue replay checks. Completed pages
+therefore stop polling during replay. The replay commands retain their 60-second
+limits and verification assertions.
 The stack status includes the latest JetStream retry, recovery or exhaustion for
 dispatcher pulls, dispatcher acknowledgements and computer watcher reads.
 Starting the dispatcher clears its previous report.
@@ -705,6 +707,7 @@ Endpoint diagnostics accept only known route words and decimal entity ids;
 unexpected provider identifiers receive a fixed `unrecognised endpoint` label.
 
 `claim.sh` prints one free secondary id, or exits non-zero when both ids are in use.
+With `--id 1` or `--id 2`, it only checks and claims the selected slot.
 The owner file records the worktree, claiming process id and claim start time. A
 worktree that claims again gets its existing id. A claim stays reserved for 15 minutes
 from its `startedAt` timestamp, even after the claiming process has ended. This gives
@@ -1260,6 +1263,10 @@ See the [model integration evidence](../../docs/process/models-evidence.md) for
 fresh/repeat journeys, owner-stack restoration and unqualified conditions.
 
 ## Browser chat qualification
+
+The sign-in check confirms the browser session even when sign-in opens the
+welcome survey. The chat and sign-out checks open the workspace from that
+session. On a phone, the sign-out form is in the session navigation drawer.
 
 The joined member opens **Open workspace**, sends through the composer, observes
 streamed stub text, reloads and reads the saved answer. A second turn is stopped

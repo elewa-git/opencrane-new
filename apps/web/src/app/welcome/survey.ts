@@ -1,8 +1,9 @@
 import {
-  afterNextRender, ChangeDetectionStrategy, Component, ElementRef, signal, ViewChild,
+  afterNextRender, ChangeDetectionStrategy, Component, ElementRef, inject, signal, ViewChild,
   type OnDestroy,
 } from '@angular/core';
 import { z } from 'zod';
+import { NAVIGATE } from '../core/navigate';
 import { SharedState } from '../shared-state/shared-state';
 import { SurveyChoices, savedStyle, savedTasks, sameStyleAnswers, sameTaskAnswers,
   type StyleAnswers, type TaskAnswers } from './survey-choices';
@@ -17,6 +18,7 @@ const savedStep = z.object({
 });
 const progressSchema = z.object({
   state: z.enum(['not_started', 'survey', 'review']),
+  allowedActions: z.array(z.string()).optional(),
   survey: z.object({
     generation: z.number().int().positive(),
     position: z.number().int().nonnegative(),
@@ -25,6 +27,10 @@ const progressSchema = z.object({
   }),
 });
 type Progress = z.infer<typeof progressSchema>;
+type SurveyAnswers = NameAnswers | WorkAnswers | StyleAnswers | TaskAnswers;
+type SurveyAction = { operation: 'skip' } | { operation: 'save_step'; answers: SurveyAnswers };
+type SurveyCommand = SurveyAction & { commandId: string; generation: number;
+  expectedPosition: number };
 type ScreenState = 'loading' | 'ready' | 'read_failed' | 'saving' | 'failed' | 'unknown'
   | 'unavailable' | 'access_applying' | 'conflict' | 'recovered' | 'signed_out' | 'refused';
 
@@ -36,6 +42,7 @@ type ScreenState = 'loading' | 'ready' | 'read_failed' | 'saving' | 'failed' | '
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SurveyScreen implements OnDestroy {
+  private readonly navigate = inject(NAVIGATE);
   @ViewChild('stepHeading') private stepHeading?: ElementRef<HTMLHeadingElement>;
   protected readonly state = signal<ScreenState>('loading');
   protected readonly progress = signal<Progress | null>(null);
@@ -49,8 +56,7 @@ export class SurveyScreen implements OnDestroy {
   protected readonly groupsState = signal<'loading' | 'ready' | 'failed'>('loading');
   protected readonly hasMoreGroups = signal(false);
   protected readonly announcement = signal('');
-  private commandId: string | null = null;
-  private sentAnswers: NameAnswers | WorkAnswers | StyleAnswers | TaskAnswers | null = null;
+  private pendingCommand: SurveyCommand | null = null;
   private request = new AbortController();
   private identityLoaded = false;
   private draftWithoutProgress = false;
@@ -170,8 +176,7 @@ export class SurveyScreen implements OnDestroy {
     this.choices.clear();
     this.groups.set([]);
     this.groupRead += 1;
-    this.sentAnswers = null;
-    this.commandId = null;
+    this.pendingCommand = null;
     this.state.set('refused');
     this.announcement.set('Access changed. Your survey details were cleared.');
   }
@@ -275,7 +280,9 @@ export class SurveyScreen implements OnDestroy {
       return;
     }
     const answers = this.nameDraft.checkedAnswers();
-    if (!answers) return;
+    if (!answers) {
+      return;
+    }
     if (!this.progress() || this.draftWithoutProgress) {
       await this.readProgress(true);
       if (this.state() !== 'ready') return;
@@ -291,9 +298,7 @@ export class SurveyScreen implements OnDestroy {
       this.openStep(2);
       return;
     }
-    this.commandId = crypto.randomUUID();
-    this.sentAnswers = answers;
-    await this.postStep();
+    await this.submit({ operation: 'save_step', answers });
   }
 
   private async continueChoiceStep(): Promise<void> {
@@ -328,9 +333,7 @@ export class SurveyScreen implements OnDestroy {
       return;
     }
     this.workConfirmation.set(false);
-    this.commandId = crypto.randomUUID();
-    this.sentAnswers = answers;
-    await this.postStep();
+    await this.submit({ operation: 'save_step', answers });
   }
 
   private async continueStyle(): Promise<void> {
@@ -345,36 +348,49 @@ export class SurveyScreen implements OnDestroy {
       this.choices.laterAnswersConfirmation.set(true);
       return;
     }
-    this.commandId = crypto.randomUUID();
-    this.sentAnswers = answers;
-    await this.postStep();
+    await this.submit({ operation: 'save_step', answers });
   }
 
   private async continueTasks(): Promise<void> {
     const answers = this.choices.checkedTaskAnswers();
-    if (!answers) return;
+    if (!answers) {
+      return;
+    }
     const saved = savedTasks.safeParse(this.progress()?.survey.steps[3]?.answers);
     if (saved.success && sameTaskAnswers(saved.data, answers)) {
       this.choices.editingCompletedTasks.set(false);
       return;
     }
-    this.commandId = crypto.randomUUID();
-    this.sentAnswers = answers;
-    await this.postStep();
+    await this.submit({ operation: 'save_step', answers });
   }
 
-  private async postStep(): Promise<void> {
+  protected async skip(): Promise<void> {
+    const allowedActions = this.progress()?.allowedActions;
+    if (this.state() !== 'ready' || !allowedActions?.includes('skip')) {
+      return;
+    }
+    await this.submit({ operation: 'skip' });
+  }
+
+  private async submit(action: SurveyAction): Promise<void> {
     const progress = this.progress();
-    if (!progress || !this.commandId || !this.sentAnswers) return;
+    if (!progress) {
+      return;
+    }
+    const command = { ...action, commandId: crypto.randomUUID(),
+      generation: progress.survey.generation, expectedPosition: progress.survey.position };
+    this.pendingCommand = command;
+    await this.postSurvey(command);
+  }
+
+  private async postSurvey(command: SurveyCommand): Promise<void> {
     this.state.set('saving');
     const request = this.request;
     try {
       const response = await fetch('/api/onboarding/survey', {
         method: 'POST', cache: 'no-store', signal: request.signal,
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ operation: 'save_step', commandId: this.commandId,
-          generation: progress.survey.generation,
-          expectedPosition: progress.survey.position, answers: this.sentAnswers }),
+        body: JSON.stringify(command),
       });
       if (request.signal.aborted || request !== this.request) return;
       if (response.ok) {
@@ -385,9 +401,13 @@ export class SurveyScreen implements OnDestroy {
         this.handleWriteRefusal(response.status, null);
         return;
       }
-      const body: unknown = await response.json().catch(() => null);
+      function unavailableReason() {
+        return null;
+      }
+      const body = response.json();
+      const refusal: unknown = await body.catch(unavailableReason);
       if (request.signal.aborted || request !== this.request) return;
-      this.handleWriteRefusal(response.status, body);
+      this.handleWriteRefusal(response.status, refusal);
     } catch {
       if (request.signal.aborted || request !== this.request) return;
       this.state.set('unknown');
@@ -408,11 +428,21 @@ export class SurveyScreen implements OnDestroy {
     else this.state.set('failed');
   }
 
+  protected saveSubject(): 'answer' | 'choice' {
+    if (this.pendingCommand?.operation === 'save_step') {
+      return 'answer';
+    }
+    return 'choice';
+  }
+
   private async confirmSave(): Promise<void> {
+    if (this.pendingCommand?.operation === 'skip') {
+      this.navigate('/workspace');
+      return;
+    }
     await this.readProgress(false);
     if (this.state() === 'ready') {
-      this.commandId = null;
-      this.sentAnswers = null;
+      this.pendingCommand = null;
     }
   }
 
@@ -426,11 +456,14 @@ export class SurveyScreen implements OnDestroy {
   }
 
   protected async checkStatus(): Promise<void> {
-    if (this.state() !== 'unknown' || !this.commandId) return;
+    const command = this.pendingCommand;
+    if (this.state() !== 'unknown' || !command) {
+      return;
+    }
     this.state.set('saving');
     const request = this.request;
     try {
-      const response = await fetch(`/api/personal/changes/${this.commandId}`, {
+      const response = await fetch(`/api/personal/changes/${command.commandId}`, {
         cache: 'no-store', signal: request.signal,
       });
       if (request.signal.aborted || request !== this.request) return;
@@ -452,14 +485,12 @@ export class SurveyScreen implements OnDestroy {
   }
 
   protected retry(): void {
-    this.commandId = null;
-    this.sentAnswers = null;
+    this.pendingCommand = null;
     this.state.set('ready');
   }
 
   protected review(): void {
-    this.commandId = null;
-    this.sentAnswers = null;
+    this.pendingCommand = null;
     this.state.set('ready');
     this.openStep(this.currentStep());
   }

@@ -3,7 +3,8 @@ import { rm } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as observability from '@opencrane/observability';
 import { until } from '@opencrane/authz/testing';
-import { envelope } from '@opencrane/models';
+import { envelope, personalAssistantId } from '@opencrane/models';
+import { event } from '@opencrane/event-store/testing';
 import { expect, it, vi } from 'vitest';
 import { fakeKubectl } from './fake-kubectl.ts';
 import { SandboxClient } from '../src/kubernetes.ts';
@@ -437,3 +438,108 @@ async function upgradesRunningComputerAtNextSuspend() {
 
 it('keeps an outdated running computer until its next committed suspend',
   upgradesRunningComputerAtNextSuspend);
+
+const minute = 60_000;
+
+async function onboardingIdleLimit(firstChat?: 'personal' | 'shared' | 'direct') {
+  const assistantId = personalAssistantId('test', 'alice');
+  const fixture = await computerFixture({ suspended: false, assistantId });
+  const { nats, directory, stop, tokens, subject } = fixture;
+  const joinedAt = Date.now();
+  let now = joinedAt + 10 * minute;
+  function clock() {
+    return now;
+  }
+  vi.spyOn(Date, 'now').mockImplementation(clock);
+  const joined = event('joined-alice', 'member-alice', 'member.joined');
+  await nats.seed([{ ...joined, time: new Date(joinedAt).toISOString() }]);
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const sandbox = { uid: 'sandbox', podUid: 'old-pod', ready: true, suspended: false };
+  vi.spyOn(kube, 'state').mockResolvedValue(sandbox);
+  vi.spyOn(kube, 'mode').mockResolvedValue();
+  const sink = vi.fn().mockResolvedValue(undefined);
+  const work = watchComputers(nats.store, kube, tokens, sink,
+    { silo: 'test', idleMs: 15 * minute, signal: stop.signal });
+  function checkedOnce() {
+    return sink.mock.calls.length >= 1;
+  }
+  function checkedTwice() {
+    return sink.mock.calls.length >= 2;
+  }
+  async function isSuspended() {
+    const rows = await history(nats.store, subject);
+    return rows.at(-1)?.event.type === 'computer.suspended';
+  }
+  try {
+    await until(checkedOnce);
+    now = joinedAt + 16 * minute;
+    async function checkedAgain() {
+      return checkedTwice() || await isSuspended();
+    }
+    await until(checkedAgain);
+    expect(await isSuspended()).toBe(false);
+    if (firstChat) {
+      const time = new Date(now).toISOString();
+      await sendFirstChat(nats, firstChat, assistantId, time);
+      now = joinedAt + 32 * minute;
+    } else {
+      now = joinedAt + 59 * minute;
+      const time = new Date(now).toISOString();
+      await saveOnboardingActivity(nats, time);
+      now = joinedAt + 60 * minute;
+    }
+    await until(isSuspended, 2500);
+  } finally {
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await nats.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+async function sendFirstChat(nats: Awaited<ReturnType<typeof computerFixture>>['nats'],
+  firstChat: 'personal' | 'shared' | 'direct', personalId: string, time: string) {
+  const conversationId = 'onboarding-chat';
+  const conversation = `conversation-${conversationId}`;
+  const assistantId = firstChat === 'shared' ? 'shared-assistant' : personalId;
+  const common = { conversationId, createdBy: 'alice' };
+  const direct = { ...common, mode: 'direct' as const, participantIds: ['alice', 'bob'] };
+  const session = { ...common, mode: 'agent_session' as const, assistantId };
+  const created = envelope('test', conversation, 'conversation.created',
+    firstChat === 'direct' ? direct : session);
+  const posted = envelope('test', conversation, 'message.posted', {
+    conversationId, authorId: 'alice', authorKind: 'human',
+    utterance: 'My first ordinary message', contentType: 'text',
+  });
+  await nats.seed([{ ...created, time }]);
+  await nats.seed([{ ...posted, time }]);
+  if (firstChat !== 'direct') {
+    const finished = envelope('test', conversation, 'agent.turn_completed', {
+      conversationId, turnId: posted.id,
+    });
+    await nats.seed([{ ...finished, time }]);
+  }
+}
+
+async function saveOnboardingActivity(nats: Awaited<ReturnType<typeof computerFixture>>['nats'],
+  time: string) {
+  const subject = 'personal-alice';
+  const types = ['onboarding.survey_step_saved', 'onboarding.survey_step_saved',
+    'onboarding.persona_revised'];
+  for (const [index, type] of types.entries()) {
+    const fixture = event(`onboarding-${index}`, subject, type);
+    const data = { ...fixture.data, memberId: 'alice' };
+    const principal = { kind: 'human' as const, id: 'alice' };
+    await nats.seed([{ ...fixture, source: 'opencrane-server', data, principal, time }]);
+  }
+}
+
+function expiresAfterAnHour() {
+  return onboardingIdleLimit();
+}
+it('keeps a new member’s computer awake for up to an hour even with repeated onboarding saves',
+  expiresAfterAnHour);
+const firstChatKinds = ['personal', 'shared', 'direct'] as const;
+it.each(firstChatKinds)('returns to the ordinary idle rule after the first %s chat',
+  onboardingIdleLimit);

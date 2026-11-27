@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
-import { serveWebBuild } from './serve-web-build.mjs';
+import { serveWebBuild, usesApiFixture } from './serve-web-build.mjs';
 import { pageHasNoOverflow, waitForFonts } from './visual-helpers.mjs';
 
 const output = resolve('docs/process/screen-p4-8-pr12a');
@@ -59,7 +59,7 @@ async function servePage(route) {
       allowanceBoundCents: 1000, review: 'signed-review', expiresAt: Date.now() + 600_000 } });
     return;
   }
-  if (url.pathname.startsWith('/api/')) assert.fail(`Unexpected API request: ${url.pathname}`);
+  if (usesApiFixture(url.pathname)) assert.fail(`Unexpected API request: ${url.pathname}`);
   await serveWebBuild(route, build);
 }
 

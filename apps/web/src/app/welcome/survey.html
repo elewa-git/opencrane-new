@@ -23,6 +23,9 @@
         <span [class.done]="currentStep() > 3" [class.active]="currentStep() === 3"></span>
         <span [class.active]="currentStep() === 4"></span>
       </div>
+      @if (state() === 'ready' && progress()?.allowedActions?.includes('skip')) {
+        <button type="button" (click)="skip()">Skip welcome setup</button>
+      }
       <p class="sr-only" role="status" aria-live="polite">{{ announcement() }}</p>
       @if (state() === 'loading') {
         <oc-shared-state kind="checking" message="Checking your progress" [showAction]="false" />
@@ -89,10 +92,10 @@
                 <p class="field-error" id="pronouns-error">{{ nameDraft.pronounsError() }}</p>
               }
               @if (state() === 'saving') {
-                <oc-shared-state kind="checking" message="Saving your answer" [showAction]="false" />
+                <oc-shared-state kind="checking" [message]="'Saving your ' + saveSubject()" [showAction]="false" />
               } @else if (state() === 'unknown') {
                 <oc-shared-state kind="unknown" message="Save status unknown"
-                  detail="The answer may have been saved. Check before doing anything else."
+                  [detail]="'Your ' + saveSubject() + ' may have been saved. Check before doing anything else.'"
                   (action)="checkStatus()" />
               } @else if (state() === 'failed' || state() === 'unavailable') {
                 <oc-shared-state kind="failed" message="Nothing was saved"
@@ -156,10 +159,10 @@
               <p role="alert">Please confirm this change before saving it.</p>
             }
             @if (state() === 'saving') {
-              <oc-shared-state kind="checking" message="Saving your answer" [showAction]="false" />
+              <oc-shared-state kind="checking" [message]="'Saving your ' + saveSubject()" [showAction]="false" />
             } @else if (state() === 'unknown') {
               <oc-shared-state kind="unknown" message="Save status unknown"
-                detail="The answer may have been saved. Check before doing anything else."
+                [detail]="'Your ' + saveSubject() + ' may have been saved. Check before doing anything else.'"
                 (action)="checkStatus()" />
             } @else if (state() === 'failed' || state() === 'unavailable') {
               <oc-shared-state kind="failed" message="Nothing was saved"
@@ -281,10 +284,10 @@
         }
         @if (currentStep() > 2) {
           @if (state() === 'saving') {
-            <oc-shared-state kind="checking" message="Saving your answer" [showAction]="false" />
+            <oc-shared-state kind="checking" [message]="'Saving your ' + saveSubject()" [showAction]="false" />
           } @else if (state() === 'unknown') {
             <oc-shared-state kind="unknown" message="Save status unknown"
-              detail="The answer may have been saved. Check before doing anything else."
+              [detail]="'Your ' + saveSubject() + ' may have been saved. Check before doing anything else.'"
               (action)="checkStatus()" />
           } @else if (state() === 'failed' || state() === 'unavailable') {
             <oc-shared-state kind="failed" message="Nothing was saved"

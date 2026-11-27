@@ -52,23 +52,17 @@ metadata:
   name: server
 spec:
   replicas: {{ ternary 0 1 .Values.pilotRestore.enabled }}
-{{- if eq (toString .Values.models.mode) "provider" }}
-  {{- /* Let the old models process release the budget lock before starting its replacement. */}}
+  {{- /* Stop the old Pod before a replacement uses its keys or takes the budget lock. */}}
   strategy:
     type: Recreate
-{{- end }}
   selector:
     matchLabels: { app: server }
   template:
     metadata:
       labels: { app: server }
     spec:
-      serviceAccountName: package-worker
-{{- if eq (toString .Values.models.mode) "provider" }}
+      serviceAccountName: package-server
       securityContext: { fsGroup: 1000, fsGroupChangePolicy: OnRootMismatch }
-{{- else }}
-      securityContext: { fsGroup: 1000 }
-{{- end }}
       initContainers:
         - name: kubeconfig
           image: {{ .Values.images.server | quote }}
@@ -127,6 +121,11 @@ spec:
             requests: { cpu: 10m, memory: 32Mi }
             limits: { cpu: 50m, memory: 64Mi }
 {{- end }}
+        {{- if not .Values.pilotRestore.enabled }}
+        {{- $keys := list "personal-secrets" "memory-secrets" }}
+        {{- $init := dict "name" "private-member-keys" "image" .Values.images.server "volumes" $keys }}
+        {{- include "opencrane.memberKeyInit" $init | nindent 8 }}
+        {{- end }}
       containers:
         - name: server
           image: {{ required "server pin" .Values.images.server | quote }}
@@ -143,6 +142,10 @@ spec:
             - { name: NATS_INBOX_PREFIX, value: _INBOX.projection }
             {{- end }}
             - { name: PILOT_RESTORE_READ_ONLY, value: {{ .Values.pilotRestore.enabled | quote }} }
+            {{- if not .Values.pilotRestore.enabled }}
+            - { name: PERSONAL_KEY_DIRECTORY, value: /var/lib/opencrane/personal-secrets/keys }
+            {{- include "opencrane.memoryKeyEnvironment" . | nindent 12 }}
+            {{- end }}
 {{- if eq (toString .Values.models.mode) "provider" }}
             - { name: PROVIDER_SECRETS_DIR, value: "/var/lib/opencrane/provider-secrets/keys" }
 {{- end }}
@@ -164,6 +167,10 @@ spec:
           volumeMounts:
             - { name: runtime, mountPath: /run/opencrane, readOnly: true }
             - { name: runtime-files, mountPath: /run/opencrane/files, readOnly: true }
+            {{- if not .Values.pilotRestore.enabled }}
+            - { name: personal-secrets, mountPath: /var/lib/opencrane/personal-secrets }
+            - { name: memory-secrets, mountPath: /var/lib/opencrane/memory-secrets }
+            {{- end }}
             {{- if .Values.exposure.public.enabled }}
             - { name: bootstrap-token, mountPath: /var/lib/opencrane/bootstrap, readOnly: true }
             {{- end }}
@@ -259,6 +266,9 @@ spec:
         - name: provider-secrets
           persistentVolumeClaim: { claimName: provider-secrets }
 {{- end }}
+        {{- if not .Values.pilotRestore.enabled }}
+        {{- include "opencrane.memberKeyVolumes" (list "personal-secrets" "memory-secrets") | nindent 8 }}
+        {{- end }}
         - name: model-state
           emptyDir: {}
         - name: kubeconfig

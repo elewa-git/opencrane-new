@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, it } from 'vitest';
+import { afterEach, it, vi } from 'vitest';
+import * as fileSystem from 'node:fs';
+import { sha256Hex } from '@opencrane/events/digest';
 import { conversationKeys } from '../src/keys.ts';
+
+vi.mock('node:fs', async function mockSync(importOriginal) {
+  const actual = await importOriginal<typeof fileSystem>();
+  return { ...actual, fsyncSync: vi.fn(actual.fsyncSync) };
+});
 
 const directories: string[] = [];
 
@@ -45,3 +52,68 @@ it('refuses a different wrapping key', () => {
 
   assert.throws(() => otherKeys.decrypt('dev', 'chat', encrypted));
 });
+
+function recoversInterruptedKeyWrite(published: boolean) {
+  const { directory } = keyStore();
+  const keysPath = join(directory, 'conversations');
+  mkdirSync(keysPath, { mode: 0o700 });
+  const reference = sha256Hex(JSON.stringify(['dev', 'chat']));
+  const keyFile = join(keysPath, reference);
+  const pending = `${keyFile}-00000000-0000-4000-8000-000000000000.pending`;
+  const oldKey = Buffer.alloc(32, 7);
+  writeFileSync(pending, oldKey, { mode: 0o600 });
+  if (published) {
+    linkSync(pending, keyFile);
+  }
+  const keys = conversationKeys(keysPath);
+  keys.provision('dev', 'chat');
+  assert.deepEqual(readdirSync(keysPath), [reference]);
+  if (published) {
+    assert.deepEqual(readFileSync(keyFile), oldKey);
+  }
+  const answer = keys.encrypt('dev', 'chat', 'recovered answer');
+  assert.equal(keys.decrypt('dev', 'chat', answer), 'recovered answer');
+}
+function recoversBeforePublication() {
+  recoversInterruptedKeyWrite(false);
+}
+function recoversAfterPublication() {
+  recoversInterruptedKeyWrite(true);
+}
+it('cleans a key left by an interrupted write before publication', recoversBeforePublication);
+it('keeps the published key and clears its extra name after interruption', recoversAfterPublication);
+
+async function syncFailureLeavesRecoverableKey(failDirectory: boolean) {
+  const { directory } = keyStore();
+  const keyDirectory = join(directory, 'conversations');
+  mkdirSync(keyDirectory, { mode: 0o700 });
+  const keys = conversationKeys(keyDirectory);
+  const { fsyncSync } = await vi.importActual<typeof fileSystem>('node:fs');
+  function failCheckedSync(descriptor: number) {
+    if (fileSystem.fstatSync(descriptor).isDirectory() === failDirectory) {
+      throw new Error('Synthetic sync failure');
+    }
+    fsyncSync(descriptor);
+  }
+  const syncSpy = vi.mocked(fileSystem.fsyncSync);
+  syncSpy.mockImplementation(failCheckedSync);
+  try {
+    assert.throws(() => keys.provision('dev', 'chat'), /Synthetic sync failure/u);
+  } finally {
+    syncSpy.mockReset();
+  }
+  const files = readdirSync(keyDirectory);
+  assert.equal(files.length, failDirectory ? 1 : 0);
+  keys.provision('dev', 'chat');
+  assert.equal(readdirSync(keyDirectory).length, 1);
+  const answer = keys.encrypt('dev', 'chat', 'saved after sync');
+  assert.equal(keys.decrypt('dev', 'chat', answer), 'saved after sync');
+}
+function requiresFileSync() {
+  return syncFailureLeavesRecoverableKey(false);
+}
+function requiresDirectorySync() {
+  return syncFailureLeavesRecoverableKey(true);
+}
+it('refuses to publish a key if its file cannot be synced', requiresFileSync);
+it('refuses to acknowledge a key if its directory cannot be synced', requiresDirectorySync);

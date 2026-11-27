@@ -10,7 +10,7 @@ import { connectEventStore, type EventStore } from '@opencrane/event-store';
 import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members,
   mcpCatalogue, connectionProfiles, computers, modelAccess, egressPolicy, delegations, routines,
   conversations, childRequests, files, personalSettings, conversationKeys, memoryKeys,
-  memoryProjection,
+  memoryProjection, memoryProjectionDatabaseUrl, initialiseMemoryProjectionSchema,
   type Projection, type Db,
 } from '@opencrane/projections';
 import { dispatch, HandlerRuntime } from '@opencrane/handlers';
@@ -102,13 +102,17 @@ function readinessRemovalFailed() {
 }
 stop.signal.addEventListener('abort', withdrawReadiness, { once: true });
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => stop.abort());
-const db = connectProjectionDb(required('DATABASE_URL'), (error) => {
+const databaseUrl = required('DATABASE_URL');
+const memoryDatabaseUrl = mode === 'memory' ? memoryProjectionDatabaseUrl(databaseUrl) : undefined;
+const db = connectProjectionDb(memoryDatabaseUrl ?? databaseUrl, workerDatabaseFailed);
+function workerDatabaseFailed(error: Error) {
   logger.error({ err: error }, 'Worker database connection failed');
   process.exitCode = 1;
   stop.abort();
-});
+}
 let connection: Awaited<ReturnType<typeof connectNats>> | undefined;
 let content: ReturnType<typeof connectProjectionDb> | undefined;
+let memoryContent: ReturnType<typeof connectProjectionDb> | undefined;
 let runtime: HandlerRuntime | undefined;
 let commands: Awaited<ReturnType<typeof connectEventStore>> | undefined;
 let watcher: Promise<void> | undefined;
@@ -117,6 +121,9 @@ async function runProjectionWorker(projection: Projection, store: EventStore) {
   const runner = new ProjectionRunner(db.db, store, logger);
   // Hold the database lock while creating shared tables. Other workers may start together.
   async function initialiseProjection(locked: Db) {
+    if (memoryDatabaseUrl) {
+      await initialiseMemoryProjectionSchema(locked);
+    }
     const lockedRunner = new ProjectionRunner(locked, store, logger);
     await lockedRunner.initialise(projection);
   }
@@ -255,8 +262,14 @@ try {
       }
     }
     const memoryDirectory = process.env['MEMORY_KEY_DIRECTORY']?.trim();
+    const memoryContentUrl = memoryDirectory
+      ? memoryProjectionDatabaseUrl(contentDatabaseUrl()) : undefined;
+    if (memoryContentUrl) {
+      memoryContent = connectProjectionDb(memoryContentUrl, workerDatabaseFailed);
+    }
+    const memoryReadTables = memoryContent?.db ?? content!.db;
     if (memoryDirectory) {
-      const cleanup = memoryCleanupHandler(commands.store, memoryKeys(memoryDirectory), content!.db);
+      const cleanup = memoryCleanupHandler(commands.store, memoryKeys(memoryDirectory), memoryReadTables);
       available.push(cleanup);
     }
     const decisionUrl = process.env['MODEL_DECISION_URL'];
@@ -308,7 +321,7 @@ try {
       await recoverHostedImageChecks(dispatcherRuntime, store, commandStore);
       await dispatcherRuntime.work();
       async function scanNightly(occurrence: Date) {
-        await scanNightlyMemory(content!.db, commandStore, silo, occurrence);
+        await scanNightlyMemory(memoryReadTables, commandStore, silo, occurrence);
       }
       await dispatcherRuntime.startNightly(scanNightly);
       function deliverCredentials(id: string, token: import('@opencrane/auth').IssuedToken) {
@@ -361,7 +374,7 @@ try {
     }
   }
   const closed = await Promise.allSettled([
-    commands?.close(), connection?.close(), content?.close(), db.close(),
+    commands?.close(), connection?.close(), content?.close(), memoryContent?.close(), db.close(),
   ]);
   for (const result of closed) {
     if (result.status === 'rejected') {

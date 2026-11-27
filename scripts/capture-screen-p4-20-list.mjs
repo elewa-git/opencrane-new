@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
-import { serveWebBuild } from './serve-web-build.mjs';
+import { serveWebBuild, usesApiFixture } from './serve-web-build.mjs';
 import { pageHasNoOverflow, waitForFonts } from './visual-helpers.mjs';
 
 const output = resolve('docs/process/screen-p4-20-list');
@@ -54,7 +54,7 @@ async function serve(fixture, route) {
       eventId: 'archive-event', time: completedAt } });
     return;
   }
-  if (address.pathname.startsWith('/api/')) assert.fail(`Unexpected request: ${address.pathname}`);
+  if (usesApiFixture(address.pathname)) assert.fail(`Unexpected request: ${address.pathname}`);
   await serveWebBuild(route, build);
 }
 

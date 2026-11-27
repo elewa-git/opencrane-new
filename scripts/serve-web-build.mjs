@@ -9,9 +9,21 @@ const contentTypes = {
   '.jpg': 'image/jpeg',
   '.svg': 'image/svg+xml',
 };
+const welcomeEntry = '/api/onboarding/entry';
+
+export function usesApiFixture(pathname) {
+  return pathname.startsWith('/api/') && pathname !== welcomeEntry;
+}
 
 export async function serveWebBuild(route, buildDirectory) {
-  const url = new URL(route.request().url());
+  const request = route.request();
+  const url = new URL(request.url());
+  if (url.pathname === welcomeEntry && request.method() === 'GET') {
+    // Serve the response for an installation with welcome setup turned off.
+    const disabled = { status: 204 };
+    await route.fulfill(disabled);
+    return;
+  }
   let filename = resolve(buildDirectory, `.${url.pathname}`);
   if (!extname(url.pathname)) filename = resolve(buildDirectory, 'index.html');
   if (!filename.startsWith(`${buildDirectory}/`)) {

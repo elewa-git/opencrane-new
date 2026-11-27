@@ -1,5 +1,6 @@
+import { surveyCanBeSkipped } from '@opencrane/projections';
 import type { OnboardingOptions } from './options.ts';
-import { parseEventByType, surveyRestartedDataSchema, surveyStepSavedDataSchema,
+import { parseEventByType, surveyGenerationDataSchema, surveyStepSavedDataSchema,
   personaRevisedDataSchema, personaApprovedDataSchema,
   welcomeStartedDataSchema, welcomeAnswerRecordedDataSchema, onboardingCompletedDataSchema,
   welcomeArchiveSetDataSchema,
@@ -16,13 +17,14 @@ export type PersonaReference = { revision: number; sequence: number; eventId: st
   time: string; generation: number };
 type Survey = { generation: number; position: number; steps: StoredEvent[];
   commands: Map<string, Reference>; revisions: PersonaReference[];
-  currentRevision: number | null;
+  currentRevision: number | null; skipped: boolean; hasSavedAnswers: boolean;
   approval: { revision: number; revisionId: string; time: string } | null;
   welcome: { start: StoredEvent; answers: StoredEvent[]; completion: StoredEvent | null;
     archive: { archived: boolean; position: number } } | null };
 function empty(): Survey {
   return { generation: 1, position: 0, steps: [], commands: new Map(),
-    revisions: [], currentRevision: null, approval: null, welcome: null };
+    revisions: [], currentRevision: null, skipped: false, hasSavedAnswers: false,
+    approval: null, welcome: null };
 }
 function validWelcomeVariant(survey: Survey,
   data: ReturnType<typeof welcomeStartedDataSchema.parse>) {
@@ -99,41 +101,83 @@ function addRevision(survey: Survey, row: StoredEvent) {
   survey.currentRevision = data.revision;
 }
 const personalTypes = new Set(['onboarding.survey_step_saved', 'onboarding.survey_restarted',
+  'onboarding.survey_skipped',
   'onboarding.persona_revised', 'onboarding.persona_approved',
   'onboarding.welcome_started', 'onboarding.welcome_answer_recorded',
   'onboarding.completed', 'onboarding.welcome_archive_set']);
 function applyChange(survey: Survey, row: StoredEvent) {
-  const event = row.event;
-  if (event.type === 'onboarding.survey_restarted') {
-    const data = surveyRestartedDataSchema.parse(event.data);
-    if (data.generation !== survey.generation + 1) throw new Error('Invalid generation');
-    survey.generation = data.generation;
-    survey.steps = [];
-    survey.currentRevision = null;
-    if (!survey.welcome?.completion) survey.welcome = null;
-  } else if (event.type === 'onboarding.welcome_started') {
-    addWelcomeStart(survey, row);
-  } else if (event.type === 'onboarding.welcome_answer_recorded') {
-    addWelcomeAnswer(survey, row);
-  } else if (event.type === 'onboarding.completed') {
-    addCompletion(survey, row);
-  } else if (event.type === 'onboarding.welcome_archive_set') {
-    addArchive(survey, row);
-  } else if (event.type === 'onboarding.persona_approved') {
-    addApproval(survey, row);
-  } else if (event.type === 'onboarding.persona_revised') {
-    addRevision(survey, row);
-  } else {
-    const data = surveyStepSavedDataSchema.parse(event.data);
-    if (data.generation !== survey.generation || data.step > survey.steps.length + 1) {
-      throw new Error('Invalid progress');
-    }
-    survey.steps = survey.steps.slice(0, data.step - 1);
-    survey.steps.push(row);
-    survey.currentRevision = null;
-    if (!survey.welcome?.completion) survey.welcome = null;
+  switch (row.event.type) {
+    case 'onboarding.survey_restarted':
+      restartSurvey(survey, row);
+      return;
+    case 'onboarding.survey_skipped':
+      saveSkip(survey, row);
+      return;
+    case 'onboarding.welcome_started':
+      addWelcomeStart(survey, row);
+      return;
+    case 'onboarding.welcome_answer_recorded':
+      addWelcomeAnswer(survey, row);
+      return;
+    case 'onboarding.completed':
+      addCompletion(survey, row);
+      return;
+    case 'onboarding.welcome_archive_set':
+      addArchive(survey, row);
+      return;
+    case 'onboarding.persona_approved':
+      addApproval(survey, row);
+      return;
+    case 'onboarding.persona_revised':
+      addRevision(survey, row);
+      return;
+    case 'onboarding.survey_step_saved':
+      saveStep(survey, row);
+      return;
+    default:
+      throw new Error('Unsupported onboarding event');
   }
 }
+
+function restartSurvey(survey: Survey, row: StoredEvent) {
+  const data = surveyGenerationDataSchema.parse(row.event.data);
+  if (data.generation !== survey.generation + 1) {
+    throw new Error('Invalid generation');
+  }
+  survey.generation = data.generation;
+  survey.steps = [];
+  survey.currentRevision = null;
+  if (!survey.welcome?.completion) {
+    survey.welcome = null;
+  }
+}
+
+function saveSkip(survey: Survey, row: StoredEvent) {
+  const data = surveyGenerationDataSchema.parse(row.event.data);
+  if (data.generation !== survey.generation || !canSkipSurvey(survey)) {
+    throw new Error('Invalid survey skip');
+  }
+  survey.skipped = true;
+}
+
+function saveStep(survey: Survey, row: StoredEvent) {
+  const data = surveyStepSavedDataSchema.parse(row.event.data);
+  if (data.generation !== survey.generation || data.step > survey.steps.length + 1) {
+    throw new Error('Invalid progress');
+  }
+  survey.steps = survey.steps.slice(0, data.step - 1);
+  survey.steps.push(row);
+  survey.hasSavedAnswers = true;
+  survey.currentRevision = null;
+  if (!survey.welcome?.completion) {
+    survey.welcome = null;
+  }
+}
+
+export function canSkipSurvey(survey: Survey) {
+  return surveyCanBeSkipped(survey.skipped, Boolean(survey.welcome?.completion));
+}
+
 function add(survey: Survey, row: StoredEvent) {
   const event = row.event;
   if (!personalTypes.has(event.type)) return;

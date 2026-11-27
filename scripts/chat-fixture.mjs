@@ -99,6 +99,10 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
   await page.route('**/api/**', async route => {
     const request = route.request(), url = new URL(request.url());
     const fulfil = body => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+    if (url.pathname === '/api/onboarding/entry') {
+      const completedWelcome = { next: 'workspace' };
+      return fulfil(completedWelcome);
+    }
     if (url.pathname.includes('/changes/')) {
       const commandId = url.pathname.split('/').at(-1);
       function hasCommand(row) {
@@ -168,10 +172,21 @@ export async function chatFixture(page, scenario = 'live', options = {}) {
       socketReady = true;
     });
   });
+  function waitBeforeCheckingAgain(resolve) {
+    setTimeout(resolve, 10);
+  }
   async function waitForReadySocket() {
+    if (socketReady) {
+      return;
+    }
+    // Wait for the chat to read its history and start connecting before checking the socket.
+    const loadedTranscript = page.locator('section.transcript[aria-busy="false"]');
+    await loadedTranscript.waitFor();
     for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (socketReady) return;
-      await new Promise(resolve => setTimeout(resolve, 10));
+      if (socketReady) {
+        return;
+      }
+      await new Promise(waitBeforeCheckingAgain);
     }
     throw new Error('The fixture socket did not send ready');
   }

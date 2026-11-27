@@ -16,6 +16,7 @@ export interface ChatOptions {
   silo: string;
   store: EventStore;
   db: Query;
+  memoryDb?: Query;
   binding: Binding;
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
   dispatcherReady?: () => Promise<boolean>;

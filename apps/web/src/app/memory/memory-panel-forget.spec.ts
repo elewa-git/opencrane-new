@@ -1,7 +1,8 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryPanel } from './memory-panel';
+import { memoryDialogFixture } from './memory-dialog-fixture';
 import { MemoryForget } from './memory-forget';
 import { isObject } from './memory-panel-data';
 
@@ -45,8 +46,6 @@ function buttonMatches(name: string, candidate: HTMLButtonElement): boolean {
   return candidate.textContent?.trim() === name;
 }
 
-function showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); }
-function closeModal(this: HTMLDialogElement): void { this.removeAttribute('open'); }
 
 async function openDetail(kind: 'person' | 'group' | 'assistant_notes' = 'person',
   detail: unknown = { scopeId: 'scope', fact: savedFact, sources: [], canForget: true },
@@ -108,13 +107,19 @@ function requestUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-  TestBed.resetTestingModule();
-});
+const dialogs = memoryDialogFixture();
+beforeEach(dialogs.install);
 
-Object.assign(HTMLDialogElement.prototype, { showModal, close: closeModal });
+function cleanupTest(): void {
+  try {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    TestBed.resetTestingModule();
+  } finally {
+    dialogs.restore();
+  }
+}
+afterEach(cleanupTest);
 
 function searchInput(fixture: ComponentFixture<MemoryPanel>): HTMLInputElement {
   const input = pageElement(fixture).querySelector<HTMLInputElement>('input[type="search"]');
