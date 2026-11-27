@@ -1,10 +1,47 @@
 {
-  "verdict": "FAIL",
+  "verdict": "PARTIAL",
   "slot": 1,
-  "productCommit": "fb932db61ef16f21a26921fa68b42c0d90ca8a16",
-  "claimLoadOneMinute": 3.83,
+  "productCommit": "36d6287dc61ba2d744056fe75cf27674e54e5f98",
+  "distinctDataVolumes": true,
+  "slotReleased": true,
   "desktop": {
     "width": 1280,
+    "http": {
+      "claim": 201,
+      "ownerDirectory": 200,
+      "invitationAddress": 200,
+      "invitation": 200,
+      "join": 200
+    },
+    "screenshots": [
+      "invitation-created-1280.png",
+      "member-welcome-1280.png"
+    ],
+    "cleanup": {
+      "package-down": "PASS",
+      "testApp": "PASS"
+    },
+    "fresh": true,
+    "freshVolumeCount": 7,
+    "hostRiskOverride": "accepted-dev-box-366",
+    "ownerDirectoryReplies": [
+      425,
+      425,
+      200
+    ],
+    "ownerSawFailure": false,
+    "claimToInviteClickMs": 3354,
+    "claimToInviteRequestMs": 3775,
+    "verdict": "PARTIAL",
+    "failedStep": "member invitation refusal",
+    "failureKind": "TimeoutError",
+    "browserRun": "FAIL",
+    "failureCheck": "Welcome survey opened while the script waited for the old acceptance heading",
+    "memberInvitationVerdict": "NOT RUN",
+    "claimLoadOneMinute": 2.99
+  },
+  "mobile": {
+    "width": 390,
     "http": {
       "claim": 201,
       "ownerDirectory": 200,
@@ -16,30 +53,8 @@
       "memberInvitation": 403
     },
     "screenshots": [
-      "invitation-created-1280.png",
-      "member-refused-1280.png"
-    ],
-    "cleanup": {
-      "package-down": "PASS",
-      "testApp": "PASS"
-    },
-    "fresh": true,
-    "freshVolumeCount": 5,
-    "hostRiskOverride": "accepted-dev-box-366",
-    "claimToInviteClickMs": 1682,
-    "claimToInviteRequestMs": 2182,
-    "memberRefusalReason": "access_refused",
-    "verdict": "PASS",
-    "unavailableServiceLogs": 1
-  },
-  "mobile": {
-    "width": 390,
-    "http": {
-      "claim": 201,
-      "ownerDirectory": 503
-    },
-    "screenshots": [
-      "failed-390.png"
+      "invitation-created-390.png",
+      "member-refused-390.png"
     ],
     "cleanup": {
       "package-down": "PASS",
@@ -48,15 +63,26 @@
       "testApp": "PASS"
     },
     "fresh": true,
-    "freshVolumeCount": 5,
+    "freshVolumeCount": 7,
     "hostRiskOverride": "accepted-dev-box-366",
-    "verdict": "FAIL",
-    "failedStep": "first invitation",
-    "failureKind": "AssertionError",
-    "failureCheck": "Owner People page failed",
-    "received": 503,
-    "expected": 200,
-    "directoryFailureStage": "caller_authorisation",
-    "directoryFailureReason": "membership_applying"
+    "ownerDirectoryReplies": [
+      425,
+      200
+    ],
+    "ownerSawFailure": false,
+    "claimToInviteClickMs": 2254,
+    "claimToInviteRequestMs": 2687,
+    "memberStep": "member invitation refusal",
+    "memberSkippedWelcome": true,
+    "memberRefusalReason": "access_refused",
+    "verdict": "PASS",
+    "desktopRefusalOnMobileInstall": {
+      "width": 1280,
+      "http": 403,
+      "verdict": "PASS",
+      "reason": "access_refused"
+    },
+    "claimLoadOneMinute": 2.13,
+    "launcherExit": 124
   }
 }

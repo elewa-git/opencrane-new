@@ -1,54 +1,58 @@
 # First invitation after claiming the installation
 
-Journey on a fresh packaged stack: **FAIL**. Desktop passed. On mobile,
-People returned HTTP 503 immediately after the claim and hid **Invite people**.
+Fresh slot-1 packaged journey — **PARTIAL**. The 390 px journey passed.
+At 1280 px the owner could open People and send the first invitation. The
+browser script stopped at the welcome survey before checking the member's refusal.
 
-On 27 November 2026, slot 1 was claimed at 05:02 UTC with one-minute load
-at 3.83. The run used a fresh Helm installation per width, each with five
-new persistent volume claims and its own one-time owner token. The product
-commit was `fb932db61ef16f21a26921fa68b42c0d90ca8a16`.
-[CI run](https://github.com/elewa-git/opencrane-new/actions/runs/45926426186) ·
-[Application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45926457320) ·
-[Scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45926457185)
+Both packages ran product commit `36d6287dc61ba2d744056fe75cf27674e54e5f98`.
+Slot 1 was claimed at 05:59 UTC for desktop and 06:17 UTC for mobile on
+27 November 2026. Each claim followed five minutes with the one-minute load
+below 6. Each package created seven new data volumes and used a new one-time
+owner token.
+[Application approval](https://github.com/elewa-git/opencrane-new/actions/runs/45947738743) ·
+[Scanner approval](https://github.com/elewa-git/opencrane-new/actions/runs/45947738708)
 
 | Step | 1280 px | 390 px |
 | --- | --- | --- |
 | Start a fresh package in slot 1 | PASS | PASS |
 | Claim the empty installation in Chromium | PASS · HTTP 201 | PASS · HTTP 201 |
-| Open People immediately after claiming | PASS · HTTP 200 | FAIL · HTTP 503 |
-| Submit the first invitation and see the link | PASS · HTTP 200 | NOT RUN |
-| Accept the invitation as an ordinary member | PASS · HTTP 200 | NOT RUN |
-| Submit an invitation as that member | PASS · HTTP 403, `access_refused` | NOT RUN |
+| Open People and see **Invite people** | PASS · 425, 425, 200 | PASS · 425, 200 |
+| Send the first invitation and see the link | PASS · HTTP 200 | PASS · HTTP 200 |
+| Accept the invitation as an ordinary member | PASS · HTTP 200 | PASS · HTTP 200 |
+| Open People as that member and find **Invite people** hidden | NOT RUN | PASS · HTTP 403 |
+| Send an invitation as that member | NOT RUN | PASS · HTTP 403, `access_refused` |
 | Remove the disposable package | PASS | PASS |
 
-At 1280 px, the browser sent the first invitation flow's address check
-2.18 seconds after receiving the claim response. The address check and
-invitation command each returned HTTP 200. The invited member signed in,
-accepted the link, and could read their own member header. Their invitation
-request then returned HTTP 403 with reason `access_refused`.
+The owner's People page never showed an error during either wait. The invitation
+requests followed the claim response by 3.78 seconds on desktop and 2.69 seconds
+on mobile.
 
-At 390 px, the server received `GET /api/members` 0.69 seconds after the
-claim response. It logged `Member read unavailable` at `caller_authorisation`
-with reason `membership_applying`. People showed **Members are unavailable
-right now**. The mobile journey never reached either invitation endpoint.
-[PR #1206](https://github.com/elewa-git/opencrane-new/pull/1206) covers this
-first-owner People read on a different revision.
+After the desktop member joined, the site opened the welcome survey. The script
+was still waiting for the previous acceptance heading and timed out. I stopped
+mobile preparation before Helm started and updated the script to choose
+**Skip welcome setup**. The mobile run completed the refusal check. After resizing
+that browser to 1280 px on the same installation, the member received another
+HTTP 403 with `access_refused`. The desktop result above covers the original
+fresh desktop installation.
+
+Both installs recorded the documented `accepted-dev-box-366` exception for
+host checks F1 and F2. Both temporary sign-in apps were removed. Startup and
+service logs were saved before teardown. The mobile launcher exited 124 after
+the browser completed and wrote its teardown result. A separate check confirmed
+that the volumes differed and that slot 1 was free. The desktop timeout is in
+`browser-1280.log`.
 
 [Result data](results.json) · [Desktop invitation](invitation-created-1280.png) ·
-[Desktop refusal](member-refused-1280.png) · [Mobile error](failed-390.png)
+[Desktop welcome survey](member-welcome-1280.png) ·
+[Mobile invitation](invitation-created-390.png) · [Mobile refusal](member-refused-390.png)
 
-Both package starts recorded the documented `accepted-dev-box-366` host
-exception for F1/F2. Both disposable sign-in apps were removed and slot 1
-reported free after teardown. Startup and service logs were collected before
-each teardown. See `package-up.log`, `browser-1280.log`, `browser-390.log`
-and `server-f7b4f6794-9clwz.log` for the mobile server's failure.
+The server test reproduced HTTP 503 with `membership_applying` when the
+ownership worker saved its event during the read. The web test reproduced
+the error page when the usual wait ended with access still being set up.
+Both tests were committed before the fix. The same server test returned
+HTTP 200 too early when the ownership receipt check was temporarily removed.
+It passed again after that check was restored.
 
-The original build recorded NOT RUN after its two-hour capacity wait. This
-run used the first free sample below 6 after correcting a polling script
-error that missed an earlier sample. Capacity checks are in `live-capacity.log`.
-
-The source regression reproduced the original invitation-command HTTP 503
-while OpenFGA was still applying ownership. The fix gives both invitation
-endpoints up to five seconds to wait for a claim that the account made
-within the past 30 seconds. Both earlier focused runs passed 171 tests,
-and removing the claimant identity check made the refusal test fail.
+Both focused server runs passed 307 tests each. Both People web runs passed
+204 tests each. Typecheck, the event catalogue, Knip, scoped ESLint, Markdown
+lint, changelog lint, the whole-stream read check and the README check passed.
