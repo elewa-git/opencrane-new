@@ -48,7 +48,7 @@ The one-cent settlements above are synthetic fixture prices.
 
 | Check | Result |
 | --- | --- |
-| Changed tests | PASS twice: 40 cases across 8 files |
+| Changed tests | PASS twice: 41 cases across 8 files |
 | Text schema and event security fixtures | PASS: 303 cases |
 | Full typecheck, including package and dev stack | PASS |
 | Event catalogue | PASS: 175 types agree |
