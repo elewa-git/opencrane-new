@@ -378,7 +378,8 @@ def computer_source_hashes():
         if path.is_file():
             relative = str(path.relative_to(root))
             data = path.read_bytes()
-            hashes[relative] = hashlib.sha256(data).hexdigest()
+            digest = hashlib.sha256(data)
+            hashes[relative] = digest.hexdigest()
     return hashes
 
 

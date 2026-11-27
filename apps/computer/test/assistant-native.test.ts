@@ -18,7 +18,8 @@ async function captureRequests(computer: Awaited<ReturnType<typeof uploadCompute
   const capture = await computer.requests();
   const directory = process.env['BRIEF_CAPTURE_DIRECTORY'];
   if (directory) {
-    await writeFile(`${directory}/${name}.jsonl`, capture, { mode: 0o600 });
+    const options = { mode: 0o600 };
+    await writeFile(`${directory}/${name}.jsonl`, capture, options);
   }
   return capture;
 }
@@ -26,7 +27,13 @@ async function captureRequests(computer: Awaited<ReturnType<typeof uploadCompute
 function lastRequest(capture: string) {
   const trimmed = capture.trim();
   const lines = trimmed.split('\n');
-  return record(JSON.parse(lines.at(-1)!));
+  const line = lines.at(-1)!;
+  return parseRequest(line);
+}
+
+function parseRequest(line: string) {
+  const parsed: unknown = JSON.parse(line);
+  return record(parsed);
 }
 
 function expectBrief(request: Record<string, unknown>, persona: string) {
@@ -60,7 +67,8 @@ async function checkSavedThread(computer: Awaited<ReturnType<typeof uploadComput
   const socket = await openComputerBridge(computer.url, computer.credential.value);
   let terminal: string | undefined;
   function receive(bytes: Buffer) {
-    const frame = record(JSON.parse(bytes.toString()));
+    const line = bytes.toString();
+    const frame = parseRequest(line);
     acknowledgeTurn(socket, frame);
     if (frame['type'] === 'agent.turn_completed' || frame['type'] === 'agent.turn_failed') {
       terminal = frame['type'];
@@ -80,7 +88,7 @@ async function checkSavedThread(computer: Awaited<ReturnType<typeof uploadComput
     const capture = await captureRequests(computer, 'saved-thread');
     const trimmed = capture.trim();
     const lines = trimmed.split('\n');
-    const request = record(JSON.parse(lines[beforeLines.length]!));
+    const request = parseRequest(lines[beforeLines.length]!);
     expect(request['prompt_cache_key']).toBe(lastRequest(before)['prompt_cache_key']);
     expectBrief(request, 'Your name is Cedar.');
     expect(JSON.stringify(request)).not.toContain('Your name is Willow.');
@@ -91,13 +99,15 @@ async function checkSavedThread(computer: Awaited<ReturnType<typeof uploadComput
 
 async function usesToolsWithTheReplacementSoul() {
   // Exercise the installed bridge and templates; a source mount hides stale image pins.
-  const computer = await uploadComputer(true, '', { installedSource: true });
+  const fixtureOptions = { installedSource: true };
+  const computer = await uploadComputer(true, '', fixtureOptions);
   const frames: Record<string, unknown>[] = [];
   let terminals = 0;
   let expectedTerminals = 1;
   const socket = await openComputerBridge(computer.url, computer.credential.value);
   function receive(bytes: Buffer) {
-    const frame = record(JSON.parse(bytes.toString()));
+    const line = bytes.toString();
+    const frame = parseRequest(line);
     frames.push(frame);
     if (isTerminal(frame)) {
       terminals++;
@@ -129,7 +139,7 @@ async function usesToolsWithTheReplacementSoul() {
     const capture = await captureRequests(computer, 'new-thread');
     const trimmedCapture = capture.trim();
     const lines = trimmedCapture.split('\n');
-    const firstRequest = record(JSON.parse(lines[0]!));
+    const firstRequest = parseRequest(lines[0]!);
     expectBrief(firstRequest, 'Your name is Willow.');
     expect(capture).toContain('custom_tool_call_output');
     expect(capture).toContain('Project code: Willow-47.');
@@ -140,8 +150,9 @@ async function usesToolsWithTheReplacementSoul() {
     await until(finished, 30_000);
     expect(frames.at(-1)?.['type']).toBe('agent.turn_completed');
     const loadedCapture = await captureRequests(computer, 'loaded-thread');
-    expectBrief(lastRequest(loadedCapture), 'Your name is Willow.');
-    expect(lastRequest(loadedCapture)['prompt_cache_key']).toBe(firstRequest['prompt_cache_key']);
+    const loadedRequest = lastRequest(loadedCapture);
+    expectBrief(loadedRequest, 'Your name is Willow.');
+    expect(loadedRequest['prompt_cache_key']).toBe(firstRequest['prompt_cache_key']);
     expectedTerminals = 3;
     const nextTurn = { ...turn, id: 'brief-second', approvedPersona: 'Your name is Cedar.' };
     socket.send(JSON.stringify(nextTurn));
@@ -152,7 +163,7 @@ async function usesToolsWithTheReplacementSoul() {
     const nextLines = trimmedNextCapture.split('\n');
     const loadedLines = loadedCapture.trim();
     const loadedRequestLines = loadedLines.split('\n');
-    const nextRequest = record(JSON.parse(nextLines[loadedRequestLines.length]!));
+    const nextRequest = parseRequest(nextLines[loadedRequestLines.length]!);
     expectBrief(nextRequest, 'Your name is Cedar.');
     expect(nextRequest['prompt_cache_key']).toBe(firstRequest['prompt_cache_key']);
     expect(JSON.stringify(nextRequest)).not.toContain('Your name is Willow.');
