@@ -1,5 +1,57 @@
 # My tools on a fresh dev stack
 
+## Fresh slot 1 journey rerun 4
+
+**Fresh-stack journey — PARTIAL.** Tested on 27 November 2026 at
+`cefefb3503afa7faab71d1c5c610cd49af5a8c21` in slot 1. Each start used
+`infra/dev-stack/up.sh --fresh --id 1` with `DEV_OWNER_BOOTSTRAP=0`, the
+free model stub and two guarded local TLS tool fixtures.
+
+| Fresh start | Startup and fixtures | Owner claim | First admin invitation |
+| --- | --- | --- | --- |
+| 04:01 UTC | PASS | PASS, HTTP 201 | NOT RUN |
+| 04:10 UTC | PASS | PASS, HTTP 201 | PASS, attempt 1 at 04:14:01.384 UTC returned HTTP 200 |
+
+The first start stopped when the driver made an immediate ownership read
+after claiming and received HTTP 503. The driver stopped before sending an
+invitation. The next start used the 30-second wait immediately after the
+claim. The first invitation succeeded and needed zero retries. The admin
+and both members accepted their invitations. All three create calls and
+all three acceptance calls returned HTTP 200.
+
+| Browser step | 1280 px | 390 px |
+| --- | --- | --- |
+| Open My tools from Settings and see the empty list | [PASS](rerun4-empty-1280.png) | [PASS](rerun4-empty-390.png) |
+| Discover the personal-key server | NOT RUN | PASS |
+| Set the personal-key server's audience | NOT RUN | FAIL |
+| Publish the personal-key and no-key servers | NOT RUN | NOT RUN |
+| See Needs your account and Ready for you | NOT RUN | NOT RUN |
+| Verify and select a personal key, then see Ready for you | NOT RUN | NOT RUN |
+| See Not available to you and An owner or admin can give you access for both tools | NOT RUN | NOT RUN |
+
+While setting the personal-key server's audience, the driver timed out
+checking whether a status button was enabled after the button had
+disappeared. A private check reproduced the race and passed after the driver
+checked and clicked the current status button in one browser call.
+
+A fresh run of the corrected driver was **NOT RUN**. Slot 1 reported busy
+at 04:31 UTC when the five-minute load check cleared. The slot and load
+checks did not clear together again with time for a fresh journey and
+teardown within the 90-minute limit. See `follow-up-load-wait.log`.
+
+Startup and service logs were saved before both teardowns. The private
+copies include `initial-ownership-startup.log`, `initial-ownership-diagnostics.log`,
+`initial-ownership-stage-b-server.log`, `first-browser-diagnostics.log`
+and `first-browser-stage-b-server.log`. Slot 1 reported free after each teardown.
+
+### Local checks for rerun 4
+
+**PASS** for 19 focused My tools tests (two server tests and 17 web tests),
+typecheck, Knip, event catalogue, Markdown lint and changelog. Private driver checks passed
+for the 30-second wait, the invitation retry limit and the disappearing
+status button. Full root tests and changed-file ESLint were **NOT RUN**.
+This receipt adds Markdown and screenshot evidence.
+
 ## Fresh slot 1 journey rerun 3
 
 **Fresh-stack journey — FAIL.** Run on 27 November 2026 at
