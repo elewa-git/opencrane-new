@@ -2391,6 +2391,43 @@ it('creates two fresh conversations in one visit with separate commands', async 
   }
 });
 
+it('confirms a first send after its reply is lost and its status briefly returns 404', async () => {
+  const capture = await createCaptureWorkspace();
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    chat.newSession();
+    capture.setMessageStatus(0);
+    const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+    const statusReads: { path: string; status: number }[] = [];
+    async function brieflyMissing(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      const path = String(input);
+      const reply = await originalFetch(input, init);
+      if (path.includes('/changes/')) {
+        statusReads.push({ path, status: reply.status });
+        capture.fixture.detectChanges();
+        expect(capture.root.textContent).not.toContain("couldn't tell whether");
+        capture.confirmPendingMessage();
+      }
+      return reply;
+    }
+    vi.mocked(fetch).mockImplementation(brieflyMissing);
+    const field = capture.root.querySelector<HTMLTextAreaElement>('#message')!;
+    field.value = 'First message';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    capture.fixture.detectChanges();
+    await capture.fixture.componentInstance['send'](field.value);
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).not.toContain("couldn't tell whether");
+    expect(field.value).toBe('');
+    expect(capture.postBodies).toHaveLength(2);
+    const command = z.object({ id: z.string() }).parse(capture.postBodies[1]);
+    const statusPath = `/api/conversations/${chat.selected()}/changes/${command.id}`;
+    expect(statusReads).toEqual([{ path: statusPath, status: 404 }, { path: statusPath, status: 200 }]);
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
 it('keeps a message pending until its send returns a 200 receipt', async () => {
   const capture = await createCaptureWorkspace([], [], 'team');
   try {
