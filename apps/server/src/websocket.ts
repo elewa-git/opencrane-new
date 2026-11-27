@@ -8,11 +8,10 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import type { FastifyBaseLogger } from 'fastify';
 import { parseEventByType } from '@opencrane/events';
 import {
-  decodeSession,
   isOrganisationSession,
-  parseCookieHeader,
+  readSessionCookie,
   type AuthConfig,
-  type SessionData,
+  type SessionCookie,
 } from '@opencrane/auth';
 import {
   subscribeSchema,
@@ -85,7 +84,7 @@ export function attachWebSocketServer(
   // from the OIDC redirect URI. Browsers send Origin during the handshake, so
   // refuse requests that omit it too.
   const allowedOrigin = new URL(authConfig.redirectUri).origin;
-  const sessions = new WeakMap<IncomingMessage, SessionData>();
+  const sessions = new WeakMap<IncomingMessage, SessionCookie>();
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: 16 * 1024,
@@ -95,17 +94,16 @@ export function attachWebSocketServer(
         return;
       }
       try {
-        const cookie = parseCookieHeader(info.req.headers.cookie)[authConfig.cookieName];
-        if (!cookie) {
+        const selected = readSessionCookie(authConfig, info.req.headers.cookie, sessionNow());
+        if (!selected) {
           callback(false, 401, 'Unauthorized');
           return;
         }
-        const session = decodeSession(authConfig, cookie, sessionNow());
-        if (!isOrganisationSession(authConfig, session)) {
+        if (!isOrganisationSession(authConfig, selected.session)) {
           callback(false, 403, 'Forbidden');
           return;
         }
-        sessions.set(info.req, session);
+        sessions.set(info.req, selected);
         callback(true);
       } catch {
         callback(false, 401, 'Unauthorized');
@@ -123,18 +121,14 @@ export function attachWebSocketServer(
   });
 
   const connect = (socket: WebSocket, request: IncomingMessage) => {
-    const session = sessions.get(request);
+    const selected = sessions.get(request);
     sessions.delete(request);
-    if (!session || session.exp * 1000 <= sessionNow().getTime()) {
+    if (!selected || selected.session.exp * 1000 <= sessionNow().getTime()) {
       logger.warn({ operation: 'websocket.connect' }, 'websocket session unavailable');
       socket.close(1008, 'session unavailable');
       return;
     }
-    const cookie = parseCookieHeader(request.headers.cookie)[authConfig.cookieName];
-    if (!cookie) {
-      socket.close(1008, 'session unavailable');
-      return;
-    }
+    const { session, cookie } = selected;
     trackSessionSocket(httpServer, cookie, socket);
     const subscribe = memberSubscription(socket, session, authConfig, logger, realtime);
     const chat = conversationSubscription(socket, session, authConfig, realtime?.chat);

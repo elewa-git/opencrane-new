@@ -1333,7 +1333,7 @@ one of its required settings is missing.
 | `OIDC_EXPECTED_ORG_ID` | Server | Production, or with NATS | None | Organisation allowed to sign in to this silo. |
 | `OIDC_EXTRA_IDENTITIES` | Server | Development and tests only | Empty list | JSON list of exact issuer and subject exceptions. Production refuses any set value. |
 | `OIDC_SCOPES` | Server | No | `openid profile email` | Sign-in details requested from the provider. |
-| `OIDC_COOKIE_NAME` | Server | No | `oc_session` | Browser session cookie name. |
+| `OIDC_COOKIE_NAME` | Server | No | `oc_session` | Base name for the browser session cookie. |
 | `OIDC_FLOW_COOKIE_NAME` | Server | No | `oc_auth_flow` | Sign-in flow cookie name. |
 | `OIDC_COOKIE_SECURE` | Server | No | `true` | Requires HTTPS for browser cookies. |
 | `OIDC_SESSION_MAX_AGE_SECONDS` | Server | No | `43200` | Browser session lifetime. |
@@ -1402,8 +1402,11 @@ an explicit exception; `/healthz` is public and outside `/api`.
 
 `GET /auth/login` redirects to the provider. For an invitation with an old
 session, `fresh=1` asks the provider to authenticate again before returning
-to the same local invitation. `GET /auth/me` reports the session and the
-optional signed-in profile `user.name` for display.
+to the same local invitation. A successful callback writes the current session at `/`
+and expires the previous cookie name at `/`. The server checks only the current name,
+including when older cookies remain on other paths. HTTP and WebSocket requests use
+the same cookie selection and keep their own organisation and access checks.
+`GET /auth/me` reports the session and optional profile `user.name` for display.
 `POST /auth/logout` requires the exact configured Origin and a valid session for
 the pinned organisation. Refusals clear no cookies or sockets. Success closes every
 `/ws` connection on this server that used the exact cookie, with code 1008, before

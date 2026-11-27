@@ -98,6 +98,34 @@ it('keeps a wrong account out of the workspace', async function refuseWrongAccou
   expect(element.querySelector('a[href="/workspace"]')).toBeNull();
 });
 
+async function showExpiredSession(response: Response) {
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockResolvedValueOnce(reply({ authenticated: true }));
+  fetchSpy.mockResolvedValueOnce(response);
+  const { element, fixture } = await openInvitation('input[name=displayName]');
+  accept(element);
+
+  await vi.waitFor(function showsSessionRefusal() {
+    fixture.detectChanges();
+    expect(element.querySelector('[role=alert]')?.textContent)
+      .toContain('Your session has expired. Sign in again to continue.');
+    const link = element.querySelector<HTMLAnchorElement>('a[href^="/auth/login"]');
+    expect(link?.textContent?.trim()).toBe('Sign in to accept');
+    expect(new URL(link!.href).searchParams.get('returnTo')).toBe(path);
+  });
+  expect(navigate).not.toHaveBeenCalled();
+}
+
+it('explains the session refusal and returns the person to the invitation after sign-in',
+  async function expiredSession() {
+    await showExpiredSession(reply({ status: 'refused', reason: 'no_session' }, 401));
+  });
+
+it('offers sign-in when the join request is unauthorised and has no JSON reply',
+  async function unauthorisedSession() {
+    await showExpiredSession(new Response('Unauthorized', { status: 401 }));
+  });
+
 it('requests fresh authentication when the provider session is old', async function refresh() {
   const fetchSpy = vi.spyOn(globalThis, 'fetch');
   fetchSpy.mockResolvedValueOnce(reply({ authenticated: true }));

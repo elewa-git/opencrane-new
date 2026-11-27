@@ -62,7 +62,8 @@ describe('loadAuthConfig', () => {
       issuerUrl: requiredEnv.OIDC_ISSUER_URL,
       clientId: requiredEnv.OIDC_CLIENT_ID,
       scopes: 'openid profile email',
-      cookieName: 'oc_session',
+      cookieName: '__Host-oc_session',
+      legacyCookieName: 'oc_session',
       cookieSecure: true,
       sessionMaxAgeSeconds: 12 * 60 * 60,
       flowCookieName: 'oc_auth_flow',
@@ -74,6 +75,21 @@ describe('loadAuthConfig', () => {
     });
     expect(config.clientSecret).toBeUndefined();
     expect(config.expectedOrgId).toBeUndefined();
+  });
+
+  it('keeps a configured session name separate from its old path-scoped cookies', function cookieNames() {
+    const env = { ...requiredEnv, OIDC_COOKIE_NAME: 'custom_session' };
+    const secure = loadAuthConfig(env);
+    expect(secure).toMatchObject({ cookieName: '__Host-custom_session', legacyCookieName: 'custom_session' });
+
+    const local = loadAuthConfig({ ...env, OIDC_COOKIE_SECURE: 'false' });
+    expect(local).toMatchObject({ cookieName: 'custom_session_v2', legacyCookieName: 'custom_session' });
+  });
+
+  it('keeps an HTTPS session cookie name that already starts with __Host-', function hostCookie() {
+    const config = loadAuthConfig({ ...requiredEnv, OIDC_COOKIE_NAME: '__Host-custom_session' });
+    expect(config.cookieName).toBe('__Host-custom_session');
+    expect(config.legacyCookieName).toBeUndefined();
   });
 
   it('reads the step-up window and the expected organisation', () => {

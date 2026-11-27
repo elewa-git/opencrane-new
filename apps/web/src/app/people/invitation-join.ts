@@ -84,6 +84,10 @@ export class InvitationJoin implements OnInit, OnDestroy {
         body: JSON.stringify(command),
         signal: AbortSignal.timeout(requestDeadlineMs),
       });
+      if (response.status === 401) {
+        this.requireSignIn();
+        return;
+      }
       const reply = replySchema.parse(await response.json());
       if (response.ok && (reply.status === 'joined' || reply.status === 'already_joined')) {
         await this.openEntry();
@@ -115,8 +119,7 @@ export class InvitationJoin implements OnInit, OnDestroy {
           this.state.set('joined');
           break;
         case 'signed-out':
-          this.state.set('signin');
-          this.message.set('Your session has expired. Sign in again to continue.');
+          this.requireSignIn();
           break;
         case 'denied':
           this.state.set('access-denied');
@@ -149,7 +152,7 @@ export class InvitationJoin implements OnInit, OnDestroy {
 
   private refuse(reason: string | undefined): void {
     if (reason === 'no_session') {
-      this.state.set('signin');
+      this.requireSignIn();
     } else if (reason === 'sign_in_again') {
       this.state.set('fresh-signin');
     } else if (reason === 'wrong_identity' || reason === 'wrong_silo') {
@@ -159,5 +162,10 @@ export class InvitationJoin implements OnInit, OnDestroy {
     } else {
       this.message.set('This invitation could not be accepted. Ask the person who invited you to check it.');
     }
+  }
+
+  private requireSignIn(): void {
+    this.state.set('signin');
+    this.message.set('Your session has expired. Sign in again to continue.');
   }
 }
