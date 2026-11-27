@@ -11,7 +11,6 @@ import { createLogger } from '@opencrane/observability';
 import { connectMemberFeed, groups, members, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { memberDirectorySchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
-import type { GroupOptions } from '../src/members/group-routes.ts';
 import type { JoinResult, JoinStore } from '../src/members/join.ts';
 import { testAuthConfig, tamperCookie } from './support/test-auth-config.ts';
 
@@ -71,7 +70,9 @@ function sessionHeaders(identity: SessionData) {
 }
 function accept(body: unknown = input, identity: SessionData = session) {
   const headers = sessionHeaders(identity);
-  return app.inject({ method: 'POST', url: '/members/join', payload: JSON.stringify(body), headers });
+  const payload = JSON.stringify(body);
+  const request = { method: 'POST' as const, url: '/members/join', payload, headers };
+  return app.inject(request);
 }
 function invitation(patch: Record<string, unknown> = {}, silo = 'acme') {
   return {
@@ -101,24 +102,19 @@ async function startPermissions() {
 async function stopPermissions() {
   await fga?.close();
 }
-type ReaderOptions = {
-  identity?: SessionData;
-  feed?: GroupOptions['feed'];
-};
-
-async function memberReader(options: ReaderOptions = {}) {
+async function memberReader(identity: SessionData = session) {
   await runner.initialise(groups);
   const { binding, auth } = await permissionStore(fga, 'acme');
   const db = pgDb(dbs.queue);
   const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
-  const memberReads = { silo: 'acme', store: nats.store, binding, db,
-    feed: options.feed ?? feed };
+  const memberReads = { silo: 'acme', store: nats.store, binding, db, feed };
   const logs: string[] = [];
   function write(line: string) {
     logs.push(line);
   }
-  const directoryApp = buildServer(config, { memberReads, logDestination: { write } });
-  const headers = sessionHeaders(options.identity ?? session);
+  const serverOptions = { memberReads, logDestination: { write } };
+  const directoryApp = buildServer(config, serverOptions);
+  const headers = sessionHeaders(identity);
 
   function read(url: string) {
     const request = { url, headers };
@@ -159,7 +155,7 @@ async function joinedReader(role: 'admin' | 'member', recent = true) {
   const joined = await accept(input, signedIn);
   expect(joined.statusCode, joined.body).toBe(200);
   expect(joined.json()).toMatchObject({ status: 'joined' });
-  return memberReader({ identity: signedIn });
+  return memberReader(signedIn);
 }
 
 async function readsAsNewAdmin(membersProjected: boolean) {
@@ -177,8 +173,9 @@ async function readsAsNewAdmin(membersProjected: boolean) {
     expect(accepted.statusCode).toBe(200);
     const directory = memberDirectorySchema.parse(accepted.json());
     expect(directory.permissions.invite).toBe(true);
-    expect(directory.rows).toContainEqual(expect.objectContaining({ memberId: 'alice',
-      role: 'admin' }));
+    const adminRow = { memberId: 'alice', role: 'admin' };
+    const expectedRow: unknown = expect.objectContaining(adminRow);
+    expect(directory.rows).toContainEqual(expectedRow);
   } finally {
     await reader.close();
   }
@@ -226,11 +223,7 @@ async function refusesAmbiguousMembership(partialTable: boolean) {
   const signedIn = currentTestSession();
   const join = await accept(input, signedIn);
   expect(join.statusCode, join.body).toBe(200);
-  const memberId = vi.fn().mockResolvedValue('alice');
-  if (!partialTable) {
-    memberId.mockResolvedValueOnce(undefined);
-  }
-  const reader = await memberReader({ identity: signedIn, feed: { memberId } });
+  const reader = await memberReader(signedIn);
   try {
     await reader.applyMember();
     const duplicate = { memberId: 'duplicate', email: session.email, displayName: 'Duplicate',
@@ -550,7 +543,7 @@ function firstMemberReads() {
   it.each([true, false])('lets a newly joined admin read People (members projected: %s)',
     readsAsNewAdmin);
   it('gives a newly joined member their header and refuses the directory', limitsNewMemberToHeader);
-  it.each([true, false])('refuses ambiguous membership with no rows (partial table: %s)',
+  it.each([true, false])('refuses two active memberships (partial member table: %s)',
     refusesAmbiguousMembership);
   it('finds a returning admin while the table still shows their removed ID', readsAsReturningAdmin);
   it('refuses an established admin whose permission and old join receipt are absent',
@@ -565,7 +558,7 @@ function firstMemberReads() {
     checksIndependentOwnershipReceipt);
   it('checks live permission even after the join receipt is present', checksLivePermissionAfterJoinReceipt);
   it('lets the first owner wait for their saved claim and then open People', readsAsNewOwner);
-  it('logs a safe cause and returns 503 when the first owner’s ownership receipt cannot be checked',
+  it('logs a safe cause and returns 503 when the first owner’s ownership receipt is unavailable',
     checksFirstOwnerReceiptOutage);
 }
 describe('first member reads after accepting an invitation', firstMemberReads);

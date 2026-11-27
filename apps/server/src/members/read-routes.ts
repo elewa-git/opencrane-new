@@ -158,13 +158,8 @@ async function requireAdmissionApplied(options: GroupOptions,
   }
   const auth = memberAuthorisation(options.binding);
   const admissionId = admission.event.id;
-  const receipt = await auth.checkApplied(admissionId);
-  if (receipt.status === 'unavailable') {
-    throw new MemberPermissionsUnavailable(receipt.error);
-  }
-  if (!receipt.allowed) {
-    throw new MemberJoinApplying();
-  }
+  await requireReceipt(auth, admissionId);
+
   let ownerSeedId: string | undefined;
   if (admission.event.type === 'silo.owner_bootstrapped') {
     const seed = membership.ownership.find(isOwnershipSeed);
@@ -179,16 +174,20 @@ async function requireAdmissionApplied(options: GroupOptions,
     if (eventId !== ownerSeedId) {
       return auth.applied(eventId);
     }
-    const seedReceipt = await auth.checkApplied(eventId);
-    if (seedReceipt.status === 'unavailable') {
-      throw new MemberPermissionsUnavailable(seedReceipt.error);
-    }
-    if (!seedReceipt.allowed) {
-      throw new MemberJoinApplying();
-    }
-    return true;
+    return requireReceipt(auth, eventId);
   }
   return applied;
+}
+
+async function requireReceipt(auth: ReturnType<typeof memberAuthorisation>, eventId: string) {
+  const receipt = await auth.checkApplied(eventId);
+  if (receipt.status === 'unavailable') {
+    throw new MemberPermissionsUnavailable(receipt.error);
+  }
+  if (!receipt.allowed) {
+    throw new MemberJoinApplying();
+  }
+  return true;
 }
 
 function isOwnershipSeed(row: Membership['ownership'][number]) {
