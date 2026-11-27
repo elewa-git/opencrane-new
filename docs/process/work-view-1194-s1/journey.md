@@ -1,5 +1,22 @@
 # Watch the computer and save a screenshot
 
+## Final fix journey on 27 November 2026
+
+**NOT RUN** on commit `bfb39e78b`. Slot 1 was free during parts of the
+wait. It became busy as the five-minute low-load windows ended at 00:23
+and 00:48 UTC. The slot and load requirements did not hold together again
+before the startup cutoff. The checks are recorded in `journey-progress.log`.
+
+| Expected result | 1280 px | 390 px |
+| --- | --- | --- |
+| Watch a personal computer, save a PNG and reopen it | NOT RUN | NOT RUN |
+| Refuse an active member outside the chat with zero pixels | NOT RUN | NOT RUN |
+| Refuse a signed-in outsider with zero pixels | NOT RUN | NOT RUN |
+| Close the socket and clear the picture within 2 s of participant removal | NOT RUN | NOT RUN |
+
+Fresh startup, the browser checks and teardown were **NOT RUN**. This
+attempt did not acquire a slot.
+
 ## Fresh journey run 2 on 26 November 2026
 
 **PARTIAL** on commit `845ac02c1`. One fresh slot 1 stack ran Chromium
