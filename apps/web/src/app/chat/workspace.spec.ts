@@ -3016,7 +3016,7 @@ it('ignores a saved-message status reply after socket access loss', async () => 
 async function rendersAssistantMarkdown() {
   const capture = await createCaptureWorkspace([
     { id: 'message', position: 1, type: 'message.posted',
-      time: '2026-10-04T10:00:00Z', data: { text: '# My question', authorId: 'me' } },
+      time: '2026-10-04T10:00:00Z', data: { text: '# My question https://example.test', authorId: 'me' } },
   ]);
   const delta = { id: 'delta', position: 2, type: 'agent.message_delta',
     time: '2026-10-04T10:00:01Z',
@@ -3024,7 +3024,9 @@ async function rendersAssistantMarkdown() {
   sendConversationRow(capture.socket, delta);
   await capture.fixture.whenStable();
   capture.fixture.detectChanges();
-  expect(capture.root.querySelector('.own .prose')?.textContent).toBe('# My question');
+  expect(capture.root.querySelector('.own .prose')?.textContent).toBe('# My question https://example.test');
+  expect(capture.root.querySelector('.own .prose a')?.getAttribute('href'))
+    .toBe('https://example.test');
   expect(capture.root.querySelector('.own h1')).toBeNull();
   expect(capture.root.querySelector('oc-assistant-markdown h2')?.textContent).toBe('Answer');
   capture.root.querySelector<HTMLButtonElement>('oc-assistant-markdown .citation')?.click();
@@ -3034,7 +3036,7 @@ async function rendersAssistantMarkdown() {
   capture.fixture.destroy();
 }
 
-it('renders Markdown only in assistant replies, including live updates and citations',
+it('shares inline links with member messages while keeping assistant block formatting',
   rendersAssistantMarkdown);
 
 async function opensPublishedImageLink() {

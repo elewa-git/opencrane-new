@@ -3033,3 +3033,21 @@ it('discards a late review after the group chat loses access', async () => {
   expect(root(fixture).querySelector('oc-modal-sheet dialog[open]')).toBeNull();
   fixture.destroy();
 });
+
+async function linksColleagueMessages(): Promise<void> {
+  const api = createFetchFixture();
+  function linkHistory(request: RequestRecord): Response | undefined {
+    if (request.url.includes('/messages')) {
+      const rows = [eventRow(1, 'bob', 'See https://example.test and `www.code.test`')];
+      return reply({ rows, position: 1, generation: 1, computerState: 'not_applicable' });
+    }
+    return undefined;
+  }
+  api.override(linkHistory);
+  const fixture = await mount(api);
+  await settle(fixture);
+  expect(root(fixture).querySelector('.message a')?.getAttribute('href'))
+    .toBe('https://example.test');
+  expect(root(fixture).querySelector('.message code a')).toBeNull();
+}
+it('links addresses in colleague messages through the shared safe renderer', linksColleagueMessages);
