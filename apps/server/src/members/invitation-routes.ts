@@ -3,6 +3,8 @@ import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { MemberAccessRefused } from '@opencrane/models';
 import { invitationCommandSchema, invitationStatusParamsSchema } from '@opencrane/protocol';
 import type { InvitationEmailOptions } from './invitation-email.ts';
+import { invitationActor, InvitationAccessUnavailable,
+  type InvitationAccount } from './invitation-access.ts';
 import { recordMemberRefusal } from './refusals.ts';
 import { sessionFor } from './routes.ts';
 import { invitationCommand, invitationStatus, invitationChange, InvitationConflict } from './invitations.ts';
@@ -31,7 +33,9 @@ export function registerInvitations(app: FastifyInstance, config: AuthConfig,
     const input = invitationCommandSchema.safeParse(request.body);
     try {
       if (options.silo !== options.binding.silo) throw new MemberAccessRefused('Wrong silo');
-      actor = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
+      const account = { issuer: config.issuerUrl, sub: session.sub };
+      actor = await resolveActor(options, account, request, input.success, now);
+      if (reply.sent) return reply;
       if (!actor) throw new MemberAccessRefused('Active membership required');
       let result;
       if (request.method === 'POST') {
@@ -57,6 +61,14 @@ export function registerInvitations(app: FastifyInstance, config: AuthConfig,
       clearTimeout(timer);
     }
   }
+}
+
+function resolveActor(options: InvitationEmailOptions, account: InvitationAccount,
+  request: FastifyRequest, validBody: boolean, now: () => Date) {
+  if (request.method === 'POST' && validBody) {
+    return invitationActor(options, account, now(), request.log);
+  }
+  return options.feed.memberId(options.silo, account.issuer, account.sub);
 }
 
 async function readInvitationStatus(options: InvitationEmailOptions, actor: string,
@@ -139,7 +151,8 @@ function commandError(error: unknown, request: FastifyRequest, reply: FastifyRep
   if (error instanceof InvitationConflict) {
     return reply.code(409).send({ status: 'refused', reason: error.message });
   }
-  const diagnostic = { operation: 'member.invited' };
+  const dependency = error instanceof InvitationAccessUnavailable ? error.dependency : undefined;
+  const diagnostic = { operation: 'member.invited', dependency };
   request.log.error(diagnostic, 'Invitation command unavailable');
   return reply.code(503).send({ status: 'unavailable' });
 }
