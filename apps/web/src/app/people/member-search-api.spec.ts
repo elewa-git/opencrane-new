@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { controlledTimeout } from '../../../test/support/controlled-timeout';
 import { searchMembers } from './member-search-api';
 import { fetchMember } from './members-api';
 
@@ -53,7 +54,9 @@ it('waits between reads and stops after eleven applying replies', retriesAtInter
 async function doesNotCarryApplyingStatusToLaterFailure() {
   vi.useFakeTimers();
   const retry = new Response('Too Early', { status: 425 });
-  const fetcher = vi.fn().mockImplementationOnce(applying).mockResolvedValueOnce(retry);
+  const fetcher = vi.fn();
+  fetcher.mockImplementationOnce(applying);
+  fetcher.mockResolvedValueOnce(retry);
   vi.stubGlobal('fetch', fetcher);
   const request = new AbortController();
   const loading = searchMembers('', '', request.signal);
@@ -63,15 +66,6 @@ async function doesNotCarryApplyingStatusToLaterFailure() {
 }
 it('reports an unrelated 425 after an applying reply as unavailable',
   doesNotCarryApplyingStatusToLaterFailure);
-
-function controlledTimeout(ms: number): AbortSignal {
-  const deadline = new AbortController();
-  function expire() {
-    deadline.abort(new DOMException('Read timed out', 'TimeoutError'));
-  }
-  globalThis.setTimeout(expire, ms);
-  return deadline.signal;
-}
 
 function stalledFetch(_url: string, request: RequestInit): Promise<Response> {
   const signal = request.signal;
