@@ -1,40 +1,57 @@
 # Fresh development stack journey
 
-**PASS** on 27 November 2026. Source `d778ee1f31b90c45022a614bd61b0714c24cb107`.
-Slot 1 started from scratch at 03:05 UTC with the default owner setup and
-stand-in model. The one-minute host load stayed below 6 for five minutes before
-the claim.
+**PARTIAL** on 27 November 2026. The rebased source was
+`5e76409198cbd17950dddcf99564ce28a2c2ba73`, based on `f70213d5f`.
 
-1. Run `infra/dev-stack/up.sh --fresh --id 1`. The launcher saved the first
-   ownership record, confirmed the owner's permissions and started the website.
-   The website readiness check took about 50 seconds.
-2. Let the default CORE checks run in Playwright against the stack. The member
-   signed in at 1280 px and 390 px, sent a message and reloaded to check the
-   saved reply. Stopping a second reply kept its partial text after reload.
-   PDF upload and preview passed at both widths. The scanner refused EICAR.
-3. Open the computer from the chat at each width. The view refused access before
-   a grant, showed the desktop while the assistant replied after a grant, and
-   cleared the picture after access was removed. It cleared in 494 ms at
-   1280 px and 385 ms at 390 px.
-4. Check private action history and spending at both widths. Another member
-   and the owner were refused access to the member's private history. The
-   budget blocked calls above the saved limit, including after reload.
-5. Check sign-out, sign back in and verify the rebuilt members and tool
-   catalogue tables. All CORE checks passed. The separate long-chat approval
-   journey was outside this run.
-6. Run `infra/dev-stack/status.sh --id 1`. The stack reported healthy. The
-   first terminal monitor ended during the run. A second monitor observed the
-   completed CORE and stack-ready messages from the same startup.
-7. Save the screenshots and logs, then run `infra/dev-stack/down.sh --id 1`.
-   Slot 1 reported free. The run logs are `startup.log`, `status.log` and
-   `down.log`.
+## Rebased run
+
+1. The one-minute host load stayed below 6 for five minutes before slot 1 was
+   reserved with `infra/dev-stack/claim.sh --id 1` at 05:24 UTC.
+2. `infra/dev-stack/up.sh --fresh --id 1` saved the first ownership record,
+   confirmed Owner access and brought the website up. **PASS** for default
+   owner setup. `infra/dev-stack/status.sh --id 1` reported healthy.
+3. The default browser checks (CORE) **FAIL**. The browser waited 30 seconds
+   for the first chat reply's streaming indicator. The check stopped before
+   the full checks at 1280 px and 390 px could finish. Startup and service
+   logs were saved before the stack was reset.
+4. Start fresh on the same slot with `DEV_OWNER_BOOTSTRAP=0` and
+   `infra/dev-stack/up.sh --fresh --id 1`. The claim page opened after
+   sign-in through Zitadel. A valid token returned HTTP 201. The worker saved
+   one ownership record, the member record showed Owner and OpenFGA
+   allowed Owner access. **PASS** for the token claim.
+5. Reusing the token was refused as already used. A second user was refused
+   because the silo already had an owner. The event log held one first-owner
+   claim. Slot 1 reported healthy and then free after
+   `infra/dev-stack/down.sh --id 1`.
+
+The rebased run logs are `startup.log`, `default-service-last-error.log`,
+`default-status.log`, `token-startup.log`, `token-journey.log`,
+`token-status.log` and `down.log`.
+
+A further CORE run was **NOT RUN**. The host load left too little time to
+finish another run within the task limit.
+
+## First run
+
+**PASS** on source `0f9be67e4120884482b26e527a5dee686cd14490`, based on
+`c6c8604db`. Slot 1 started with default owner setup and the stand-in model.
+The default browser checks passed at 1280 px and 390 px. They covered chat and
+reload, stopping a reply, PDF upload and preview, desktop access and removal,
+private history, spending, sign-out and projection replay. The scanner refused
+EICAR, a scanner test file.
+
+A second fresh start on the same reservation accepted a valid first-owner
+token, saved one ownership record and gave the claimant Owner access. The
+token was refused on reuse. Slot 1 reported free after teardown. The branch
+was then rebased after `main` changed desktop viewing and uploads.
 
 | Evidence | 1280 px | 390 px |
 | --- | --- | --- |
-| Saved and stopped replies | [Workspace](screenshots/workspace-1280.png) | [Workspace](screenshots/workspace-390.png) |
-| Desktop access removed | [Cleared view](screenshots/conversation-revoked-1280.png) | [Cleared view](screenshots/conversation-revoked-390.png) |
+| First run saved and stopped replies | [Workspace](screenshots/workspace-1280.png) | [Workspace](screenshots/workspace-390.png) |
+| First run desktop access removed | [Cleared view](screenshots/conversation-revoked-1280.png) | [Cleared view](screenshots/conversation-revoked-390.png) |
+| Rebased run token confirmation | [Owner confirmation](screenshots/token-claimed-1280.png) | [Owner confirmation](screenshots/token-claimed-390.png) |
 
-The JetStream tests supplied the competing writes. Five real writes first
-reproduced the startup error on the original code. With the fix, seeding waited,
-reread membership and saved one ownership record. Continuous contention
-reached the deadline with the ownership stream still empty.
+JetStream tests covered the competing writes. Development startup waited
+through five competing writes, read membership again and saved one owner
+list. The token claim worker saved ownership in one delivery after two
+simulated six-second membership reads and one real competing write.
