@@ -1,0 +1,17 @@
+{
+  "source": "446ea3490e1e57efba3e5be6cb7e628a661fbd19",
+  "journey": "NOT RUN",
+  "firstAttempt": "FAIL",
+  "firstStackCore": "PASS",
+  "firstStackReleased": true,
+  "correctedStackClaimed": false,
+  "reason": "The only non-pilot slot lock was held after the permitted total availability wait.",
+  "webTests": 1689,
+  "changedWebChecks": 352,
+  "modelChecksPerRun": 9,
+  "projectionAndDisplayChecksPerRun": 21,
+  "eventTypes": 175,
+  "shippedCodeLines": 457,
+  "independentReview": "NOT RUN",
+  "linkScreenshots": 0
+}
