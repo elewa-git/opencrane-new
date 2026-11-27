@@ -1,0 +1,87 @@
+{
+  "sourceCommit": "810f7294a78874f98e0512da6abe1b5a9455a3cf",
+  "checks": {
+    "workspace": {
+      "result": "PASS",
+      "testsPerRun": 119,
+      "runs": 2,
+      "seconds": [
+        57.35,
+        55.91
+      ]
+    },
+    "server": {
+      "result": "PASS",
+      "testsPerRun": 51,
+      "runs": 2,
+      "seconds": [
+        263.87,
+        209.68
+      ]
+    },
+    "changedFileEslint": {
+      "result": "PASS",
+      "warnings": 0
+    },
+    "webTypecheck": {
+      "result": "PASS"
+    },
+    "completeTypecheck": {
+      "result": "PASS"
+    },
+    "eventCatalogue": {
+      "result": "PASS",
+      "eventTypes": 175
+    },
+    "knip": {
+      "result": "PASS"
+    },
+    "changelog": {
+      "result": "PASS"
+    },
+    "markdown": {
+      "result": "PASS",
+      "issues": 0
+    },
+    "publicPrivacy": {
+      "result": "PASS"
+    },
+    "secretScan": {
+      "result": "PASS"
+    }
+  },
+  "rawLogs": [
+    "workspace-1.log",
+    "workspace-2.log",
+    "server-before.log",
+    "server-2.log",
+    "typecheck-final.log",
+    "web-typecheck-helper.log",
+    "eslint.log",
+    "eslint-helper.log",
+    "knip-final.log",
+    "events.log",
+    "changelog.log",
+    "markdown-final.log",
+    "slot-wait.jsonl",
+    "privacy-final.log",
+    "secrets-final.log"
+  ],
+  "approvals": {
+    "application": {
+      "result": "PASS",
+      "run": 46076744537,
+      "artifactsAvailable": true
+    },
+    "scanner": {
+      "result": "PASS",
+      "run": 46076747717,
+      "artifactsAvailable": true
+    }
+  },
+  "hostedCI": {
+    "result": "PASS",
+    "run": 46076749020,
+    "note": "Checks, image fixtures, browser fixtures, all four test shards and the final CI gate passed."
+  }
+}

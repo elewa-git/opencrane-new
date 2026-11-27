@@ -1,45 +1,102 @@
 {
-  "journey": "PASS",
+  "journey": "NOT RUN",
   "date": "2026-11-27",
-  "sourceCommit": "267a650b368e41764854819cfa20c11d055b55b7",
+  "sourceCommit": "810f7294a78874f98e0512da6abe1b5a9455a3cf",
   "slot": 1,
-  "environment": {
-    "freshPackagedInstall": true,
-    "memberInvitedAndJoined": true,
-    "modelMode": "stub",
-    "browser": "Chromium",
-    "viewports": ["1280x900", "390x844"],
-    "hostRiskAcknowledgement": "accepted-dev-box-366"
+  "requestedViewports": [
+    "1280x900",
+    "390x844"
+  ],
+  "reason": "The safe start conditions were not met before this round needed to leave time for installation, checks and teardown. Slot 1 was occupied for most of the wait. After it became free, load repeatedly rose above 6.",
+  "wait": {
+    "result": "NOT RUN",
+    "firstSample": "2026-11-27T22:18:26Z",
+    "lastSample": "2026-11-27T22:58:45Z",
+    "samples": 73,
+    "slot": 1,
+    "pilotSlotExcluded": 2,
+    "slotEverFree": true,
+    "minimumLoad": 3.52,
+    "maximumLoad": 26.44,
+    "longestBelowSixSamplePeriodSeconds": 131.0,
+    "safeStartReached": false,
+    "stackClaimed": false,
+    "reason": "The safe start conditions were not met before the installation cutoff for this round.",
+    "rawLog": "slot-wait.jsonl"
   },
   "checks": {
     "1280": {
-      "newSessionHasNoUncertainSendWarning": "PASS",
-      "realNetworkFailureShowsClearMessage": "PASS",
-      "draftRetained": "PASS",
-      "retryAvailable": "PASS"
+      "serverSavedBeforeReplyDropped": "NOT RUN",
+      "noUncertainWarningAfterReplyLoss": "NOT RUN",
+      "savedMessageAppearsOnceAfterReload": "NOT RUN",
+      "retryChecksOriginalCommandAfterRecovery": "NOT RUN",
+      "oneSavedMessageEvent": "NOT RUN"
     },
     "390": {
-      "newSessionHasNoUncertainSendWarning": "PASS",
-      "realNetworkFailureShowsClearMessage": "PASS",
-      "draftRetained": "PASS",
-      "retryAvailable": "PASS"
-    },
-    "successfulFirstMessagePersistsAfterReload": "NOT RUN",
-    "retryAfterConnectionReturnsSavesOnce": "NOT RUN"
+      "serverSavedBeforeReplyDropped": "NOT RUN",
+      "noUncertainWarningAfterReplyLoss": "NOT RUN",
+      "savedMessageAppearsOnceAfterReload": "NOT RUN",
+      "retryChecksOriginalCommandAfterRecovery": "NOT RUN",
+      "oneSavedMessageEvent": "NOT RUN"
+    }
   },
-  "failure": {
-    "operation": "POST /api/conversations",
-    "injectedAt": "browser transport",
-    "observedMessage": "Your draft is still on this page. Retry to send it."
+  "environment": {
+    "stackClaimed": false,
+    "freshPackagedInstall": "NOT RUN",
+    "browserJourney": "NOT RUN"
   },
-  "screenshots": [
-    "new-session-1280.png",
-    "network-failure-1280.png",
-    "new-session-390.png",
-    "network-failure-390.png"
-  ],
   "cleanup": {
-    "packageDown": "PASS",
-    "slotDown": "PASS"
+    "required": false,
+    "reason": "No stack was claimed or started."
+  },
+  "sourceChecks": "checks.json",
+  "previousRun": {
+    "journey": "PARTIAL",
+    "date": "2026-11-27",
+    "sourceCommit": "267a650b368e41764854819cfa20c11d055b55b7",
+    "slot": 1,
+    "environment": {
+      "freshPackagedInstall": true,
+      "memberInvitedAndJoined": true,
+      "modelMode": "stub",
+      "browser": "Chromium",
+      "viewports": [
+        "1280x900",
+        "390x844"
+      ],
+      "hostRiskAcknowledgement": "accepted-dev-box-366"
+    },
+    "checks": {
+      "1280": {
+        "newSessionHasNoUncertainSendWarning": "PASS",
+        "realNetworkFailureShowsClearMessage": "PASS",
+        "draftRetained": "PASS",
+        "retryAvailable": "PASS"
+      },
+      "390": {
+        "newSessionHasNoUncertainSendWarning": "PASS",
+        "realNetworkFailureShowsClearMessage": "PASS",
+        "draftRetained": "PASS",
+        "retryAvailable": "PASS"
+      },
+      "successfulFirstMessagePersistsAfterReload": "NOT RUN",
+      "retryAfterConnectionReturnsSavesOnce": "NOT RUN"
+    },
+    "failure": {
+      "operation": "POST /api/conversations",
+      "injectedAt": "browser transport",
+      "observedMessage": "Your draft is still on this page. Retry to send it."
+    },
+    "screenshots": [
+      "new-session-1280.png",
+      "network-failure-1280.png",
+      "new-session-390.png",
+      "network-failure-390.png"
+    ],
+    "cleanup": {
+      "packageDown": "PASS",
+      "slotDown": "PASS"
+    },
+    "note": "This earlier run tested a failure before saving. It did not test a saved message whose reply was lost."
   }
 }
