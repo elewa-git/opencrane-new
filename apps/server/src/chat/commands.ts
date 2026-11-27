@@ -84,11 +84,17 @@ function sameMessageRetry(
 
 function verifyCommandIdentity(previous: StoredEvent, input: Input, context: Context) {
   const event = previous.event;
-  if (event.id !== input.id || event.type !== commandType(input) ||
-      event.silo !== context.silo || event.subject !== `conversation-${input.conversationId}` ||
-      event.principal?.kind !== 'human' || event.principal.id !== context.memberId) {
+  if (event.type !== commandType(input) ||
+      !matchesHumanChatCommand(event, input.id, input.conversationId, context)) {
     throw new ChatConflict('Id reused');
   }
+}
+
+export function matchesHumanChatCommand(event: StoredEvent['event'], commandId: string,
+  conversationId: string, context: Context): boolean {
+  return event.id === commandId && event.silo === context.silo &&
+    event.subject === `conversation-${conversationId}` &&
+    event.principal?.kind === 'human' && event.principal.id === context.memberId;
 }
 
 function sameGroupCreation(data: unknown,
