@@ -252,6 +252,9 @@ try {
   await queued.page.getByRole('textbox', { name: 'Message your agent' }).fill('Keep this draft');
   await queued.page.getByRole('button', { name: 'Send message' }).click();
   await queued.page.getByRole('button', { name: 'Retry queued message' }).waitFor();
+  await queued.page.getByText('Your draft is still on this page. Retry to send it.').waitFor();
+  const uncertainSend = queued.page.getByText(/couldn't tell whether your message was recorded/u);
+  assert.equal(await uncertainSend.count(), 0);
   queued.fixture.online(); await queued.page.getByRole('button', { name: 'Retry queued message' }).click();
   await queued.page.getByRole('article', { name: 'Your message', exact: true }).filter({ hasText: 'Keep this draft' }).waitFor();
   assert.equal(queued.fixture.commands[0].id, queued.fixture.commands[1].id, 'Creation retry retains event id');

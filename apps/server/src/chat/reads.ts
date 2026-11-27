@@ -1,8 +1,12 @@
 import { recordIdSchema } from '@opencrane/events';
+import { readEventAt } from '@opencrane/event-store';
 import { z } from 'zod';
 import { memberAuthorisation } from '@opencrane/authz';
 import { activeChatMember, isChatRefused } from './access.ts';
 import type { ChatOptions } from './access.ts';
+import { readChatCommandFacts } from './chat-summary.ts';
+import { savedCloseMatches } from './close.ts';
+import { matchesHumanChatCommand } from './commands.ts';
 
 const colleagueQuery = z.object({
   after: recordIdSchema.default(''),
@@ -40,14 +44,17 @@ export async function colleagues(options: ChatOptions, memberId: string, query: 
 }
 
 export async function chatChange(
-  options: ChatOptions, conversationId: string, commandId: string, joinPosition = 0,
+  options: ChatOptions, memberId: string, conversationId: string, commandId: string,
+  historyPosition: number,
 ) {
   const result = await options.db.query<{ event_id: string; type: string; position: string }>(
     `SELECT event_id, type, position FROM conversation_feed
       WHERE silo = $1 AND conversation_id = $2 AND event_id = $3 AND position >= $4`,
-    [options.silo, conversationId, commandId, joinPosition]);
+    [options.silo, conversationId, commandId, historyPosition]);
   const row = result.rows[0];
-  if (!row) return { status: 'not_found' as const };
+  if (!row) {
+    return unprojectedChatChange(options, memberId, conversationId, commandId, historyPosition);
+  }
   let iam = 'current';
   if (['conversation.created', 'participant.added', 'participant.removed'].includes(row.type)) {
     const applied = await memberAuthorisation(options.binding).applied(row.event_id);
@@ -57,4 +64,26 @@ export async function chatChange(
     status: 'appended' as const, conversationId, commandId, type: row.type,
     sequence: Number(row.position), projection: { content: 'current', iam },
   };
+}
+
+async function unprojectedChatChange(options: ChatOptions, memberId: string,
+  conversationId: string, commandId: string, historyPosition: number) {
+  // Let the person who sent the command check it before the feed shows it.
+  const missing = { status: 'not_found' as const };
+  const { silo, store } = options;
+  const facts = await readChatCommandFacts(store, silo, conversationId, commandId);
+  if (facts.position === undefined || facts.position < historyPosition) return missing;
+  const row = await readEventAt(store, `conversation-${conversationId}`,
+    facts.position, performance.now() + 10_000);
+  if (!row) return missing;
+  const event = row.event;
+  const context = { silo, memberId };
+  const ownMessage = event.type === 'message.posted' && event.commandId === commandId &&
+    matchesHumanChatCommand(event, commandId, conversationId, context);
+  if (!ownMessage && !savedCloseMatches(row, commandId, options, memberId, conversationId)) {
+    return missing;
+  }
+  return { status: 'appended' as const, conversationId, commandId,
+    type: event.type, sequence: row.sequence,
+    projection: { content: 'applying' as const, iam: 'current' as const } };
 }

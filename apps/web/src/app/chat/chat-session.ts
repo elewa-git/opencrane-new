@@ -16,9 +16,10 @@ import { isActiveTurn, lastConfirmedTurnAt, shouldShowMaintenance,
 import { shortTime } from './file-presentation';
 import { ChatSessionStop, type StopScreen } from './chat-session-stop';
 import { sessionWaitingReason, updateComputerStatus, applyComputerMessage } from './chat-session-status';
-import { readChatIdentity, ReadFailure, requestChat, savedChatChange } from './chat-session-http';
+import { isChatAccessFailure, MessageUnconfirmed, readChatIdentity, ReadFailure,
+  requestChat, savedChatChange, sendChatMessage } from './chat-session-http';
 import { ReadMarker } from './read-marker';
-import { displayAgentSessions, includeRequestedConversation, isTeamConversation,
+import { displayAgentSessions, includeRequestedConversation, isTeamConversation, type PendingChatMessage,
   createPendingMessage, resumeAgentSession, selectedSessionPayingGroupId,
   updateSessionSummaries, selectedSessionAssistant }
   from './conversations-data';
@@ -71,7 +72,9 @@ export class ChatSession implements OnDestroy {
   readonly olderLoading = signal(false);
   readonly olderFailure = signal(false);
   readonly denied = signal(false);
-  readonly queued = signal(false);
+  private readonly sendFailure = signal<'unsent' | 'unknown' | undefined>(undefined);
+  readonly queued = computed(() => this.sendFailure() !== undefined);
+  readonly messageOutcomeUnknown = computed(() => this.sendFailure() === 'unknown');
   readonly connected = this.socket.isConnected;
   private readonly stopState: ChatSessionStop = new ChatSessionStop(this.stopScreen());
   readonly turns = computed(() =>
@@ -110,8 +113,7 @@ export class ChatSession implements OnDestroy {
     this.selected.bind(this), this.readAllowed.bind(this),
     this.reloadReadRow.bind(this), this.clearDenied.bind(this));
   private reconnectCount = 0;
-  private pending: { id: string; conversationId: string; text: string;
-    attachmentIds?: string[]; executionMode?: 'memory_free' } | undefined;
+  private pending: PendingChatMessage | undefined;
   private subscription = this.socket.received.subscribe(message => this.receive(message));
   private readonly accessLossSubscription = this.socket.accessLost.subscribe(this.clearDenied.bind(this));
   private readonly connectionCloseSubscription = this.socket.connectionClosed.subscribe(
@@ -275,15 +277,23 @@ export class ChatSession implements OnDestroy {
     try {
       await this.deliver(revision);
       if (revision !== this.revision) return false;
-      this.queued.set(false);
+      this.sendFailure.set(undefined);
       this.uploadBatch.sent();
       this.executionMode.set('restricted');
       return true;
     } catch (error) {
-      if (revision === this.revision) { this.queued.set(true); this.fail(error); }
+      if (revision === this.revision) this.sendFailed(error);
       return false;
     }
     finally { if (revision === this.revision) this.busy.set(false); }
+  }
+  private sendFailed(error: unknown): void {
+    if (error instanceof MessageUnconfirmed) {
+      this.sendFailure.set('unknown');
+    } else if (!this.queued()) {
+      this.sendFailure.set('unsent');
+    }
+    this.fail(error);
   }
   private canSend(text: string): boolean {
     const hasContent = Boolean(text.trim() || this.uploadBatch.readyIds().length);
@@ -461,13 +471,10 @@ export class ChatSession implements OnDestroy {
     const command = this.pending!;
     await this.ensureConversation(command.conversationId);
     if (revision !== this.revision) return;
-    const confirmed = this.queued() && await savedChatChange(command);
+    const confirmed = this.messageOutcomeUnknown() && await savedChatChange(command);
     if (revision !== this.revision) return;
     if (!confirmed) {
-      await requestChat(`/api/conversations/${command.conversationId}/messages`, {
-        id: command.id, text: command.text, executionMode: command.executionMode,
-        attachmentIds: command.attachmentIds,
-      });
+      await sendChatMessage(command);
       if (revision !== this.revision) return;
     }
     // Give the temporary row the saved event's id so the later event replaces it.
@@ -708,7 +715,7 @@ export class ChatSession implements OnDestroy {
     return true;
   }
   private fail(error: unknown): void {
-    if (error instanceof ReadFailure && [401, 403].includes(error.status)) {
+    if (isChatAccessFailure(error)) {
       this.clearDenied();
     } else this.error.set(this.pending ? '↻ Offline or unavailable — message queued on this page. Retry to send it once.' : '× Could not load the conversation. Retry when the connection returns.');
   }
@@ -744,7 +751,7 @@ export class ChatSession implements OnDestroy {
     this.readMarker.purge();
     this.pending = undefined;
     this.stopState.reset();
-    this.queued.set(false);
+    this.sendFailure.set(undefined);
     this.busy.set(false);
     this.announcement.set('');
     this.reconnectedAt.set('');

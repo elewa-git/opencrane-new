@@ -248,47 +248,11 @@ function politeStatusText(root: HTMLElement): string {
 interface DownloadScenario {
   name: string;
   expectedVisible: boolean;
-  rows: object[];
+  rows: Record<string, unknown>[];
 }
 
 async function checkDownloadVisibility(scenario: DownloadScenario): Promise<void> {
-  history.replaceState({}, '', '/workspace?conversation=chat');
-  vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
-    const path = input instanceof Request ? input.url : String(input);
-    const pathname = new URL(path, location.origin).pathname;
-    let body: object;
-    if (pathname === '/auth/me') {
-      body = { authenticated: true, user: { name: 'Alex' } };
-    } else if (pathname === '/api/chat') {
-      body = { memberId: 'me', assistantId: 'assistant' };
-    } else if (pathname.endsWith('/approvals')) {
-      body = { cards: [], csrf: 'fixture' };
-    } else if (pathname === '/api/conversations') {
-      body = { rows: [{
-        conversationId: 'chat', assistantId: 'assistant', createdBy: 'me',
-        createdAt: '2026-10-03T10:00:00Z', status: 'open',
-      }] };
-    } else {
-      body = {
-        rows: scenario.rows,
-        position: scenario.rows.length,
-        generation: 1,
-        computerState: 'ready',
-      };
-    }
-    return Promise.resolve(new Response(JSON.stringify(body)));
-  });
-
-  const socket: SocketLike = {
-    readyState: 1, onopen: null, onclose: null, onerror: null,
-    onmessage: null, send: vi.fn(), close: vi.fn(),
-  };
-  TestBed.configureTestingModule({ providers: [{ provide: SOCKET_FACTORY, useValue: () => socket }] });
-  const fixture = TestBed.createComponent(Workspace);
-  await fixture.whenStable();
-
-  const root: unknown = fixture.nativeElement;
-  if (!(root instanceof HTMLElement)) throw new Error('No workspace root');
+  const { fixture, root } = await createCaptureWorkspace(scenario.rows);
   await vi.waitFor(() => expect(root.querySelector('.file-card')).not.toBeNull());
   const download = root.querySelector('.file-card a');
   expect(download !== null).toBe(scenario.expectedVisible);
@@ -352,10 +316,6 @@ const downloadScenarios: DownloadScenario[] = [
   },
 ];
 
-function runDownloadScenario(scenario: DownloadScenario): Promise<void> {
-  return checkDownloadVisibility(scenario);
-}
-
 const originalViewportWidth = globalThis.innerWidth;
 const originalShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
 const originalClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
@@ -391,7 +351,7 @@ afterEach(() => {
   });
 });
 
-it.each(downloadScenarios)('shows Download only when the route can serve $name', runDownloadScenario);
+it.each(downloadScenarios)('shows Download only when the route can serve $name', checkDownloadVisibility);
 
 it('keeps an authorised image download and preview after a live close', async () => {
   const uploaded = {
@@ -1883,11 +1843,7 @@ it('disables the team composer during recovery and shows the last confirmed turn
 it('keeps a memory-free choice in the draft and does not send it', async () => {
   const capture = await createCaptureWorkspace([], [], 'team');
   try {
-    const field = capture.root.querySelector<HTMLTextAreaElement>('#message');
-    if (!field) throw new Error('Message field is missing');
-    field.value = 'Review the order note';
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-    capture.fixture.detectChanges();
+    const field = typeWorkspaceMessage(capture, 'Review the order note');
 
     const memoryFreeButton = [...capture.root.querySelectorAll<HTMLButtonElement>(
       'oc-memory-free-notice button')]
@@ -2300,20 +2256,30 @@ it('clears recovered state when switching chats before the new feed arrives', as
   }
 });
 
+function typeWorkspaceMessage(capture: CaptureWorkspace, text: string): HTMLTextAreaElement {
+  const field = capture.root.querySelector<HTMLTextAreaElement>('#message')!;
+  field.value = text;
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  capture.fixture.detectChanges();
+  return field;
+}
+
 it('keeps typed text and a single pending command after a lost send reply', async () => {
   const capture = await createCaptureWorkspace([], [], 'team');
   try {
-    const field = capture.root.querySelector<HTMLTextAreaElement>('#message')!;
-    field.value = 'Keep my words';
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-    capture.fixture.detectChanges();
+    const field = typeWorkspaceMessage(capture, 'Keep my words');
     capture.setMessageStatus(0);
+    vi.useFakeTimers();
     field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await vi.advanceTimersByTimeAsync(1_100);
+    vi.useRealTimers();
     await capture.fixture.whenStable();
     capture.fixture.detectChanges();
     expect(capture.postBodies).toHaveLength(1);
     expect(field.value).toBe('Keep my words');
     const command = z.object({ id: z.string() }).parse(capture.postBodies[0]);
+    const statusRead = `GET /api/conversations/chat/changes/${command.id}`;
+    expect(capture.calls.filter(call => call === statusRead)).toHaveLength(5);
     expect(capture.root.textContent).toContain(command.id);
     const chat = capture.fixture.componentInstance['chat'];
     await chat.select('another');
@@ -2329,13 +2295,12 @@ it('keeps typed text and a single pending command after a lost send reply', asyn
 it('keeps typed text on a refused send and does not report a healthy refresh as failed', async () => {
   const capture = await createCaptureWorkspace([], [], 'team');
   try {
-    const field = capture.root.querySelector<HTMLTextAreaElement>('#message')!;
-    field.value = 'My draft';
-    field.dispatchEvent(new Event('input', { bubbles: true }));
-    capture.fixture.detectChanges();
+    const field = typeWorkspaceMessage(capture, 'My draft');
     capture.setMessageStatus(400);
     capture.root.querySelector<HTMLButtonElement>('.send')!.click();
     await capture.fixture.whenStable();
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).not.toContain("couldn't tell whether");
     expect(field.value).toBe('My draft');
     capture.setMessageStatus(200);
     const chat = capture.fixture.componentInstance['chat'];
@@ -2386,6 +2351,40 @@ it('creates two fresh conversations in one visit with separate commands', async 
     expect(creates).toHaveLength(2);
     expect(creates[1]!.conversationId).not.toBe(creates[0]!.conversationId);
     expect(creates[1]!.id).not.toBe(creates[0]!.id);
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('confirms a first send after its reply is lost and its status briefly returns 404', async () => {
+  const capture = await createCaptureWorkspace();
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    chat.newSession();
+    capture.setMessageStatus(0);
+    const originalFetch = vi.mocked(fetch).getMockImplementation()!;
+    const statusReads: { path: string; status: number }[] = [];
+    async function brieflyMissing(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      const path = input instanceof Request ? input.url : String(input);
+      const reply = await originalFetch(input, init);
+      if (path.includes('/changes/')) {
+        statusReads.push({ path, status: reply.status });
+        capture.fixture.detectChanges();
+        expect(capture.root.textContent).not.toContain("couldn't tell whether");
+        capture.confirmPendingMessage();
+      }
+      return reply;
+    }
+    vi.mocked(fetch).mockImplementation(brieflyMissing);
+    const field = typeWorkspaceMessage(capture, 'First message');
+    await capture.fixture.componentInstance['send'](field.value);
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).not.toContain("couldn't tell whether");
+    expect(field.value).toBe('');
+    expect(capture.postBodies).toHaveLength(2);
+    const command = z.object({ id: z.string() }).parse(capture.postBodies[1]);
+    const statusPath = `/api/conversations/${chat.selected()}/changes/${command.id}`;
+    expect(statusReads).toEqual([{ path: statusPath, status: 404 }, { path: statusPath, status: 200 }]);
   } finally {
     capture.fixture.destroy();
   }
