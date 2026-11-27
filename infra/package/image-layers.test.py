@@ -48,6 +48,18 @@ class SourceReviewTests(unittest.TestCase):
             with self.subTest(source=path):
                 self.assertIn(path, review["files"])
 
+    def test_native_review_input_hashes_match_repository_source(self):
+        review = json.loads(Path("infra/package/native-runtime-inventory.json").read_text())
+        inputs = (
+            (review["sourceLock"], "sourceLockSha256"),
+            (review["nativeLicenceReview"], "nativeLicenceReviewSha256"),
+            ("apps/computer/licences.json", "computerInventorySha256"),
+        )
+        for path, hash_field in inputs:
+            with self.subTest(source=path):
+                actual = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+                self.assertEqual(actual, review[hash_field])
+
     def test_provider_runtime_paths_are_permitted(self):
         checker = ImageLayerTests("test_development_files_stay_within_the_narrow_allowlist")
         checker.paths = {
