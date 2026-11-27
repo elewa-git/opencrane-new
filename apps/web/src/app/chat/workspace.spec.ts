@@ -5,6 +5,7 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { Workspace } from './workspace';
 import { ChatComposer } from './composer';
 import { RANDOM_SOURCE, SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
+import { typeWorkspaceMessage } from '../../../test/support/workspace-message';
 
 interface CaptureWorkspace {
   fixture: ComponentFixture<Workspace>;
@@ -2255,14 +2256,6 @@ it('clears recovered state when switching chats before the new feed arrives', as
     capture.fixture.destroy();
   }
 });
-
-function typeWorkspaceMessage(capture: CaptureWorkspace, text: string): HTMLTextAreaElement {
-  const field = capture.root.querySelector<HTMLTextAreaElement>('#message')!;
-  field.value = text;
-  field.dispatchEvent(new Event('input', { bubbles: true }));
-  capture.fixture.detectChanges();
-  return field;
-}
 
 it('keeps typed text and a single pending command after a lost send reply', async () => {
   const capture = await createCaptureWorkspace([], [], 'team');

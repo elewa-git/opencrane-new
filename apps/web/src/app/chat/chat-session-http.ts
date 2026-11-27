@@ -31,7 +31,9 @@ export function isChatAccessFailure(error: unknown): boolean {
 }
 
 function chatReply(response: Response): Promise<unknown> {
-  if (response.status !== 200) throw new ReadFailure(response.status);
+  if (response.status !== 200) {
+    throw new ReadFailure(response.status);
+  }
   return response.json() as Promise<unknown>;
 }
 

@@ -72,10 +72,14 @@ async function unprojectedChatChange(options: ChatOptions, memberId: string,
   const missing = { status: 'not_found' as const };
   const { silo, store } = options;
   const facts = await readChatCommandFacts(store, silo, conversationId, commandId);
-  if (facts.position === undefined || facts.position < historyPosition) return missing;
+  if (facts.position === undefined || facts.position < historyPosition) {
+    return missing;
+  }
   const row = await readEventAt(store, `conversation-${conversationId}`,
     facts.position, performance.now() + 10_000);
-  if (!row) return missing;
+  if (!row) {
+    return missing;
+  }
   const event = row.event;
   const context = { silo, memberId };
   const ownMessage = event.type === 'message.posted' && event.commandId === commandId &&

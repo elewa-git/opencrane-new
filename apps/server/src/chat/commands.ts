@@ -92,6 +92,7 @@ function verifyCommandIdentity(previous: StoredEvent, input: Input, context: Con
 
 export function matchesHumanChatCommand(event: StoredEvent['event'], commandId: string,
   conversationId: string, context: Context): boolean {
+  // Stop callers from treating another person's saved command as their own.
   return event.id === commandId && event.silo === context.silo &&
     event.subject === `conversation-${conversationId}` &&
     event.principal?.kind === 'human' && event.principal.id === context.memberId;
