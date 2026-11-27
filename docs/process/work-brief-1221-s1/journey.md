@@ -114,3 +114,26 @@ This check uses a local stand-in model and costs 0 euro cents.
 
 Application package run 45980193385 was dispatched after the hash repair was
 pushed. Its result belongs to CI; the PR records its current status.
+
+## Package smoke test style repair
+
+Journey: NOT RUN, as instructed. No stack was claimed.
+
+The offline package smoke test now uses named JavaScript functions, separate
+promise statements and an expanded loop. It imports the same helpers, renders
+the same four session cases and identity, and checks the same native CLI version.
+No product behaviour, assertion or timeout changed. This is a style repair;
+there is no failing behaviour test to add. The existing smoke test passed before
+the edit and twice afterwards against the saved local application image.
+Each focused run also passed all four source review tests. These runs inspected
+the image directly and invoked the existing smoke test without rereading its
+archive. The full layer suite was not rerun for this style-only change.
+
+CI run 45980782424 timed out on the mixed-object recovery refusal. The isolated
+case passes locally. It changes an object backup descriptor and refuses the
+restore before either target changes. That path does not use the changed chat
+or persona code; the shared memory text guard was moved without changing it.
+The timeout is unrelated to this repair. The same run also reports two failed
+thread-start and thread-resume assertions in `private-turn-channel.test.ts`.
+Those failures remain outside this style repair. The PR comment records the
+failed-job rerun and both package workflow results.
