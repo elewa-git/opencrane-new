@@ -37,7 +37,11 @@ export async function searchMembers(
     const parsed = memberDirectorySchema.safeParse(raw);
     if (!parsed.success) return { kind: 'unavailable' };
     return { kind: 'ok', value: parsed.data };
-  } catch {
+  } catch (error) {
+    if (applyingReply && !signal.aborted && error instanceof DOMException
+      && error.name === 'TimeoutError') {
+      return { kind: 'access_applying' };
+    }
     return { kind: 'unavailable' };
   }
 }
