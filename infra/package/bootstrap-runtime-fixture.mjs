@@ -157,6 +157,7 @@ const services = {
         return { status: 'appended', sequence };
       }
       async function close() {}
+      // Provide the real store clock because bootstrap approval reads it in this fixture too.
       return { store: { clock: systemClock, head, readStream, append }, close };
     },
   },
