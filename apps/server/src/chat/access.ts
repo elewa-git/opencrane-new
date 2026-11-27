@@ -42,8 +42,10 @@ export async function chatAccess(options: ParticipationOptions, request: AccessR
   const member = activeChatMember(options, request.memberId, undefined, deadline);
   const conversation = conversationAccess(options, request, deadline);
   const [, access] = await Promise.all([member, conversation]);
-  // Read saved membership after both permission checks have finished.
-  await requireSavedChatMember(options, request.memberId, deadline);
+  if (request.conversationId) {
+    // Read saved membership after both permission checks for this chat have finished.
+    await requireSavedChatMember(options, request.memberId, deadline);
+  }
   return access;
 }
 
