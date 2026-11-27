@@ -1,5 +1,26 @@
 # #1221 packaged journey receipt
 
+## Run 2 — PARTIAL
+
+**Date:** 27 November 2026
+**Install:** Fresh packaged install on slot 1, product commit `3a9e760e4fbead2cb1b49dae36ea2c18157e6ecd`.
+**Package checks:** PASS. Application and scanner approvals were present for this commit. `package-check` passed. `package-up` used the documented `OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` switch because this host has swap. Slot 1 was released after the run.
+
+### Run 2 steps and results
+
+1. **PASS — member onboarding.** Signed in as the slot 1 member, joined the invited membership, saved all four survey steps, reviewed and approved persona revision 2 with assistant name Aster, and completed the welcome. Screenshots: `member-persona-approved-1280.png` and `welcome-complete-1280.png`.
+2. **PASS — personal chat and Memory off.** The chat list reported `assistantKind: personal`. Installed session defaults use `memoryEnabled: false` for personal sessions; personal message requests omit `executionMode`. The desktop and phone chat screenshots are `chat-desktop-1280.png` and `chat-mobile-390.png`.
+3. **FAIL — assistant identity.** Despite the approved persona naming Aster, the assistant introduced itself as Codex.
+4. **FAIL — capabilities.** The answer described files and software installs, but claimed terminal internet access was enabled. That contradicts the required “no internet yet” answer. It did not claim browser control.
+5. **FAIL — shared slide deck.** The assistant offered a `sandbox:` download link. No file card appeared in the chat within five minutes.
+6. **PASS — fetch refusal.** Fetching `https://example.com` received a plain failure explanation and did not claim success.
+
+No `Run interrupted`, 502, or `127.0.0.1:8080/v1/responses` message appeared. The `computer-runtime` gateway ConfigMap was not inspected because that trigger did not occur.
+
+**Spend:** 20 euro cents settled today (`todayCents: 20`, `dailyCeilingCents: 2000`, `reservedCents: 0`). The priced provider test reserved 3 cents and settled 1 cent. All amounts are integer cents.
+
+Safe package logs were copied outside the repository before teardown. The receipt contains only the steps, results, small summary JSON and screenshots. No secrets or private paths are included.
+
 Run date: 27 November 2026. Fresh packaged slot: 1. Tested product commit:
 `3a9e760e4fbead2cb1b49dae36ea2c18157e6ecd`.
 
