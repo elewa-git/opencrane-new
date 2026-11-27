@@ -1,3 +1,4 @@
+import { waitForRead } from '../core/read-retry';
 import {
   addMemberCommandSchema, createGroupCommandSchema, groupChangeSchema, groupReceiptSchema,
   groupsResponseSchema,
@@ -145,22 +146,8 @@ export async function followChange(
       return { kind: 'current', checkedAt: new Date().toISOString() };
     }
     if (attempt < 19) {
-      await waitForNextRead(signal);
+      await waitForRead(500, signal);
     }
   }
   return { kind: 'still_applying' };
-}
-
-function waitForNextRead(signal: AbortSignal): Promise<void> {
-  return new Promise<void>(scheduleNextRead.bind(null, signal));
-}
-
-function scheduleNextRead(signal: AbortSignal, resolve: () => void): void {
-  const timer = globalThis.setTimeout(resolve, 500);
-  signal.addEventListener('abort', cancelWait.bind(null, timer, resolve), { once: true });
-}
-
-function cancelWait(timer: number, resolve: () => void): void {
-  globalThis.clearTimeout(timer);
-  resolve();
 }

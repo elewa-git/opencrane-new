@@ -2,6 +2,7 @@ import { memberAccessSchema, memberDepartureSchema, memberDetailSchema,
   memberHeaderSchema, memberRoleCommandSchema, memberRoleReceiptSchema,
   memberRoleStatusSchema } from '@opencrane/protocol';
 import { z } from 'zod';
+import { fetchMemberRead } from './member-search-api';
 
 export type Header = ReturnType<typeof memberHeaderSchema.parse>;
 export type Detail = ReturnType<typeof memberDetailSchema.parse>;
@@ -14,9 +15,18 @@ export type ReadResult<T> = { kind: 'ok'; value: T } | { kind: 'denied'; status:
 export type RoleResult<T> = ReadResult<T> | { kind: 'invalid' }
   | { kind: 'conflict'; reason: string };
 
-async function read(url: string, signal: AbortSignal): Promise<ReadResult<unknown>> {
+async function read(url: string, signal: AbortSignal,
+  joinMayBeApplying = false): Promise<ReadResult<unknown>> {
+  function readUrl() {
+    return url;
+  }
   try {
-    const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
+    let response: Response;
+    if (joinMayBeApplying) {
+      response = await fetchMemberRead(readUrl, signal);
+    } else {
+      response = await fetch(url, { headers: { accept: 'application/json' }, signal });
+    }
     // Check the status before reading a denied body, which may contain no JSON.
     if (response.status === 401 || response.status === 403) {
       return { kind: 'denied', status: response.status };
@@ -32,7 +42,7 @@ async function read(url: string, signal: AbortSignal): Promise<ReadResult<unknow
 export async function fetchMember(
   memberId: string, signal: AbortSignal,
 ): Promise<ReadResult<Header | Detail>> {
-  const result = await read(`/api/members/${encodeURIComponent(memberId)}`, signal);
+  const result = await read(`/api/members/${encodeURIComponent(memberId)}`, signal, true);
   if (result.kind !== 'ok') return result;
   const full = memberDetailSchema.safeParse(result.value);
   if (full.success) return { kind: 'ok', value: full.data };

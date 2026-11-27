@@ -329,10 +329,14 @@ addition rereads the group after both content and IAM are current. A denied
 search clears the group and late results; a temporary
 search failure keeps the group on screen.
 The default Members tab reads `/api/members?q=&after=&limit=20`. Search starts a new
-page, and `next` loads more rows. A request generation drops older successful and
-ordinary failed search replies. Any live 401 or 403 clears member and group rows,
-closes the tabs and stops later replies from showing names. Member rows are read-only
-in this part.
+page, and `next` loads more rows. Directory and member detail reads retry only
+HTTP 425 with `{ status: 'access_applying' }`. They retry up to ten times, 500 ms apart,
+within ten seconds. Leaving the page cancels the read. On the first applying reply,
+the Members tab clears earlier rows, counts and invite access. It starts again at
+the first page and shows data only after a successful read. A request generation
+drops older successful and ordinary failed search replies. Any live 401 or 403
+clears member and group rows, closes the tabs and stops later replies from showing
+names. Member rows are read-only in this part.
 Each member name links to `/org/people/members/<id>`. That page reads the member
 first, then `/api/members/<id>/access` only for a full admin detail. A minimal
 header never triggers the access read. A refused read clears all detail, including

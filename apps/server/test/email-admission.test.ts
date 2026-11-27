@@ -7,7 +7,11 @@ import { readActiveIdentity } from '../src/members/admission.ts';
 const issuer = 'https://idp.example.test';
 const account = 'person';
 const now = new Date('2026-10-01T12:00:00Z');
-type CandidateRow = { sequence: string | number; member_id: string | null };
+type CandidateRow = {
+  sequence: string | number;
+  member_id: string | null;
+  status?: 'joined';
+};
 type IdentityStore = Pick<EventStore, 'head' | 'readStream'>;
 
 function restoreMocks() {
@@ -56,7 +60,8 @@ function store(memberPosition: number, recent: StoredEvent[], candidates: Stored
 }
 
 function readIdentity(source: IdentityStore, db: Query) {
-  return readActiveIdentity(source, db, 'acme', issuer, account, now);
+  const identity = { issuer, sub: account };
+  return readActiveIdentity(source, db, 'acme', identity, now);
 }
 
 async function refusesInvalidCheckpoint(sequence: string | number) {
@@ -111,8 +116,8 @@ function unrelatedRows(count: number): StoredEvent[] {
 
 async function refusesRecentEventOverflow() {
   const recent = unrelatedRows(10_001);
-  await expect(readIdentity(store(10_001, recent, []), projection(emptyProjection)))
-    .rejects.toThrow('Identity history unavailable');
+  const result = await readIdentity(store(10_001, recent, []), projection(emptyProjection));
+  expect(result).toEqual({ status: 'backlog', memberSequence: 10_001 });
 }
 it('refuses more than ten thousand unapplied member events', refusesRecentEventOverflow);
 
@@ -124,7 +129,7 @@ async function refusesCombinedCandidateOverflow() {
 it('counts projected and unapplied identity candidates together',
   refusesCombinedCandidateOverflow);
 
-const projectedPerson = [{ sequence: 1, member_id: 'person' }];
+const projectedPerson: CandidateRow[] = [{ sequence: 1, member_id: 'person', status: 'joined' }];
 
 async function refusesInvalidCandidate(kind: string) {
   const row = joined(1);
@@ -162,7 +167,7 @@ async function excludesLaterRecentEvents() {
   const recent = unrelatedRows(1);
   recent.push(joined(2));
   const result = await readIdentity(store(1, recent, [joined(2)]), projection(emptyProjection));
-  expect(result).toEqual({ active: false, memberSequence: 1 });
+  expect(result).toEqual({ status: 'none', memberSequence: 1 });
 }
 it('ignores member events saved after the captured member position', excludesLaterRecentEvents);
 
@@ -171,10 +176,22 @@ async function excludesLaterCandidateEvents() {
     silo: 'acme', data: { memberId: 'person', removedBy: 'admin' } };
   const candidates = [joined(1), { sequence: 2, event: removal }];
   const result = await readIdentity(store(1, [], candidates), projection(projectedPerson));
-  expect(result).toEqual({ active: true, memberSequence: 1 });
+  expect(result).toEqual({ status: 'active', memberId: 'person', memberSequence: 1,
+    projectedSequence: 1, projectedJoined: true });
 }
 it('ignores a candidate removal saved after the captured member position',
   excludesLaterCandidateEvents);
+
+async function excludesRemovedCandidate() {
+  const raw = event('remove-person', 'member-person', 'member.removed');
+  const removal = { ...raw, silo: 'acme', data: { memberId: 'person', removedBy: 'admin' } };
+  const candidates = [joined(1), { sequence: 2, event: removal }];
+  const result = await readIdentity(store(2, candidates.slice(1), candidates),
+    projection(projectedPerson));
+  expect(result).toEqual({ status: 'none', memberSequence: 2 });
+}
+it('excludes a removed account even when the table still shows it joined',
+  excludesRemovedCandidate);
 
 function fixedPerformanceTime() {
   return 100;
@@ -183,9 +200,11 @@ function fixedPerformanceTime() {
 async function boundsEventReads(kind: string) {
   vi.spyOn(performance, 'now').mockImplementation(fixedPerformanceTime);
   const rows = [joined(1)];
-  const db = projection(kind === 'recent' ? emptyProjection : projectedPerson);
-  const recent = kind === 'recent' ? rows : [];
+  const unprojected = kind === 'recent';
+  const db = projection(unprojected ? emptyProjection : projectedPerson);
+  const recent = unprojected ? rows : [];
   const result = await readIdentity(store(1, recent, rows, 10_100), db);
-  expect(result).toEqual({ active: true, memberSequence: 1 });
+  expect(result).toEqual({ status: 'active', memberId: 'person', memberSequence: 1,
+    projectedSequence: unprojected ? 0 : 1, projectedJoined: !unprojected });
 }
 it.each(['recent', 'candidate'])('bounds %s reads with the ten-second deadline', boundsEventReads);

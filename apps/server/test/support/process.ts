@@ -51,7 +51,7 @@ export interface RunningServer {
   exited: Promise<{ code: number | null; signal: NodeJS.Signals | null; exitedAtMs: number }>;
   port: number;
   stdout: () => string;
-  stop: () => Promise<void>;
+  stop: (output?: 'exit-only') => Promise<void>;
 }
 
 /** Launch main.ts as a child process and wait until /healthz answers. */
@@ -72,7 +72,7 @@ export async function startServer(extraEnv: NodeJS.ProcessEnv = {}): Promise<Run
   child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')));
 
   /** Ask the child to stop, hard-kill it after 3 seconds, and resolve only once it has exited. */
-  const stop = async (): Promise<void> => {
+  const stop = async (output?: 'exit-only'): Promise<void> => {
     if (child.exitCode !== null || child.signalCode !== null) {
       return;
     }
@@ -80,7 +80,12 @@ export async function startServer(extraEnv: NodeJS.ProcessEnv = {}): Promise<Run
     const hardKill = setTimeout(() => child.kill('SIGKILL'), 3000);
     const result = await exited;
     clearTimeout(hardKill);
-    if (result.code !== 0 || result.signal) throw new Error(`Server did not stop cleanly: ${JSON.stringify(result)}\n${stdout}\n${stderr}`);
+    if (result.code !== 0 || result.signal) {
+      if (output === 'exit-only') {
+        throw safeShutdownError(result, stdout);
+      }
+      throw new Error(`Server did not stop cleanly: ${JSON.stringify(result)}\n${stdout}\n${stderr}`);
+    }
   };
 
   // Poll rather than guess a delay: a cold type-stripping boot can take seconds on a loaded machine.
@@ -102,4 +107,23 @@ export async function startServer(extraEnv: NodeJS.ProcessEnv = {}): Promise<Run
     }
     await sleep(100);
   }
+}
+
+const shutdownStages = new Set([
+  'server shutdown started', 'server shutdown forced', 'server shutdown timed out',
+  'server shutdown failed',
+]);
+
+function safeShutdownError(result: Awaited<RunningServer['exited']>, stdout: string) {
+  const code = result.code ?? 'none';
+  const signal = result.signal ?? 'none';
+  const error = new Error(`Server did not stop cleanly (exit code ${code}, signal ${signal})`);
+  // Use only fixed shutdown messages. Child output can contain a session or private data.
+  const lines = parseJsonLines(stdout);
+  function isShutdownStage(line: Record<string, unknown>) {
+    const message = line['msg'];
+    return typeof message === 'string' && shutdownStages.has(message);
+  }
+  const last = lines.findLast(isShutdownStage);
+  return Object.assign(error, { shutdownStage: last?.['msg'] });
 }

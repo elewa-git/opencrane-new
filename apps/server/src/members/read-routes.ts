@@ -1,13 +1,15 @@
-import { recordIdSchema } from '@opencrane/events';
+import { memberJoinedDataSchema, recordIdSchema } from '@opencrane/events';
 import { isEventStoreUnavailable } from '@opencrane/event-store';
 import type { FastifyBaseLogger, FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
+import { memberAuthorisation } from '@opencrane/authz';
 import { AuthorityApplying, currentMembership, readActiveMember,
   MemberAccessRefused } from '@opencrane/models';
 import { memberHeaderSchema, memberPageQuerySchema, memberDetailSchema,
   memberDirectorySchema } from '@opencrane/protocol';
 import { registerToolExplanation } from '../integrations/explanation-routes.ts';
+import { readActiveIdentity, type MemberAccount } from './admission.ts';
 import { registerMemberInventory } from './inventory-routes.ts';
 import { memberCounts } from './read-counts.ts';
 import type { GroupOptions } from './group-routes.ts';
@@ -20,6 +22,20 @@ class InvalidMemberRequest extends Error {
     super('Invalid member request', { cause: error });
   }
 }
+
+class MemberJoinApplying extends Error {}
+class MemberPermissionsUnavailable extends Error {
+  constructor(cause: Error) {
+    super('IAM unavailable', { cause });
+  }
+}
+
+const admissionWaitMs = 30_000;
+const permissionErrorCodes = new Set([
+  'ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'ENOTFOUND', 'EAI_AGAIN',
+]);
+
+type Membership = Awaited<ReturnType<typeof currentMembership>>;
 
 export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
@@ -49,17 +65,9 @@ export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
       const { memberId } = parseRequest(parameters, request.params);
       let query: z.infer<typeof memberPageQuerySchema> | undefined;
       if (!memberId) query = parseRequest(memberPageQuerySchema, request.query);
-      stage = 'caller_identity';
-      const caller = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
-      if (!caller) throw new MemberAccessRefused('Active membership required');
-      stage = 'caller_membership';
-      const membership = await currentMembership(options.store, options.silo, caller);
-      const management = isManager(membership.role);
-      requireDirectoryRole(memberId, management);
-      let requiredRole: 'member' | 'admin' = 'member';
-      if (management) requiredRole = 'admin';
-      stage = 'caller_authorisation';
-      await readActiveMember(options.store, options.binding, caller, requiredRole);
+      stage = 'caller_access';
+      const account = { issuer: config.issuerUrl, sub: session.sub };
+      const caller = await authoriseRead(options, account, memberId);
       if (!memberId) {
         stage = 'member_directory';
         const directory = await readDirectory(options, query, request.log);
@@ -67,20 +75,143 @@ export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
         return reply.send(memberDirectorySchema.parse(directory));
       }
       stage = 'member_detail';
-      const response = await readHeader(options, memberId, management, membership.role);
+      const response = await readHeader(options, memberId, caller.management, caller.role);
       if (reply.sent) return reply;
       return reply.code(response.code).send(response.body);
     } catch (error) {
       if (reply.sent) return reply;
       if (error instanceof InvalidMemberRequest) return reply.code(400).send({ status: 'refused' });
       if (error instanceof MemberAccessRefused) return reply.code(403).send({ status: 'refused' });
+      if (error instanceof MemberJoinApplying) {
+        return reply.code(425).send({ status: 'access_applying' });
+      }
       const reason = memberReadFailure(error);
-      request.log.error({ stage, reason }, 'Member read unavailable');
+      const diagnostic = permissionDiagnostic(error);
+      request.log.error({ stage, reason, ...diagnostic }, 'Member read unavailable');
       return reply.code(503).send({ status: 'unavailable' });
     } finally {
       clearTimeout(watchdog);
     }
   }
+}
+
+async function authoriseRead(options: GroupOptions, account: MemberAccount,
+  targetId: string | undefined) {
+  const { store, db, silo, binding } = options;
+  const now = new Date();
+  const identity = await readActiveIdentity(store, db, silo, account, now);
+  if (identity.status !== 'active') {
+    throw new MemberAccessRefused('Active membership required');
+  }
+
+  const caller = identity.memberId;
+  const membership = await currentMembership(store, silo, caller);
+  const management = isManager(membership.role);
+  if (!targetId && !management) {
+    throw new MemberAccessRefused('Owner or Admin required');
+  }
+  const admission = recentAdmission(membership, caller, now);
+  if (!identity.projectedJoined) {
+    // Trust a recent saved admission to ask for a wait while the member table is behind it.
+    if (admission && admission.sequence > identity.projectedSequence) {
+      throw new MemberJoinApplying();
+    }
+    throw new MemberAccessRefused('Active membership required');
+  }
+
+  const requiredRole = management ? 'admin' : 'member';
+  const applied = await requireAdmissionApplied(options, admission, membership);
+  const role = await readActiveMember(store, binding, caller, requiredRole, applied);
+  return { role, management };
+}
+
+function recentAdmission(membership: Membership, caller: string, now: Date) {
+  const subject = `member-${caller}`;
+  function concernsCaller(row: Membership['facts'][number]) {
+    return row.event.subject === subject;
+  }
+  const latest = membership.facts.findLast(concernsCaller);
+  if (!latest) {
+    return undefined;
+  }
+  const age = now.getTime() - Date.parse(latest.event.time);
+  if (age < 0 || age >= admissionWaitMs) {
+    return undefined;
+  }
+  if (latest.event.type === 'silo.owner_bootstrapped') {
+    return latest;
+  }
+  // Treat only accepted invitations as new access. Older joins may lack an invitation.
+  if (latest.event.type === 'member.joined') {
+    const join = memberJoinedDataSchema.parse(latest.event.data);
+    if (join.invitationId) {
+      return latest;
+    }
+  }
+  return undefined;
+}
+
+async function requireAdmissionApplied(options: GroupOptions,
+  admission: ReturnType<typeof recentAdmission>, membership: Membership) {
+  if (!admission) {
+    return undefined;
+  }
+  const auth = memberAuthorisation(options.binding);
+  const admissionId = admission.event.id;
+  await requireReceipt(auth, admissionId);
+
+  let ownerSeedId: string | undefined;
+  if (admission.event.type === 'silo.owner_bootstrapped') {
+    const seed = membership.ownership.find(isOwnershipSeed);
+    ownerSeedId = seed?.event.id;
+  }
+
+  async function applied(eventId: string) {
+    // Reuse only this receipt. Ownership and other changes have their own receipts.
+    if (eventId === admissionId) {
+      return true;
+    }
+    if (eventId !== ownerSeedId) {
+      return auth.applied(eventId);
+    }
+    return requireReceipt(auth, eventId);
+  }
+  return applied;
+}
+
+async function requireReceipt(auth: ReturnType<typeof memberAuthorisation>, eventId: string) {
+  const receipt = await auth.checkApplied(eventId);
+  if (receipt.status === 'unavailable') {
+    throw new MemberPermissionsUnavailable(receipt.error);
+  }
+  if (!receipt.allowed) {
+    throw new MemberJoinApplying();
+  }
+  return true;
+}
+
+function isOwnershipSeed(row: Membership['ownership'][number]) {
+  return row.event.type === 'ownership.seeded';
+}
+
+function permissionDiagnostic(error: unknown) {
+  if (!(error instanceof MemberPermissionsUnavailable)) {
+    return {};
+  }
+  // Log only recognised network codes or HTTP statuses. The cause may contain private URLs.
+  let cause: unknown = error.cause;
+  for (let depth = 0; depth < 4 && cause instanceof Error; depth += 1) {
+    const code: unknown = Reflect.get(cause, 'code');
+    if (typeof code === 'string' && permissionErrorCodes.has(code)) {
+      return { dependencyCode: code };
+    }
+    const status: unknown = Reflect.get(cause, 'statusCode');
+    if (typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 599) {
+      return { dependencyStatus: status };
+    }
+    cause = cause.cause;
+  }
+  return { dependencyCode: 'unknown' };
 }
 
 function memberReadFailure(error: unknown) {
@@ -186,8 +317,4 @@ function trustedRead(config: AuthConfig, options: GroupOptions,
 
 function isManager(role: string) {
   return role === 'owner' || role === 'admin';
-}
-
-function requireDirectoryRole(memberId: string | undefined, management: boolean) {
-  if (!memberId && !management) throw new MemberAccessRefused('Owner or Admin required');
 }

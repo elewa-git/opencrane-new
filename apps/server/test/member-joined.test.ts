@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Pool } from 'pg';
 import type { FastifyInstance } from 'fastify';
-import { databases } from '@opencrane/authz/testing';
+import { memberAuthorisation } from '@opencrane/authz';
+import { databases, openfga, permissionStore } from '@opencrane/authz/testing';
 import { encodeSession, type SessionData } from '@opencrane/auth';
 import { connectEventStore, type StoredEvent } from '@opencrane/event-store';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { members, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { connectMemberFeed, groups, members, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { memberDirectorySchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import type { JoinResult, JoinStore } from '../src/members/join.ts';
 import { testAuthConfig, tamperCookie } from './support/test-auth-config.ts';
@@ -23,6 +25,7 @@ const input = { memberId: 'alice', invitationId: 'invite-alice', commandId: 'joi
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let app: FastifyInstance;
 let dbs: Awaited<ReturnType<typeof databases>>;
+let runner: ProjectionRunner;
 
 async function openAcceptanceDatabase() {
   dbs = await databases();
@@ -39,7 +42,7 @@ beforeEach(async () => {
   await seedInviter();
   const db = pgDb(dbs.queue);
   await members.drop(db);
-  const runner = new ProjectionRunner(db, nats.reader, createLogger('test'));
+  runner = new ProjectionRunner(db, nats.reader, createLogger('test'));
   await runner.initialise(members);
   await db.query("UPDATE projection_checkpoints SET sequence = 0 WHERE name = 'members'");
   await db.query("DELETE FROM projection_events WHERE projection = 'members'");
@@ -47,6 +50,8 @@ beforeEach(async () => {
   app = server(nats.store);
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   await app.close();
   await nats.close();
 });
@@ -54,11 +59,20 @@ afterEach(async () => {
 function server(store: JoinStore) {
   return buildServer(config, { membership: { silo: 'acme', store, db: pgDb(dbs.queue), now: () => clock } });
 }
-function accept(body: unknown = input, identity: SessionData = session) {
-  return app.inject({ method: 'POST', url: '/members/join', payload: JSON.stringify(body), headers: {
+function currentTestSession() {
+  return { ...session, authTime: Math.floor(clock.getTime() / 1_000) };
+}
+function sessionHeaders(identity: SessionData) {
+  return {
     'content-type': 'application/json', origin: 'https://app.example.test',
     cookie: `${config.cookieName}=${encodeSession(config, identity)}`,
-  } });
+  };
+}
+function accept(body: unknown = input, identity: SessionData = session) {
+  const headers = sessionHeaders(identity);
+  const payload = JSON.stringify(body);
+  const request = { method: 'POST' as const, url: '/members/join', payload, headers };
+  return app.inject(request);
 }
 function invitation(patch: Record<string, unknown> = {}, silo = 'acme') {
   return {
@@ -72,11 +86,482 @@ async function invite(patch: Record<string, unknown> = {}, silo = 'acme') {
   const result = await nats.store.append({ event: invitation(patch, silo), expectedSequence: 0 });
   expect(result.status).toBe('appended');
 }
-async function history() {
+async function history(memberId = 'alice') {
   const records: StoredEvent[] = [];
-  for await (const stored of nats.store.readStream('member-alice')) records.push(stored);
+  for await (const stored of nats.store.readStream(`member-${memberId}`)) {
+    records.push(stored);
+  }
   return records;
 }
+
+let fga: Awaited<ReturnType<typeof openfga>>;
+
+async function startPermissions() {
+  fga = await openfga();
+}
+async function stopPermissions() {
+  await fga?.close();
+}
+async function memberReader(identity: SessionData = session) {
+  await runner.initialise(groups);
+  const { binding, auth } = await permissionStore(fga, 'acme');
+  const db = pgDb(dbs.queue);
+  const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
+  const memberReads = { silo: 'acme', store: nats.store, binding, db, feed };
+  const logs: string[] = [];
+  function write(line: string) {
+    logs.push(line);
+  }
+  const serverOptions = { memberReads, logDestination: { write } };
+  const directoryApp = buildServer(config, serverOptions);
+  const headers = sessionHeaders(identity);
+
+  function read(url: string) {
+    const request = { url, headers };
+    return directoryApp.inject(request);
+  }
+
+  async function apply(saved: StoredEvent['event']) {
+    await auth.handler.handle(saved, db);
+  }
+
+  async function applyMember(memberId = 'alice') {
+    const rows = await history(memberId);
+    const membership = rows.at(-1);
+    if (!membership) {
+      throw new Error('Expected saved membership');
+    }
+    await apply(membership.event);
+    await runner.run(members);
+    await runner.run(groups);
+  }
+
+  async function close() {
+    await directoryApp.close();
+    await feed.close();
+  }
+
+  const authorisation = memberAuthorisation(binding);
+  return { read, applyMember, apply, close, authorisation, logs };
+}
+
+async function joinedReader(role: 'admin' | 'member', recent = true) {
+  if (recent) {
+    clock = new Date();
+  }
+  const tomorrow = new Date(clock.getTime() + 86_400_000);
+  await invite({ role, invitedIdentity: undefined, expiresAt: tomorrow.toISOString() });
+  const signedIn = currentTestSession();
+  const joined = await accept(input, signedIn);
+  expect(joined.statusCode, joined.body).toBe(200);
+  expect(joined.json()).toMatchObject({ status: 'joined' });
+  return memberReader(signedIn);
+}
+
+async function readsAsNewAdmin(membersProjected: boolean) {
+  const reader = await joinedReader('admin');
+  try {
+    if (membersProjected) {
+      await runner.run(members);
+    }
+    const applying = await reader.read('/api/members');
+    expect(applying.statusCode).toBe(425);
+    expect(applying.json()).toEqual({ status: 'access_applying' });
+
+    await reader.applyMember();
+    const accepted = await reader.read('/api/members');
+    expect(accepted.statusCode).toBe(200);
+    const directory = memberDirectorySchema.parse(accepted.json());
+    expect(directory.permissions.invite).toBe(true);
+    const adminRow = { memberId: 'alice', role: 'admin' };
+    const expectedRow: unknown = expect.objectContaining(adminRow);
+    expect(directory.rows).toContainEqual(expectedRow);
+  } finally {
+    await reader.close();
+  }
+}
+async function limitsNewMemberToHeader() {
+  const reader = await joinedReader('member');
+  try {
+    const header = '/api/members/alice';
+    const applying = await reader.read(header);
+    expect(applying.statusCode).toBe(425);
+    expect(applying.json()).toEqual({ status: 'access_applying' });
+    const otherHeader = await reader.read('/api/members/admin');
+    expect(otherHeader.statusCode).toBe(425);
+    expect(otherHeader.json()).toEqual({ status: 'access_applying' });
+    const directory = await reader.read('/api/members');
+    expect(directory.statusCode).toBe(403);
+
+    await reader.applyMember();
+    const accepted = await reader.read(header);
+    expect(accepted.statusCode).toBe(200);
+    expect(accepted.json()).toEqual({ memberId: 'alice', displayName: 'Alice', role: 'member',
+      permissions: { changeRole: false, remove: false, manageOwnership: false } });
+    const refused = await reader.read('/api/members');
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toEqual({ status: 'refused' });
+  } finally {
+    await reader.close();
+  }
+}
+
+async function saveMemberEvent(memberId: string, type: string, data: object) {
+  const subject = `member-${memberId}`;
+  const saved = { ...event(randomUUID(), subject, type), silo: 'acme',
+    time: clock.toISOString(), principal: { kind: 'human' as const, id: session.sub }, data };
+  const expectedSequence = await nats.store.head(subject);
+  const append = await nats.store.append({ event: saved, expectedSequence });
+  expect(append.status).toBe('appended');
+  return saved;
+}
+
+async function refusesAmbiguousMembership(partialTable: boolean) {
+  clock = new Date();
+  const expiresAt = new Date(clock.getTime() + 86_400_000).toISOString();
+  await invite({ expiresAt });
+  const signedIn = currentTestSession();
+  const join = await accept(input, signedIn);
+  expect(join.statusCode, join.body).toBe(200);
+  const reader = await memberReader(signedIn);
+  try {
+    await reader.applyMember();
+    const duplicate = { memberId: 'duplicate', email: session.email, displayName: 'Duplicate',
+      role: 'admin', invitationId: 'duplicate-invite',
+      identity: { issuer: config.issuerUrl, sub: session.sub } };
+    const saved = await saveMemberEvent('duplicate', 'member.joined', duplicate);
+    await reader.apply(saved);
+    if (!partialTable) {
+      await runner.run(members);
+    }
+    const refused = await reader.read('/api/members');
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toEqual({ status: 'refused' });
+  } finally {
+    await reader.close();
+  }
+}
+
+async function readsAsReturningAdmin() {
+  const reader = await joinedReader('admin');
+  try {
+    await reader.applyMember();
+    const removal = { memberId: 'alice', removedBy: 'admin' };
+    await saveMemberEvent('alice', 'member.removed', removal);
+    const returning = { ...input, memberId: 'returning', invitationId: 'invite-returning',
+      commandId: 'join-returning' };
+    const expiresAt = new Date(clock.getTime() + 86_400_000).toISOString();
+    const { data } = invitation({ memberId: returning.memberId, invitationId: returning.invitationId,
+      invitedIdentity: undefined, expiresAt });
+    await saveMemberEvent('returning', 'member.invited', data);
+    const signedIn = currentTestSession();
+    const joined = await accept(returning, signedIn);
+    expect(joined.statusCode, joined.body).toBe(200);
+    const applying = await reader.read('/api/members');
+    expect(applying.statusCode).toBe(425);
+    expect(applying.json()).toEqual({ status: 'access_applying' });
+
+    await reader.applyMember('returning');
+    const response = await reader.read('/api/members');
+    expect(response.statusCode).toBe(200);
+    const directory = memberDirectorySchema.parse(response.json());
+    const memberIds = directory.rows.map(directoryMemberId);
+    expect(memberIds).toContain('returning');
+    expect(memberIds).not.toContain('alice');
+    expect(directory.permissions.invite).toBe(true);
+  } finally {
+    await reader.close();
+  }
+}
+
+function directoryMemberId(row: ReturnType<typeof memberDirectorySchema.parse>['rows'][number]) {
+  return row.memberId;
+}
+
+async function refusesPastReceipt() {
+  const reader = await joinedReader('admin', false);
+  try {
+    await runner.run(members);
+    const refused = await reader.read('/api/members');
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toEqual({ status: 'refused' });
+  } finally {
+    await reader.close();
+  }
+}
+
+async function refusesBacklog() {
+  const subject = 'member-other';
+  const example = event('other-invitation', subject, 'member.invited');
+  const unrelated = { ...example, silo: 'acme' };
+  const readHead = nats.store.head.bind(nats.store);
+  const readEvents = nats.store.readStream.bind(nats.store);
+  async function head(filter?: string, deadline?: number) {
+    if (filter === 'member-*') {
+      return 10_002;
+    }
+    return readHead(filter, deadline);
+  }
+  async function* readStream(filter: string, from = 1, deadline?: number) {
+    if (filter === 'member-*') {
+      for (let sequence = from; sequence <= 10_002; sequence += 1) {
+        yield { event: unrelated, sequence };
+      }
+      return;
+    }
+    yield* readEvents(filter, from, deadline);
+  }
+  vi.spyOn(nats.store, 'head').mockImplementation(head);
+  vi.spyOn(nats.store, 'readStream').mockImplementation(readStream);
+  const reader = await memberReader();
+  try {
+    const refused = await reader.read('/api/members');
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toEqual({ status: 'refused' });
+  } finally {
+    await reader.close();
+  }
+}
+
+const firstOwnerId = 'bootstrap-owner';
+
+async function saveFirstOwner() {
+  clock = new Date();
+  const data = { memberId: firstOwnerId, displayName: 'New owner', email: session.email,
+    role: 'owner', identity: { issuer: config.issuerUrl, sub: session.sub } };
+  await saveMemberEvent(firstOwnerId, 'silo.owner_bootstrapped', data);
+}
+
+async function readsAsNewOwner() {
+  await saveFirstOwner();
+  const reader = await memberReader();
+  try {
+    const applying = await reader.read('/api/members');
+    expect(applying.statusCode).toBe(425);
+    expect(applying.json()).toEqual({ status: 'access_applying' });
+    await runner.run(members);
+    const waitingForPermission = await reader.read('/api/members');
+    expect(waitingForPermission.statusCode).toBe(425);
+    expect(waitingForPermission.json()).toEqual({ status: 'access_applying' });
+    const ownership = await saveOwnershipSeed(firstOwnerId);
+    await reader.applyMember(firstOwnerId);
+    const waitingForOwnership = await reader.read('/api/members');
+    expect(waitingForOwnership.statusCode).toBe(425);
+    expect(waitingForOwnership.json()).toEqual({ status: 'access_applying' });
+    await reader.apply(ownership);
+    const accepted = await reader.read('/api/members');
+    expect(accepted.statusCode).toBe(200);
+    const directory = memberDirectorySchema.parse(accepted.json());
+    expect(directory.permissions.invite).toBe(true);
+  } finally {
+    await reader.close();
+  }
+}
+
+type GuardCase = 'issuer' | 'subject' | 'pending' | 'legacy' | 'superseded' | 'removed'
+  | 'wrong stream';
+const guardCases: GuardCase[] = [
+  'issuer', 'subject', 'pending', 'legacy', 'superseded', 'removed', 'wrong stream',
+];
+
+async function saveReadGuardCase(guard: GuardCase) {
+  const identity = { issuer: config.issuerUrl, sub: session.sub };
+  if (guard === 'issuer') {
+    identity.issuer = 'https://other.example.test';
+  }
+  if (guard === 'subject') {
+    identity.sub = 'idp-other';
+  }
+  if (guard === 'pending') {
+    const expiresAt = new Date(clock.getTime() + 86_400_000).toISOString();
+    await invite({ expiresAt });
+    return;
+  }
+  const data = { memberId: 'alice', displayName: 'Alice', email: session.email, role: 'admin',
+    identity, invitationId: guard === 'legacy' ? undefined : 'invite-alice' };
+  const saved = await saveMemberEvent('alice', 'member.joined', data);
+  if (guard === 'superseded') {
+    const change = { memberId: 'alice', previousRole: 'admin', newRole: 'admin',
+      changedBy: 'admin' };
+    await saveMemberEvent('alice', 'member.role_changed', change);
+  }
+  if (guard === 'removed') {
+    const removal = { memberId: 'alice', removedBy: 'admin' };
+    await saveMemberEvent('alice', 'member.removed', removal);
+  }
+  return saved;
+}
+
+async function refusesUnconfirmedJoin(guard: GuardCase) {
+  clock = new Date();
+  const saved = await saveReadGuardCase(guard);
+  const readEvents = nats.store.readStream.bind(nats.store);
+  async function* readStream(filter: string, from?: number, deadline?: number) {
+    for await (const row of readEvents(filter, from, deadline)) {
+      if (guard === 'wrong stream' && filter === 'member-alice'
+        && row.event.id === saved?.id) {
+        const wrongSubject = { ...row.event, subject: 'member-other' };
+        yield { ...row, event: wrongSubject };
+      } else {
+        yield row;
+      }
+    }
+  }
+  vi.spyOn(nats.store, 'readStream').mockImplementation(readStream);
+  const reader = await memberReader();
+  try {
+    const refused = await reader.read('/api/members');
+    const expected = guard === 'wrong stream' ? 503 : 403;
+    const body = { status: guard === 'wrong stream' ? 'unavailable' : 'refused' };
+    expect(refused.statusCode).toBe(expected);
+    expect(refused.json()).toEqual(body);
+  } finally {
+    await reader.close();
+  }
+}
+
+async function refusesMissingProjectedJoin() {
+  clock = new Date();
+  const expiresAt = new Date(clock.getTime() + 86_400_000).toISOString();
+  await invite({ expiresAt });
+  await runner.run(members);
+  const joined = await accept(input, currentTestSession());
+  expect(joined.statusCode, joined.body).toBe(200);
+  const sequence = await nats.store.head('member-alice');
+  // Simulate a broken rebuild that advanced past the join but left only the invitation.
+  const update = "UPDATE projection_checkpoints SET sequence = $1 WHERE name = 'members'";
+  await dbs.queue.query(update, [sequence]);
+  const reader = await memberReader();
+  try {
+    const refused = await reader.read('/api/members');
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toEqual({ status: 'refused' });
+  } finally {
+    await reader.close();
+  }
+}
+
+async function checksReceiptOutage() {
+  vi.stubEnv('LOG_LEVEL', 'error');
+  const reader = await joinedReader('admin');
+  try {
+    await runner.run(members);
+    const unavailable = receiptUnavailable();
+    vi.spyOn(reader.authorisation, 'checkApplied').mockResolvedValueOnce(unavailable);
+    const response = await reader.read('/api/members');
+    expectReceiptOutage(response, reader.logs);
+  } finally {
+    await reader.close();
+  }
+}
+
+const privateReceiptDetail = 'private fixture contact details';
+
+function receiptUnavailable() {
+  const cause = Object.assign(new Error(privateReceiptDetail), { code: 'ECONNREFUSED' });
+  const error = new Error('Authorisation check unavailable', { cause });
+  return { allowed: false as const, status: 'unavailable' as const, error };
+}
+
+function expectReceiptOutage(response: Awaited<ReturnType<FastifyInstance['inject']>>,
+  lines: string[]) {
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable' });
+  const logs = lines.join('');
+  expect(logs).toContain('"reason":"iam_unavailable"');
+  expect(logs).toContain('"dependencyCode":"ECONNREFUSED"');
+  expect(logs).not.toContain(privateReceiptDetail);
+}
+
+async function checksFirstOwnerReceiptOutage() {
+  vi.stubEnv('LOG_LEVEL', 'error');
+  await saveFirstOwner();
+  const ownership = await saveOwnershipSeed(firstOwnerId);
+  const reader = await memberReader();
+  try {
+    await reader.applyMember(firstOwnerId);
+    const checkReceipt = reader.authorisation.checkApplied;
+
+    async function checkApplied(eventId: string) {
+      if (eventId === ownership.id) {
+        return receiptUnavailable();
+      }
+      return checkReceipt(eventId);
+    }
+
+    vi.spyOn(reader.authorisation, 'checkApplied').mockImplementation(checkApplied);
+    const response = await reader.read('/api/members');
+    expectReceiptOutage(response, reader.logs);
+  } finally {
+    await reader.close();
+  }
+}
+
+async function saveOwnershipSeed(ownerId: string) {
+  const raw = event('ownership-seed-acme', 'ownership-acme', 'ownership.seeded');
+  const data = { ownerIds: [ownerId] };
+  const saved = { ...raw, silo: 'acme', data };
+  const result = await nats.store.append({ event: saved, expectedSequence: 0 });
+  expect(result.status).toBe('appended');
+  return saved;
+}
+
+async function checksIndependentOwnershipReceipt() {
+  const reader = await joinedReader('admin');
+  try {
+    await runner.run(members);
+    await saveOwnershipSeed('admin');
+    const applying = await reader.read('/api/members');
+    expect(applying.statusCode).toBe(425);
+    expect(applying.json()).toEqual({ status: 'access_applying' });
+    await reader.applyMember();
+    const directory = await reader.read('/api/members');
+    expect(directory.statusCode).toBe(503);
+    expect(directory.json()).toEqual({ status: 'unavailable' });
+  } finally {
+    await reader.close();
+  }
+}
+
+async function checksLivePermissionAfterJoinReceipt() {
+  const reader = await joinedReader('admin');
+  try {
+    await reader.applyMember();
+    const denied = { status: 'ok' as const, allowed: false };
+    vi.spyOn(reader.authorisation, 'check').mockResolvedValueOnce(denied);
+    const refused = await reader.read('/api/members');
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toEqual({ status: 'refused' });
+  } finally {
+    await reader.close();
+  }
+}
+
+function firstMemberReads() {
+  beforeAll(startPermissions, 120_000);
+  afterAll(stopPermissions);
+  it.each([true, false])('lets a newly joined admin read People (members projected: %s)',
+    readsAsNewAdmin);
+  it('gives a newly joined member their header and refuses the directory', limitsNewMemberToHeader);
+  it.each([true, false])('refuses two active memberships (partial member table: %s)',
+    refusesAmbiguousMembership);
+  it('finds a returning admin while the table still shows their removed ID', readsAsReturningAdmin);
+  it('refuses an established admin whose permission and old join receipt are absent',
+    refusesPastReceipt);
+  it('refuses an unconfirmed account when outstanding membership events exceed the read limit',
+    refusesBacklog);
+  it.each(guardCases)('does not ask the caller to wait for a %s join', refusesUnconfirmedJoin);
+  it('does not wait for a join at a checkpoint that already includes it',
+    refusesMissingProjectedJoin);
+  it('logs a safe cause and returns 503 when the join receipt cannot be checked', checksReceiptOutage);
+  it('checks a separate ownership receipt after confirming the join receipt',
+    checksIndependentOwnershipReceipt);
+  it('checks live permission even after the join receipt is present', checksLivePermissionAfterJoinReceipt);
+  it('lets the first owner wait for their saved claim and then open People', readsAsNewOwner);
+  it('logs a safe cause and returns 503 when the first owner’s ownership receipt is unavailable',
+    checksFirstOwnerReceiptOutage);
+}
+describe('first member reads after accepting an invitation', firstMemberReads);
 
 const assistantChoices = ['none', 'provision', undefined] as const;
 async function carriesAssistantChoice(choice: typeof assistantChoices[number]) {

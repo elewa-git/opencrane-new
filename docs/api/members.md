@@ -8,6 +8,14 @@ Reads use `no-store`, verified session identity, current events and IAM; they ap
 | Same route for Owner/Admin | Adds email, joined status, recorded `joinedAt`, groups with id/name/membership source, `memberSequence` and `ownershipSequence`. |
 | `GET /api/members?q=&after=&limit=20` | Owner/Admin-only name/email search. Returns `rows`, `next`, `counts`, `checkedAt`, `projection.content` and `permissions.invite: true`. |
 
+For 30 seconds after a saved invitation join or first-owner claim, these reads may
+return HTTP 425 with `{ "status": "access_applying" }`. This means the member table
+or OpenFGA is still applying the caller's access. The reply contains no member data.
+A signed-in person who lacks the required role or permission receives 403. The
+directory also returns 403 for an ordinary member whose join is applying, an
+account with two active memberships or an account that cannot be confirmed within
+the bound on outstanding membership events.
+
 Only Owners get `manageOwnership: true` for the existing ownership API. For an
 active non-owner target, Owner/Admin detail replies set `changeRole` and `remove`
 to true, including when the caller is the target. Owner targets keep both false.
@@ -16,8 +24,11 @@ Commands still check authority and reviewed positions when sent.
 `personalAssistant` and `rejoinedAt` return `{ status: unavailable }`.
 The access and departure reads are described below.
 The Members tab uses the directory read for search and bounded pages. It shows
-only current counts. It keeps loaded rows after an unavailable read and clears
-them after a 401 or 403. Each member name opens the detail page. That page reads
+only current counts. It clears earlier rows and hides **Invite people** on a 425
+with the `access_applying` body. It retries that reply up to ten times, 500 ms apart
+and within ten seconds. Leaving the page cancels the read. The tab also clears
+rows on 401 or 403 and keeps them after an ordinary temporary failure. Each
+member name opens the detail page. That page reads
 the member first and reads access separately only for a full admin detail. A
 minimal header shows name and role alone. A 401 or 403 on either read clears all
 detail, while a temporary failure keeps the last loaded facts for GET-only retry.

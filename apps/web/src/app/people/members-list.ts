@@ -1,14 +1,12 @@
 import {
   ChangeDetectionStrategy, Component, output, signal, type OnDestroy, type OnInit,
 } from '@angular/core';
-import { memberDirectorySchema } from '@opencrane/protocol';
 import { SharedState } from '../shared-state/shared-state';
 import { GrainLoader } from '../ui/grain-loader';
 import { checkTimeLabel } from './group-wording';
-import { classifyStatus } from './groups-api';
+import { searchMembers, type MemberDirectory } from './member-search-api';
 
-type Directory = ReturnType<typeof memberDirectorySchema.parse>;
-type Member = Directory['rows'][number];
+type Member = MemberDirectory['rows'][number];
 type State = 'loading' | 'ready' | 'failed' | 'access';
 
 @Component({
@@ -45,10 +43,7 @@ export class MembersList implements OnInit, OnDestroy {
     this.search.set(query);
     this.generation += 1;
     this.readInFlight = false;
-    this.rows.set([]);
-    this.next.set(null);
-    this.count.set(undefined);
-    this.loadedAt.set(undefined);
+    this.clearRows();
     void this.load('');
   }
 
@@ -89,12 +84,28 @@ export class MembersList implements OnInit, OnDestroy {
     if (this.readInFlight || this.request.signal.aborted || this.state() === 'access') return;
     this.readInFlight = true;
     const generation = this.generation;
-    if (after) this.loadingMore.set(true);
-    else this.state.set('loading');
-    const parameters = new URLSearchParams({ q: this.search(), after, limit: '20' });
-    const result = await this.read(`/api/members?${parameters.toString()}`);
+    let replaceRows = !after;
+    const query = this.search();
+    const request = this.request.signal;
+    function applying(this: MembersList) {
+      if (request.aborted || generation !== this.generation) {
+        return;
+      }
+      // Clear the previous directory before waiting for the current account.
+      replaceRows = true;
+      this.clearRows();
+      this.loadingMore.set(false);
+      this.invitePermission.emit(false);
+      this.state.set('loading');
+    }
+    if (after) {
+      this.loadingMore.set(true);
+    } else {
+      this.state.set('loading');
+    }
+    const result = await searchMembers(query, after, request, applying.bind(this));
     if (this.request.signal.aborted) return;
-    if (result.kind === 'access') {
+    if (result.kind === 'access_changed') {
       this.clearForAccessChange(result.status);
       return;
     }
@@ -102,21 +113,21 @@ export class MembersList implements OnInit, OnDestroy {
     if (generation !== this.generation) return;
     this.readInFlight = false;
     this.loadingMore.set(false);
-    if (result.kind === 'failed') {
+    if (result.kind !== 'ok') {
       this.state.set('failed');
       return;
     }
     const directory = result.value;
     this.invitePermission.emit(directory.permissions.invite);
-    if (after) {
+    if (replaceRows) {
+      this.rows.set(directory.rows);
+    } else {
       const known = new Set(this.rows().map(memberId));
       const additional: Member[] = [];
       for (const member of directory.rows) {
         if (!known.has(member.memberId)) additional.push(member);
       }
       this.rows.set([...this.rows(), ...additional]);
-    } else {
-      this.rows.set(directory.rows);
     }
     this.next.set(directory.next);
     this.count.set(directory.counts.members.status === 'current'
@@ -125,39 +136,24 @@ export class MembersList implements OnInit, OnDestroy {
     this.state.set('ready');
   }
 
-  private async read(url: string): Promise<{ kind: 'ok'; value: Directory }
-    | { kind: 'failed' } | { kind: 'access'; status: number }> {
-    try {
-      const response = await fetch(url, { headers: { accept: 'application/json' },
-        signal: this.request.signal });
-      if (!response.ok) {
-        const kind = classifyStatus(response.status, 'GET');
-        if (kind === 'access_changed') return { kind: 'access', status: response.status };
-        return { kind: 'failed' };
-      }
-      const raw: unknown = await response.json();
-      const parsed = memberDirectorySchema.safeParse(raw);
-      if (!parsed.success) return { kind: 'failed' };
-      return { kind: 'ok', value: parsed.data };
-    } catch {
-      return { kind: 'failed' };
-    }
-  }
-
   private clearForAccessChange(status: number): void {
     // Stop older replies from showing names after the server withdraws access.
     this.generation += 1;
     this.request.abort();
     this.readInFlight = false;
     this.loadingMore.set(false);
-    this.rows.set([]);
     this.search.set('');
-    this.next.set(null);
-    this.count.set(undefined);
-    this.loadedAt.set(undefined);
+    this.clearRows();
     this.invitePermission.emit(false);
     this.state.set('access');
     this.accessLost.emit(status);
+  }
+
+  private clearRows(): void {
+    this.rows.set([]);
+    this.next.set(null);
+    this.count.set(undefined);
+    this.loadedAt.set(undefined);
   }
 }
 

@@ -312,9 +312,14 @@ async function confirmEmailIdentity(
   context: JoinContext, now: () => Date, db?: Query,
 ): Promise<{ memberSequence: number } | JoinResult> {
   if (!db) return { status: 'unavailable' };
-  const identity = await readActiveIdentity(
-    store, db, context.silo, context.issuer, context.sub, now());
-  if (identity.active) return { status: 'refused', reason: 'already_member' };
+  const account = { issuer: context.issuer, sub: context.sub };
+  const identity = await readActiveIdentity(store, db, context.silo, account, now());
+  if (identity.status === 'backlog') {
+    return { status: 'unavailable' };
+  }
+  if (identity.status !== 'none') {
+    return { status: 'refused', reason: 'already_member' };
+  }
   // Keep the invitation unchanged through the account check. Its captured member
   // position protects later changes, but cannot detect an earlier renewal.
   const invitationSequence = events.at(-1)?.sequence ?? 0;

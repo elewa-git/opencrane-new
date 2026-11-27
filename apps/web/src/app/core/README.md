@@ -11,6 +11,8 @@ This folder keeps the website's live connection to the server running. It lets c
 - Stops reconnecting after an access-related closure and tells open chats to clear their content.
 - Reads the public organisation name supplied by the installation.
 - Supplies replaceable browser navigation and connection helpers for checks.
+- Gives People and conversation reads a shared way to wait and cancel while the
+  server applies saved changes.
 
 ## Main files
 
@@ -21,6 +23,7 @@ This folder keeps the website's live connection to the server running. It lets c
 | `socket-factory.ts` | Supplies browser connections, page addresses and random retry timing. |
 | `organisation-name.ts` | Reads and trims the public organisation name. |
 | `navigate.ts` | Supplies normal browser page navigation. |
+| `read-retry.ts` | Spaces read attempts and stops them when the page leaves or time runs out. |
 
 ## How it connects
 

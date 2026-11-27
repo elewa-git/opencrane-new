@@ -622,7 +622,17 @@ Public close and execution cleanup remain later work. Display reads are covered
 below. Fresh-install qualification: NOT RUN.
 
 Member directory GETs return `permissions.invite: true` after current Owner/Admin
-checks. Detail GETs return `changeRole` and `remove: true` for active non-owner
+checks. The look-up reads the account's projected identities with their checkpoint,
+then checks outstanding member events and the matched member histories. Two active
+memberships, no active membership or more than 10,000 outstanding events return 403.
+A recent invitation join or first-owner claim can return HTTP 425 with
+`{ status: 'access_applying' }` for up to 30 seconds. That reply requires a saved
+admission beyond the member table's checkpoint or an unapplied receipt for that
+admission. A first owner's pending ownership seed receipt can also return 425.
+OpenFGA errors return 503. A successful read needs the saved role, current permission
+and each required receipt. An ordinary member's directory read returns 403 even
+during their join.
+Detail GETs return `changeRole` and `remove: true` for active non-owner
 targets, including the caller. Owner targets keep both false. Member headers keep
 literal false flags. These reads append nothing.
 
@@ -2496,6 +2506,8 @@ Email invitations have no account binding until the join route accepts them.
 
 The [API contract](../../docs/api/members.md) defines member header/directory access and limits.
 `test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.
+`test/member-joined.test.ts` reads immediately after invitation acceptance, while
+the member table or permissions are still catching up, and checks who can read each reply.
 `test/invitations.test.ts` checks that a directory read after acceptance keeps the
 joined row and invitation permission if the event position for counts is unavailable.
 The same outage still requires a valid session, the matching organisation and silo,
