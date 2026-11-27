@@ -494,14 +494,14 @@ image pin before installation.
 The deployment build also carries Codex 0.159.2 for the private-memory native
 check. `native-runtime-inventory.json` records the two Apache-2.0 npm packages,
 their integrity-checked lockfile, the exact executable and launcher hashes, and
-four OpenCrane AGPL helpers. The package source is the existing pinned spike
+five OpenCrane AGPL helpers and their seven instruction templates.
+The adapted Codex guidance keeps its Apache-2.0 licence and notice. The package source is the existing pinned spike
 lockfile. The Dockerfile checks the executable hash, launcher hash and CLI version
 before copying only those files. It does not copy the computer filesystem or
 download anything when the native check runs. The current 583-component inventory
 includes those packages. The image layer check verifies their exact executable,
 launcher and helper hashes against the native inventory. `SourceReviewTests` in
-`image-layers.test.py` and `native-runtime-source.test.mjs` compare the four
-repository helpers with their reviewed hashes before a build. Their AGPL source
+`image-layers.test.py` and `native-runtime-source.test.mjs` compare the repository helpers, templates and notices with their reviewed hashes before a build. Their AGPL source
 review follows the current repository code.
 
 ## Package image promotion
