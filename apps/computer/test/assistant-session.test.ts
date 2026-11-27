@@ -78,3 +78,15 @@ async function sendsRestrictedInstructions(variant: 'shared' | 'routine') {
 }
 it.each(['shared', 'routine'] as const)(
   'sends the %s brief without changing private restrictions', sendsRestrictedInstructions);
+
+function keepsTeamRoutinesUnattended() {
+  const facts = { executionMode: 'restricted' as const, assistantKind: 'team' as const,
+    senderAttemptId: 'attempt' };
+  const routine = computerSessionInstructions(facts);
+  expect(routine.developer_instructions).toContain('Nobody is watching');
+  const shared = computerSessionInstructions({ ...facts, sharingClass: 'shared_only' });
+  expect(shared.developer_instructions).toContain('general shared assistant');
+  expect(shared.developer_instructions).not.toContain('Nobody is watching');
+}
+it('keeps a team routine unattended and preserves shared-context restrictions',
+  keepsTeamRoutinesUnattended);
