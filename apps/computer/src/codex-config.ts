@@ -24,8 +24,9 @@ export function computerSessionInstructions(turn: ComputerSessionFacts,
   soulFile = defaultSoulFile) {
   const configuration = computerSessionConfiguration(turn);
   let variant = 'personal';
-  if (turn.sharingClass || turn.assistantKind === 'team') variant = 'shared';
+  if (turn.sharingClass) variant = 'shared';
   else if (turn.senderAttemptId) variant = 'routine';
+  else if (turn.assistantKind === 'team') variant = 'shared';
   const environment = configuration.localTools ? 'environment-tools' : 'environment-private';
   const tools: string[] = [];
   for (const server of turn.tools ?? []) {
