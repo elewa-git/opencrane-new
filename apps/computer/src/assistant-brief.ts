@@ -11,7 +11,9 @@ export const defaultSoulFile = new URL('./prompts/soul.md', import.meta.url).pat
 
 export function renderSoul(persona?: string) {
   const soul = briefTemplate('soul');
-  if (!persona) return soul;
+  if (!persona) {
+    return soul;
+  }
   const identity = briefTemplate('persona');
   return `${soul}\n\n${identity}\n\n${persona}\n`;
 }

@@ -32,6 +32,11 @@ type Identity = Pick<Turn, 'id' | 'conversationId' | 'assistantId' | 'requesterI
 type Prepared = { identity: Identity; expiresAt: number; timer: NodeJS.Timeout;
   session?: PrivateSession; response?: Record<string, unknown> };
 
+function startRoutineThread(session: PrivateSession, senderAttemptId: string) {
+  const facts = { executionMode: 'restricted' as const, senderAttemptId };
+  return startPrivateThread(session, 'chat_turn', facts);
+}
+
 export function routineThreads(open: (() => Promise<PrivateSession>) | undefined,
   track: (work: Promise<void>) => Promise<void>) {
   const pending = new Map<string, Prepared>();
@@ -89,8 +94,7 @@ export function routineThreads(open: (() => Promise<PrivateSession>) | undefined
       }
       prepared.session = session;
       void session.closed.then(expire, expire);
-      const facts = { executionMode: 'restricted' as const, senderAttemptId: identity.id };
-      const response = await startPrivateThread(session, 'chat_turn', facts);
+      const response = await startRoutineThread(session, identity.id);
       if (pending.get(identity.id) !== prepared || expiresAt <= Date.now()) {
         throw new Error('Routine thread unavailable');
       }
