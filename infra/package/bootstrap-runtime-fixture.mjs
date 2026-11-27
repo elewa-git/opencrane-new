@@ -5,6 +5,7 @@ import { homedir, userInfo } from 'node:os';
 import { rootCertificates } from 'node:tls';
 import * as files from 'node:fs/promises';
 import { registerHooks } from 'node:module';
+import { systemClock } from '@opencrane/event-store';
 
 assert.equal(process.getuid(), 1000);
 assert.equal(process.cwd(), '/app');
@@ -156,7 +157,7 @@ const services = {
         return { status: 'appended', sequence };
       }
       async function close() {}
-      return { store: { head, readStream, append }, close };
+      return { store: { head, readStream, append, clock: systemClock }, close };
     },
   },
   '@opencrane/handlers': {
