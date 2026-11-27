@@ -1733,6 +1733,23 @@ else:
         with self.assertRaisesRegex(ValueError, "Computer licence review changed"):
             checker.check_computer_review(image)
 
+    def test_computer_package_cannot_keep_an_older_release(self):
+        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        template_path = source.parent.parent.parent / "apps/computer/sandbox-template.json"
+        template = checker.read_json(template_path)
+        template["spec"]["podTemplate"]["spec"]["containers"][0]["image"] = (
+            "k3d-ocn-registry:5000/opencrane/computer@sha256:" + "a" * 64)
+        read_json = checker.read_json
+
+        def read_with_newer_computer(path):
+            if path == template_path:
+                return template
+            return read_json(path)
+
+        with patch.object(checker, "read_json", side_effect=read_with_newer_computer):
+            with self.assertRaisesRegex(ValueError, "Computer package pin differs"):
+                checker.check_computer_review(inventory["images"]["computer"])
+
 
 if __name__ == "__main__":
     unittest.main()
