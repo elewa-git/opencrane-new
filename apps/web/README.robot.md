@@ -590,11 +590,24 @@ The earlier live journey is recorded in [sign-in evidence](../../docs/process/si
 
 ## Chat workspace
 
-`assistant-markdown.*` renders assistant text through Angular templates, never HTML injection.
+`assistant-markdown.*` renders assistant and member text through Angular templates,
+never HTML injection. Member messages use `inlineOnly`: headings, lists and quotes
+stay as typed, while code fences remain code and Mermaid stays source.
 `markdown-parser.ts` handles headings 1–6, flat ordered and unordered lists, quotes,
 paragraphs, backtick and tilde code fences, inline code, bold, italic, links and images.
-Only `https:` and `mailto:` links become anchors, with a new tab and
-`rel="noopener noreferrer"`. Other destinations and HTML remain text.
+Bare `https://`, `www.` and email addresses use the same destination checks as
+Markdown links. Trailing punctuation stays text. External HTTPS and email links
+open a new tab with `rel="noopener noreferrer"`. Relative app links and HTTPS links
+on the exact app origin use browser history and redraw the requested page without
+a document reload. Browser Back and Forward redraw the page too. Leaving a page
+ends its reads and live connections and clears private replies through its existing
+cleanup. Each new workspace page checks welcome progress again.
+Bare and Markdown `/workspace/artifacts/` and `file:///workspace/artifacts/` paths
+use the existing published-file lookup and preview output. Missing or ambiguous
+names keep the unavailable-file note. Colleague chats share the inline renderer;
+their pending-message navigation check also applies to internal message links.
+HTTP, JavaScript, data and unknown schemes stay text. Code spans and code blocks
+never produce links. HTML stays text. Links have visible keyboard focus and wrap.
 Closed Mermaid code blocks load the MIT-licensed Mermaid package only when needed.
 `mermaid-renderer.ts` creates one sandboxed iframe without same-origin access. The
 iframe sits off-screen so SVG labels still have measurable sizes. It loads the bundled library and its fixed local script, then applies a second
@@ -620,8 +633,8 @@ late results cannot replace a newer diagram. Startup and drawing each have a
 15-second timeout. The reply shows successful SVG as an inert image; refusals,
 timeouts and drawing errors keep the original source with a copy button. The
 component does not log reply text or change saved events. `a2ui` keeps its existing
-unavailable placeholder. Citations keep opening the preview. User messages, saved events
-and streamed messages are unchanged.
+unavailable placeholder. Citations keep opening the preview. Saved events and
+streamed messages are unchanged.
 Bold text can continue across a line break. Closing code markers allow at most three
 leading spaces. More deeply indented markers remain code, including when copied.
 The interactive placeholder keeps the `Ag` badge. Copy feedback stays with the same

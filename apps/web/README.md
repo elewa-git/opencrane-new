@@ -32,6 +32,7 @@ flowchart LR
   Show their personal assistant as soon as it is assigned, along with live and saved replies.
 - Keep private personal replies only in page memory and clear them when access ends.
 - Open recent and archived chats, load older messages and show saved action details.
+- Open web addresses, email addresses, shared files and app pages from chat messages.
 - Upload and preview files, explain refusals and show when files are ready to send.
 - Show tool approvals and let people watch their personal assistant's running computer
   from the chat.

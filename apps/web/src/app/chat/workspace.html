@@ -202,7 +202,13 @@
                   }
                 </div>
               }
-              @if (turn.text && turn.author !== 'agent') { <div class="prose">@for (paragraph of turn.text.split('\n\n'); track $index) { <div class="paragraph">@for (part of textParts(paragraph); track $index) {@switch (part.kind) {@case ('bold') {<strong>{{ part.text }}</strong>}@case ('citation') {<button type="button" class="citation" (click)="preview.set('Citation ' + part.text)"><span class="citation-paper" [ocDogEar]="true">{{ part.text.slice(1, -1) }}</span></button>}@case ('a2ui') {<div class="a2ui" [ocDogEar]="true"><header><span class="agent-badge">Ag</span> Interactive · built from approved components</header><p>This interface is not available yet.</p></div>}@default {<ng-container>{{ part.text }}</ng-container>}}}</div>}</div> }
+              @if (turn.text && turn.author !== 'agent') {
+                <div class="prose">
+                  <oc-assistant-markdown [text]="turn.text" [inlineOnly]="true"
+                    [conversationId]="chat.selected()" [availableFiles]="readableFiles()"
+                    (citationOpened)="preview.set($event)" (fileOpened)="preview.set($event)" />
+                </div>
+              }
               @if (turn.author === 'you') { <time class="own-time">{{ time(turn.time) }}</time> }
               @if (turn.author === 'agent' && turn.state === 'working' && turn.text
                 && chat.computer() !== 'recovering' && !isClosedConversation()) {

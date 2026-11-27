@@ -98,3 +98,88 @@ function opensSameOriginWithoutReload(): void {
   }
 }
 it('opens same-origin app links in the app without a page reload', opensSameOriginWithoutReload);
+
+function keepsLongCodeSpansUnlinked(): void {
+  const { root } = mount('``Example `code` https://example.test``');
+  expect(root.querySelector('a')).toBeNull();
+  expect(root.querySelector('code')?.textContent).toBe('Example `code` https://example.test');
+}
+it('keeps a code span containing backticks unlinked', keepsLongCodeSpansUnlinked);
+
+function refusesUnknownSameOriginSchemes(): void {
+  const { root } = mount(`[Blob](blob:${location.origin}/file)`);
+  expect(root.querySelector('a')).toBeNull();
+}
+it('refuses an unknown scheme even when its URL reports the app origin',
+  refusesUnknownSameOriginSchemes);
+
+function checksSameOriginAndProtocol(): void {
+  const appOrigin = 'https://app.example.test';
+  vi.stubGlobal('location', new URL(appOrigin));
+  try {
+    const { root } = mount(`${appOrigin}/org/people `
+      + '[Chat](./workspace?conversation=one) '
+      + '[Plain HTTP](http://app.example.test/org/people) '
+      + '[Other port](https://app.example.test:444/org/people)');
+    const links = root.querySelectorAll('a');
+    expect(links).toHaveLength(3);
+    expect(links[0]?.getAttribute('href')).toBe('/org/people');
+    expect(links[0]?.target).toBe('');
+    expect(links[1]?.getAttribute('href')).toBe('/workspace?conversation=one');
+    expect(links[2]?.target).toBe('_blank');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+}
+it('checks the complete origin and refuses HTTP on the same host', checksSameOriginAndProtocol);
+
+function resolvesRelativeAppPaths(): void {
+  vi.stubGlobal('location', new URL('https://app.example.test/org/chats/one'));
+  try {
+    const { root } = mount('[People](../people) [Chat](/workspace/direct/)');
+    const links = root.querySelectorAll('a');
+    expect(links[0]?.getAttribute('href')).toBe('/org/people');
+    expect(links[1]?.getAttribute('href')).toBe('/workspace/direct/');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+}
+it('resolves relative app paths from the current page and accepts trailing slashes',
+  resolvesRelativeAppPaths);
+
+function keepsMemberBlockMarkers(): void {
+  const text = '# Visit https://example.test\n\n- www.example.test\n\n> help@example.test';
+  const { fixture, root } = mount(text);
+  fixture.componentRef.setInput('inlineOnly', true);
+  fixture.detectChanges();
+  expect(root.querySelector('h1, ul, blockquote')).toBeNull();
+  expect(root.querySelectorAll('a')).toHaveLength(3);
+  expect(root.textContent).toContain('# Visit');
+  expect(root.textContent).toContain('- www.example.test');
+  expect(root.textContent).toContain('> help@example.test');
+}
+it('shares safe inline links while keeping member block markers as typed', keepsMemberBlockMarkers);
+
+function respectsBlockedNavigation(): void {
+  const { fixture, root } = mount('[People](/org/people)');
+  fixture.componentRef.setInput('navigationBlocked', true);
+  fixture.detectChanges();
+  const push = vi.spyOn(history, 'pushState');
+  try {
+    const link = root.querySelector<HTMLAnchorElement>('a');
+    expect(link?.getAttribute('aria-disabled')).toBe('true');
+    link?.click();
+    expect(push).not.toHaveBeenCalled();
+  } finally {
+    push.mockRestore();
+  }
+}
+it('keeps an unresolved colleague message from navigating to another app page',
+  respectsBlockedNavigation);
+
+function keepsMultilineCodeSpanUnlinked(): void {
+  const { root } = mount('`Example\nhttps://example.test`');
+  expect(root.querySelector('a')).toBeNull();
+  expect(root.querySelector('code')?.textContent).toBe('Example\nhttps://example.test');
+}
+it('keeps an inline code span unlinked across a line break', keepsMultilineCodeSpanUnlinked);

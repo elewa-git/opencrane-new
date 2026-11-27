@@ -2,7 +2,7 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryPanel } from './memory-panel';
-import { memoryDialogFixture } from './memory-dialog-fixture';
+import { dialogFixture } from '../../../test/support/dialog-fixture';
 import { MemoryForget } from './memory-forget';
 import { isObject } from './memory-panel-data';
 
@@ -107,7 +107,7 @@ function requestUrl(input: RequestInfo | URL): string {
   return input.url;
 }
 
-const dialogs = memoryDialogFixture();
+const dialogs = dialogFixture();
 beforeEach(dialogs.install);
 
 function cleanupTest(): void {

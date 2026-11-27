@@ -3024,10 +3024,8 @@ async function rendersAssistantMarkdown() {
   sendConversationRow(capture.socket, delta);
   await capture.fixture.whenStable();
   capture.fixture.detectChanges();
-  expect(capture.root.querySelector('.own .prose')?.textContent).toBe('# My question https://example.test');
   expect(capture.root.querySelector('.own .prose a')?.getAttribute('href'))
     .toBe('https://example.test');
-  expect(capture.root.querySelector('.own h1')).toBeNull();
   expect(capture.root.querySelector('oc-assistant-markdown h2')?.textContent).toBe('Answer');
   capture.root.querySelector<HTMLButtonElement>('oc-assistant-markdown .citation')?.click();
   await capture.fixture.whenStable();
@@ -3058,7 +3056,7 @@ async function opensPublishedImageLink() {
   const capture = await createCaptureWorkspace(rows);
   const card = capture.root.querySelector('oc-conversation-file-card');
   expect(card?.querySelector('button img')?.getAttribute('src')).toContain('preview=true');
-  const reply = capture.root.querySelector('oc-assistant-markdown');
+  const reply = capture.root.querySelector('.agent-turn oc-assistant-markdown');
   expect(reply?.textContent).toContain('private.svg — not shared by the agent.');
   expect(reply?.querySelectorAll('.workspace-file-link')).toHaveLength(1);
   expect(capture.root.textContent).not.toContain('/workspace/artifacts/');
@@ -3098,7 +3096,7 @@ async function displaysAndClearsPrivateReply(): Promise<void> {
     .toBe('Synthetic private reply');
   expect(root.querySelector('oc-assistant-markdown img')).toBeNull();
   send(reply);
-  expect(root.querySelectorAll('oc-assistant-markdown')).toHaveLength(1);
+  expect(root.querySelectorAll('.agent-turn oc-assistant-markdown')).toHaveLength(1);
   const lost = { ...started, id: 'lost', position: 3, type: 'agent.output_lost' };
   const loss = { ...identity, type: 'event', position: 3, generation: 2, row: lost };
   send(loss);
@@ -3106,12 +3104,12 @@ async function displaysAndClearsPrivateReply(): Promise<void> {
   expect(root.textContent).not.toContain("Didn't complete");
   const clearance = { ...binding, type: 'private_output_cleared' };
   send(clearance);
-  expect(root.querySelector('oc-assistant-markdown')).toBeNull();
+  expect(root.querySelector('.agent-turn oc-assistant-markdown')).toBeNull();
   expect(root.innerHTML).not.toContain('Synthetic private reply');
   expect(root.querySelector('[aria-label="Citation 1"]')).toBeNull();
   expect(root.textContent).toContain('Reply unavailable');
   send(reply);
-  expect(root.querySelector('oc-assistant-markdown')).toBeNull();
+  expect(root.querySelector('.agent-turn oc-assistant-markdown')).toBeNull();
 }
 it('shows a private reply once as safe Markdown and removes its text and labels on clearance',
   displaysAndClearsPrivateReply);

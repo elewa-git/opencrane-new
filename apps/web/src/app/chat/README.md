@@ -44,9 +44,14 @@ Clearing a reply removes its diagrams and cancels drawing still in progress.
 Keyboard focus moves to the conversation if a removed reply control had focus.
 
 Assistant replies show Markdown headings, lists, quotes, inline formatting and code.
-Code blocks have a copy button. Web and email links open in a new tab. Links to
-published workspace files open that file's preview. Other local file links show a
-plain note without a link or path.
+Code blocks have a copy button. Members' messages use the same inline formatting
+and safe links, while headings and lists stay as typed.
+Bare HTTPS and www. addresses and email addresses become links. Trailing punctuation
+stays outside the link. Web and email links open in a new tab. Links to this app
+open the requested page without reloading the website. Shared workspace paths,
+written bare or as Markdown links, open that file's preview. Other local file links
+show a plain note without a link or path. Unsafe schemes stay text.
+Code spans and blocks keep addresses as code. Long links wrap on phones.
 HTML stays text. Mermaid diagrams appear as images once their code block closes.
 Drawing happens in a separate browser document with network access blocked.
 An unfinished, oversized or unsupported diagram keeps its source and copy button. Citations still open the existing preview.

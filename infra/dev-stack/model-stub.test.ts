@@ -360,6 +360,19 @@ async function servesChatLinkJourney(): Promise<void> {
     const call = await first.text();
     assert.match(call, /custom_tool_call/u);
     assert.match(call, /\/workspace\/artifacts\/link-proof\.txt/u);
+    const { chatLinksFileCall } = await import('./chat-links-model.ts');
+    const argumentsText = /exec_command\((.+)\)\)/u.exec(chatLinksFileCall().input)?.[1];
+    assert(argumentsText);
+    const argumentsValue = JSON.parse(argumentsText) as { cmd: string };
+    const folder = await mkdtemp('/tmp/chat-links-');
+    try {
+      const command = argumentsValue.cmd.replaceAll('/workspace/artifacts', `${folder}/artifacts`);
+      await exec('/bin/sh', ['-c', command]);
+      const content = await readFile(`${folder}/artifacts/link-proof.txt`, 'utf8');
+      assert.equal(content, 'A shared file for the link check.\n');
+    } finally {
+      await rm(folder, { recursive: true, force: true });
+    }
     const result = { type: 'custom_tool_call_output', call_id: 'call_chat_links', output: 'Saved' };
     input.push(result);
     const second = await fetch(url, { method: 'POST', body: JSON.stringify({ input }) });

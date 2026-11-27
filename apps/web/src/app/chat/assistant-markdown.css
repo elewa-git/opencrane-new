@@ -22,3 +22,10 @@ pre { overflow-x: auto; white-space: pre; margin: 0; padding: 12px; background: 
 pre code { padding: 0; background: transparent; }
 [role=status] { display: block; padding: 4px 12px; font-size: 12px; }
 :host > :first-child { margin-top: 0; }
+
+:host > :last-child { margin-bottom: 0; }
+a:focus-visible, .workspace-file-link:focus-visible {
+  outline: 2px solid var(--oc-accent-dark);
+  outline-offset: 3px;
+}
+.workspace-file-link { overflow-wrap: anywhere; text-align: left; }

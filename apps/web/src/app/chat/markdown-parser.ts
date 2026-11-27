@@ -1,8 +1,9 @@
 interface InlinePart {
   kind: 'text' | 'code' | 'bold' | 'italic' | 'link' | 'workspace-file'
-    | 'workspace-image' | 'citation';
+    | 'workspace-image' | 'citation' | 'app-link';
   text: string;
   href?: string;
+  children?: InlinePart[];
 }
 
 export interface MarkdownBlock {
@@ -15,6 +16,25 @@ export interface MarkdownBlock {
   closed: boolean;
 }
 
+function appLink(value: string): string | undefined {
+  if (/[\\\s]/u.test(value) || value.startsWith('//')) {
+    return undefined;
+  }
+  try {
+    const relativePath = /^(?:\/(?!\/)|\.{1,2}\/|[?#])/u.test(value);
+    if (!relativePath && value.includes(':') && !/^https:/iu.test(value)) {
+      return undefined;
+    }
+    const url = new URL(value, globalThis.location.href);
+    if (url.origin === globalThis.location.origin) {
+      return url.pathname + url.search + url.hash;
+    }
+  } catch {
+    // Leave malformed destinations as text.
+  }
+  return undefined;
+}
+
 function safeLink(value: string): boolean {
   try {
     const url = new URL(value);
@@ -22,6 +42,17 @@ function safeLink(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function workspaceFileLink(value: string): boolean {
+  if (/^file:/iu.test(value) || value.startsWith('/tmp/')) {
+    return true;
+  }
+  if (value.startsWith('/workspace/')) {
+    return !/^\/workspace\/(?:direct|shared|conversations)(?:[/?#]|$)/u.test(value);
+  }
+  return !value.includes(':') && !value.startsWith('/')
+    && /\.[a-z0-9]+(?:[?#]|$)/iu.test(value);
 }
 
 function localFileLink(value: string): boolean {
@@ -43,51 +74,98 @@ function describeImageMatch(label: string, href: string, whole: string): InlineP
 }
 
 function describeLinkMatch(label: string, href: string, whole: string): InlinePart {
-  if (localFileLink(href)) return { kind: 'workspace-file', text: label, href };
-  if (safeLink(href)) return { kind: 'link', text: label, href };
+  if (workspaceFileLink(href)) {
+    return { kind: 'workspace-file', text: label, href };
+  }
+  const destination = appLink(href);
+  if (destination !== undefined) {
+    return { kind: 'app-link', text: label, href: destination };
+  }
+  if (safeLink(href)) {
+    return { kind: 'link', text: label, href };
+  }
   return { kind: 'text', text: whole };
 }
 
 function describeInlineMatch(match: RegExpMatchArray): InlinePart {
-  const [whole, code, bold, starItalic, underscoreItalic,
-    imageLabel, imageHref, label, href, citation] = match;
-  if (code !== undefined) return { kind: 'code', text: code };
-  if (bold !== undefined) return { kind: 'bold', text: bold };
-  if (starItalic !== undefined || underscoreItalic !== undefined) {
-    return { kind: 'italic', text: starItalic ?? underscoreItalic ?? '' };
+  const groups = match.groups ?? {};
+  const whole = match[0];
+  if (groups['code'] !== undefined) {
+    return { kind: 'code', text: groups['code'] };
   }
-  if (imageLabel !== undefined && imageHref !== undefined) {
-    return describeImageMatch(imageLabel, imageHref, whole ?? '');
+  const formatted = groups['bold'] ?? groups['italic'] ?? groups['underscoreItalic'];
+  if (formatted !== undefined) {
+    const kind = groups['bold'] !== undefined ? 'bold' : 'italic';
+    return { kind, text: formatted, children: parseInline(formatted) };
   }
-  if (label !== undefined && href !== undefined) {
-    return describeLinkMatch(label, href, whole ?? '');
+  if (groups['imageLabel'] !== undefined) {
+    return describeImageMatch(groups['imageLabel'], groups['imageHref'] ?? '', whole);
   }
-  if (citation !== undefined) return { kind: 'citation', text: citation };
-  return { kind: 'text', text: whole ?? '' };
+  if (groups['label'] !== undefined) {
+    return describeLinkMatch(groups['label'], groups['href'] ?? '', whole);
+  }
+  if (groups['citation'] !== undefined) {
+    return { kind: 'citation', text: groups['citation'] };
+  }
+  return { kind: 'text', text: whole };
+}
+
+function describeBareAddress(address: string): InlinePart {
+  let href = address;
+  if (/^www\./iu.test(address)) {
+    href = 'https://' + address;
+  } else if (!address.includes(':') && address.includes('@')) {
+    href = 'mailto:' + address;
+  }
+  return describeLinkMatch(address, href, address);
 }
 
 function parseInline(text: string): InlinePart[] {
-  // Keep each alternative bounded by its own delimiter, including unmatched input.
-  const pattern = /`([^`\n]+)`|\*\*([^*]+)\*\*|\*([^*\n]+)\*|_([^_\n]+)_|!\[([^[\]\n]*)\]\(([^()\s]+)\)|\[([^[\]\n]+)\]\(([^()\s]+)\)|\[(\d+)\]/g;
+  // Match whole schemes before addresses so refused links cannot hide a clickable suffix.
+  const code = /(?<marker>`+)(?<code>[\s\S]*?)\k<marker>(?!`)/.source;
+  const bold = /\*\*(?<bold>[^*]+)\*\*/.source;
+  const italic = /\*(?<italic>[^*\n]+)\*|_(?<underscoreItalic>[^_\n]+)_/.source;
+  const image = /!\[(?<imageLabel>[^[\]\n]*)\]\((?<imageHref>[^()\s]+)\)/.source;
+  const link = /\[(?<label>[^[\]\n]+)\]\((?<href>[^()\s]+)\)/.source;
+  const citation = /\[(?<citation>\d+)\]/.source;
+  const scheme = /[a-z][a-z0-9+.-]*:[^\s<>"`*]+/.source;
+  const web = /www\.[^\s<>"`*]+/.source;
+  const relative = /\/(?:workspace|org|account|history|welcome|claim)(?:[/?#][^\s<>"`*]*)?/.source;
+  const email = /[a-z0-9.!#$%&'*+/=?^_{}|~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/.source;
+  const addresses = [scheme, web, relative, email].join('|');
+  const address = '(?<![\\w@/.:+-])(?<address>' + addresses + ')';
+  const alternatives = [code, bold, italic, image, link, citation, address].join('|');
+  const pattern = new RegExp(alternatives, 'giu');
   const parts: InlinePart[] = [];
   let position = 0;
   for (const match of text.matchAll(pattern)) {
     if (match.index > position) {
       parts.push({ kind: 'text', text: text.slice(position, match.index) });
     }
-    const whole = match[0];
-    parts.push(describeInlineMatch(match));
-    position = match.index + whole.length;
+    const bare = match.groups?.['address'];
+    if (bare !== undefined) {
+      const trimmed = bare.replace(/[.,!?;:)\]}]+$/u, '');
+      parts.push(describeBareAddress(trimmed));
+      if (trimmed.length < bare.length) {
+        parts.push({ kind: 'text', text: bare.slice(trimmed.length) });
+      }
+    } else {
+      parts.push(describeInlineMatch(match));
+    }
+    position = match.index + match[0].length;
   }
-  if (position < text.length) parts.push({ kind: 'text', text: text.slice(position) });
+  if (position < text.length) {
+    parts.push({ kind: 'text', text: text.slice(position) });
+  }
   return parts;
 }
 
-function describeLine(line: string): MarkdownBlock {
-  const heading = /^(#{1,6})\s+(.+)$/.exec(line);
-  const ordered = /^\s{0,3}(\d{1,9})[.)]\s+(.+)$/.exec(line);
-  const unordered = /^\s{0,3}[-+*]\s+(.+)$/.exec(line);
-  const quote = /^>\s?(.*)$/.exec(line);
+function describeLine(line: string, inlineOnly?: boolean): MarkdownBlock {
+  const formattedLine = inlineOnly ? '' : line;
+  const heading = /^(#{1,6})\s+(.+)$/.exec(formattedLine);
+  const ordered = /^\s{0,3}(\d{1,9})[.)]\s+(.+)$/.exec(formattedLine);
+  const unordered = /^\s{0,3}[-+*]\s+(.+)$/.exec(formattedLine);
+  const quote = /^>\s?(.*)$/.exec(formattedLine);
   let kind: MarkdownBlock['kind'] = 'paragraph';
   let text = line;
   if (heading) {
@@ -134,7 +212,7 @@ function appendBlock(
   return previous;
 }
 
-export function parseMarkdown(text: string): MarkdownBlock[] {
+export function parseMarkdown(text: string, inlineOnly?: boolean): MarkdownBlock[] {
   const normalised = text.replace(/\r\n?/g, '\n');
   const lines = normalised.split('\n');
   const blocks: MarkdownBlock[] = [];
@@ -155,7 +233,7 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
     if (opening) {
       fence = opening[1] ?? '';
       const language = (opening[2] ?? '').trim();
-      fenced = { kind: language === 'a2ui' ? 'a2ui' : 'code', text: '',
+      fenced = { kind: language === 'a2ui' && !inlineOnly ? 'a2ui' : 'code', text: '',
         language, lines: [], level: 0, start: 1, closed: false };
       blocks.push(fenced);
       previous = undefined;
@@ -165,7 +243,7 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
       previous = undefined;
       continue;
     }
-    const block = describeLine(line);
+    const block = describeLine(line, inlineOnly);
     previous = appendBlock(blocks, block, previous);
   }
   for (const block of blocks) {

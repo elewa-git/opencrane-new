@@ -469,6 +469,28 @@ Fresh live run on this revision: **NOT RUN**. Full root suite: **NOT RUN**, as r
 The earlier nightly above remains the only recorded fresh pass for this investigation.
 The cause remains unproved and #600 stays open. This PR remains a draft. CI is not awaited.
 
+## Chat link check
+
+After a fresh secondary startup and its core journey, `chat-links-journey.ts` uses
+real sign-in and the shipped message box at 1280 and 390 pixels. It sends the
+`CHAT_LINKS_PROOF` prompt to the free model stand-in. The stand-in writes a small
+text file through the computer's normal command tool before replying with fixed
+link examples. File publication, chat commands, saved messages and file reads use
+the running services. Only the external example website has a browser fixture.
+The check covers both message authors, keyboard opening, a new tab, punctuation,
+code, unsafe schemes, wrapping, shared-file previews, app navigation without a
+reload, browser history, saved messages after reload and an unavailable shared file.
+
+With the claimed secondary id still exported as `DEV_STACK_ID`, run:
+
+```sh
+nice -n 10 node --experimental-strip-types infra/dev-stack/chat-links-journey.ts
+```
+
+The screenshots are saved directly in `docs/process/work-links-1225-s1/`, outside
+the stack directory, so teardown cannot remove them. This check does not fetch
+link previews or contact a real model provider.
+
 ## Starting and stopping the stack
 
 On `ocn-dev`, with Node 22, installed workspaces (`npm ci`), Docker Compose,

@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import type { MockInstance } from 'vitest';
 import { z } from 'zod';
+import { dialogFixture } from '../../../test/support/dialog-fixture';
 import { SharedAssistantAdmin } from './shared-assistant-admin';
 
 const group = {
@@ -18,13 +19,9 @@ let fetchMock: MockInstance<typeof fetch>;
 let firstLostCreateBody: z.infer<typeof createBodySchema> | undefined;
 let statusReadCount = 0;
 
-function showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); }
-function closeDialog(this: HTMLDialogElement): void {
-  this.removeAttribute('open');
-  this.dispatchEvent(new Event('close'));
-}
-
-Object.assign(HTMLDialogElement.prototype, { showModal, close: closeDialog });
+const dialog = dialogFixture();
+beforeEach(dialog.install);
+afterEach(dialog.restore);
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {

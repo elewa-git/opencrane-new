@@ -160,12 +160,10 @@ function rendersInline() {
 function keepsHostileText() {
   const hostile = '<img src=x onerror=alert(1)> <script>alert(1)</script> '
     + '[bad](javascript:alert) [data](data:text/html,hello) [web](http://example.test) '
-    + '[relative](/settings) [file](file:///example) [encoded](java&#x73;cript:alert)';
+    + '[file](file:///example) [encoded](java&#x73;cript:alert)';
   const { root } = mount(hostile);
   expect(root.querySelector('img, script, a')).toBeNull();
-  const withoutRelativePath = hostile.replace(
-    '[relative](/settings)', 'settings — not shared by the agent.');
-  const expected = withoutRelativePath.replace(
+  const expected = hostile.replace(
     '[file](file:///example)', 'example — not shared by the agent.');
   expect(root.textContent).toBe(expected);
 }

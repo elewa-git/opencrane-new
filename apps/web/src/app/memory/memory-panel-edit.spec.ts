@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryEdit } from './memory-edit';
 import { isObject, type Fact } from './memory-panel-data';
 import { MemoryPanel } from './memory-panel';
-import { memoryDialogFixture } from './memory-dialog-fixture';
+import { dialogFixture } from '../../../test/support/dialog-fixture';
 
 const fact: Fact = { memoryId: 'one', revision: 7, text: 'Private original text', kind: 'preference',
   pinned: true, expiresAt: '2027-01-01T00:00:00Z', savedAt: '2026-10-02T10:00:00Z' };
@@ -125,7 +125,7 @@ function noPrivateAnnouncements(): void {
     expect(region.textContent).not.toMatch(/Private original text|New private text|My draft/);
   }
 }
-const dialogs = memoryDialogFixture();
+const dialogs = dialogFixture();
 beforeEach(dialogs.install);
 
 function cleanupTest(): void {

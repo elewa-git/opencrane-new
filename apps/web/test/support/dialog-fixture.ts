@@ -4,6 +4,7 @@ function showModal(this: HTMLDialogElement): void {
 
 function closeModal(this: HTMLDialogElement): void {
   this.removeAttribute('open');
+  this.dispatchEvent(new Event('close'));
 }
 
 function restoreMethod(prototype: HTMLDialogElement, name: 'showModal' | 'close',
@@ -15,7 +16,7 @@ function restoreMethod(prototype: HTMLDialogElement, name: 'showModal' | 'close'
   }
 }
 
-export function memoryDialogFixture() {
+export function dialogFixture() {
   const prototype = HTMLDialogElement.prototype;
   let showDescriptor: PropertyDescriptor | undefined;
   let closeDescriptor: PropertyDescriptor | undefined;

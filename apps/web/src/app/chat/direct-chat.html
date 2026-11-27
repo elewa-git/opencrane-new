@@ -295,7 +295,8 @@
                         recipientDisplayName(colleague())) }} }
                     </strong><time>{{ directTime(row.time) }}</time></header>
                   }
-                  <p>{{ directDisplayText(row) }}</p>
+                  <oc-assistant-markdown class="message-body" [text]="directDisplayText(row)" [inlineOnly]="true"
+                    [navigationBlocked]="pendingNavigationBlocked()" />
                   @if (!closeReview.isClosed(selectedConversation(), messages())
                     && childReview.canOpen(row, selectedConversation(), currentMemberId)) {
                     <button class="child-review-action" type="button"
