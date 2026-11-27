@@ -1,0 +1,62 @@
+{
+  "verdict": "FAIL",
+  "slot": 1,
+  "productCommit": "fb932db61ef16f21a26921fa68b42c0d90ca8a16",
+  "claimLoadOneMinute": 3.83,
+  "desktop": {
+    "width": 1280,
+    "http": {
+      "claim": 201,
+      "ownerDirectory": 200,
+      "invitationAddress": 200,
+      "invitation": 200,
+      "join": 200,
+      "memberHeader": 200,
+      "memberDirectory": 403,
+      "memberInvitation": 403
+    },
+    "screenshots": [
+      "invitation-created-1280.png",
+      "member-refused-1280.png"
+    ],
+    "cleanup": {
+      "package-down": "PASS",
+      "testApp": "PASS"
+    },
+    "fresh": true,
+    "freshVolumeCount": 5,
+    "hostRiskOverride": "accepted-dev-box-366",
+    "claimToInviteClickMs": 1682,
+    "claimToInviteRequestMs": 2182,
+    "memberRefusalReason": "access_refused",
+    "verdict": "PASS",
+    "unavailableServiceLogs": 1
+  },
+  "mobile": {
+    "width": 390,
+    "http": {
+      "claim": 201,
+      "ownerDirectory": 503
+    },
+    "screenshots": [
+      "failed-390.png"
+    ],
+    "cleanup": {
+      "package-down": "PASS",
+      "slot-down": "PASS",
+      "free": true,
+      "testApp": "PASS"
+    },
+    "fresh": true,
+    "freshVolumeCount": 5,
+    "hostRiskOverride": "accepted-dev-box-366",
+    "verdict": "FAIL",
+    "failedStep": "first invitation",
+    "failureKind": "AssertionError",
+    "failureCheck": "Owner People page failed",
+    "received": 503,
+    "expected": 200,
+    "directoryFailureStage": "caller_authorisation",
+    "directoryFailureReason": "membership_applying"
+  }
+}
