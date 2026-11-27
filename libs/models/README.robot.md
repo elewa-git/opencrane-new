@@ -2216,6 +2216,10 @@ price-table fields. It sends no provider request.
 
 `currentMembership` accepts a separate history deadline for reads before a write access check.
 
+[`seedOwnership`](../../docs/api/ownership.md#migration-and-replay) shares one
+ten-second limit across reads, waits and writes. After a competing write, it
+pauses briefly and reads the owners again before trying to save them.
+
 New owners need `member.ownership_confirmed`: see the [ownership contract](../../docs/api/ownership.md).
 
 `currentMembership` reads only the named member and ownership streams. It returns

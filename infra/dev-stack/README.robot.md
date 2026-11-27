@@ -978,6 +978,9 @@ Each `up` also runs a dev-only owner bootstrap after the projections and dispatc
 start. Through the command NKey it conditionally appends `member.invited` and
 `member.joined`, binding that issuer and subject to owner member `jente-rosseel`.
 Existing stream state is checked first, so plain and `--fresh` runs do not duplicate it.
+The bootstrap uses the shared [ownership seed](../../docs/api/ownership.md#migration-and-replay).
+It gives competing writes time to finish and checks the saved owner permissions
+before starting the server.
 This dev-only bootstrap for the privately configured owner test user remains in place. Production installs
 use the [one-time token command and claim screen](../../apps/server/README.robot.md#first-owner-bootstrap-12),
 which refuse a silo that already has an owner. Dev exceptions for external

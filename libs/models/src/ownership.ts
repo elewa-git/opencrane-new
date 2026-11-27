@@ -78,15 +78,20 @@ function confirmOwner(event: StoredEvent['event'], pending: Map<string, string>,
   owners.add(confirmed.memberId);
 }
 
-/** Each attempt rescans behind a fresh global fence; unrelated writers may win the first append. */
 export async function seedOwnership(store: EventStore, silo: string) {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const deadline = performance.now() + 10_000;
+  const deadline = store.clock.now() + 10_000;
+  while (store.clock.now() < deadline) {
     if (await seedAttempt(store, silo, deadline)) {
       return;
     }
+    // Give startup writes time to finish before reading the member list again.
+    const remaining = deadline - store.clock.now();
+    if (remaining <= 0) {
+      break;
+    }
+    await store.clock.sleep(Math.min(100, remaining));
   }
-  throw new Error('Ownership migration conflicted after five attempts');
+  throw new Error('Timed out waiting for ownership migration conflicts to settle');
 }
 async function seedAttempt(store: EventStore, silo: string, deadline: number) {
   const subject = ownershipSubject(silo);
@@ -125,13 +130,13 @@ async function seedAttempt(store: EventStore, silo: string, deadline: number) {
   ownerIds.sort();
   const event = envelope(silo, subject, 'ownership.seeded', { ownerIds },
     `ownership-seed-${silo}`);
-  const command = { event, expectedSequence: 0, expectedGlobalSequence: head };
+  const command = { event, expectedSequence: 0, expectedGlobalSequence: head, deadline };
   const result = await store.append(command);
   if (result.status === 'unavailable') {
     throw new Error('Ownership migration unavailable', { cause: result.cause });
   }
   if (result.status === 'rejected') {
-    throw new Error('Ownership migration rejected');
+    throw new Error('Ownership migration rejected', { cause: result.reason });
   }
   return result.status === 'appended';
 }

@@ -69,6 +69,9 @@ async function competeWithSeed(nats: Awaited<ReturnType<typeof natsFixture>>, wr
 
 function clockForConflicts() {
   const clock = manualClock();
+  function now() {
+    return clock.now();
+  }
   function sleep(milliseconds: number, signal?: AbortSignal) {
     // Let real NATS reads finish before their deadline timers.
     if (signal) {
@@ -77,7 +80,7 @@ function clockForConflicts() {
     clock.advance(milliseconds);
     return Promise.resolve();
   }
-  return { now: clock.now, sleep };
+  return { now, sleep };
 }
 
 async function seedsAfterCompetingWrites() {
