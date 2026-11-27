@@ -1,64 +1,45 @@
 {
-  "journey": "NOT RUN",
+  "journey": "PASS",
+  "date": "2026-11-27",
   "sourceCommit": "267a650b368e41764854819cfa20c11d055b55b7",
   "slot": 1,
-  "wait": {
-    "startedAt": "2026-11-27T18:06:00Z",
-    "deadline": "2026-11-27T20:06:00Z",
-    "limitMinutes": 120,
-    "limitReached": true,
-    "samples": 194,
-    "freeSamples": 58,
-    "busySamples": 136,
-    "lastSampleAt": "2026-11-27T20:05:33Z",
-    "lastSlotFree": false,
-    "lastLoad": 10.09,
-    "loadWindowCompleted": true
+  "environment": {
+    "freshPackagedInstall": true,
+    "memberInvitedAndJoined": true,
+    "modelMode": "stub",
+    "browser": "Chromium",
+    "viewports": ["1280x900", "390x844"],
+    "hostRiskAcknowledgement": "accepted-dev-box-366"
   },
-  "claimAttempts": 1,
-  "claimsAcquired": 0,
-  "installStarted": false,
-  "browserWidths": {
-    "1280": "NOT RUN",
-    "390": "NOT RUN"
+  "checks": {
+    "1280": {
+      "newSessionHasNoUncertainSendWarning": "PASS",
+      "realNetworkFailureShowsClearMessage": "PASS",
+      "draftRetained": "PASS",
+      "retryAvailable": "PASS"
+    },
+    "390": {
+      "newSessionHasNoUncertainSendWarning": "PASS",
+      "realNetworkFailureShowsClearMessage": "PASS",
+      "draftRetained": "PASS",
+      "retryAvailable": "PASS"
+    },
+    "successfulFirstMessagePersistsAfterReload": "NOT RUN",
+    "retryAfterConnectionReturnsSavesOnce": "NOT RUN"
   },
-  "realFailureMessage": "NOT RUN",
-  "approvals": {
-    "application": {
-      "runId": 46046864660,
-      "result": "PASS"
-    },
-    "scanner": {
-      "runId": 46046869143,
-      "result": "PASS"
-    }
+  "failure": {
+    "operation": "POST /api/conversations",
+    "injectedAt": "browser transport",
+    "observedMessage": "Your draft is still on this page. Retry to send it."
   },
-  "productCi": {
-    "runId": 46046823012,
-    "result": "PASS"
-  },
-  "localChecks": {
-    "serverSharedDatabase": {
-      "runs": 2,
-      "testsPerRun": 1,
-      "result": "PASS"
-    },
-    "workspace": {
-      "runs": 2,
-      "testsPerRun": 119,
-      "result": "PASS"
-    },
-    "chromiumFixtures": {
-      "runs": 2,
-      "result": "PASS"
-    },
-    "typecheck": "PASS",
-    "eventCatalogue": "PASS",
-    "knip": "PASS",
-    "changedCodeEslint": "PASS",
-    "markdown": "PASS",
-    "readmes": "PASS",
-    "changelog": "PASS",
-    "wholeStreamReads": "PASS"
+  "screenshots": [
+    "new-session-1280.png",
+    "network-failure-1280.png",
+    "new-session-390.png",
+    "network-failure-390.png"
+  ],
+  "cleanup": {
+    "packageDown": "PASS",
+    "slotDown": "PASS"
   }
 }
