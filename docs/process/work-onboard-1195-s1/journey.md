@@ -108,6 +108,38 @@ the initial Conversations entry request before reloading the real document. A
 fresh live retry was **NOT RUN** because the host did not stay below load 6 for
 five minutes in time to start the journey and leave time for teardown.
 
+### Run 3
+
+**PASS at 1280 × 900 and 390 × 844 on one fresh slot-1 Compose stack.** On
+27 November 2026, the stack started from `1b7e277c5` with the free model
+stand-in. The changes since run 2's `c16625816` were all receipt files, so
+the 390 px result from run 2 covered the same product code. Both widths
+passed again in run 3.
+
+The test owner claimed the installation through the bootstrap API. The two
+members joined through saved invitation links. To check a real browser reload
+of `/workspace/conversations`, the revised driver interrupted the initial
+entry request once to keep the browser on that document. The reload made its
+own entry request and the browser then opened the saved survey step.
+
+| Check | 1280 × 900 | 390 × 844 |
+| --- | --- | --- |
+| Signed-out survey request returns 401 | PASS | PASS |
+| Invited member joins, saves the first survey answer and has a running personal computer | PASS | PASS |
+| Direct visit to Conversations returns the unfinished member to survey step two | [PASS](routing-run-3/workspace-unfinished-1280.png) | [PASS](routing-run-3/workspace-unfinished-390.png) |
+| Reload of Conversations returns the unfinished member to survey step two | [PASS](routing-run-3/workspace-unfinished-reload-1280.png) | [PASS](routing-run-3/workspace-unfinished-reload-390.png) |
+| Reload of the survey keeps the saved step | PASS | PASS |
+| Member saves all four answers, approves the persona and completes welcome | PASS ([persona](routing-run-3/routing-persona-1280.png), [welcome](routing-run-3/routing-welcome-1280.png)) | PASS ([persona](routing-run-3/routing-persona-390.png), [welcome](routing-run-3/routing-welcome-390.png)) |
+| Finished member stays in Conversations after a direct visit, reload and fresh sign-in | [PASS](routing-run-3/workspace-finished-1280.png) | [PASS](routing-run-3/workspace-finished-390.png) |
+| First ordinary chat replies on the computer that was running during the survey | [PASS](routing-run-3/routing-first-chat-1280.png) | [PASS](routing-run-3/routing-first-chat-390.png) |
+| A saved Memory fact remains visible after reload | [PASS](routing-run-3/routing-memory-1280.png) | [PASS](routing-run-3/routing-memory-390.png) |
+
+All 31 browser checks passed. Both members' computers and pods kept the same
+identity, start time and restart count from the survey through the first chat.
+Each member saw one saved fact after reload. The slot was claimed at 00:23 UTC
+and reported free at 00:29 UTC after `down.sh --id 1` passed.
+[Browser checks](workspace-routing-run-3.json)
+
 ### Previous routing attempt
 
 On 26 November 2026, slot 1 started fresh from `40f775d3e` with the free
