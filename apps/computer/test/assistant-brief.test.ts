@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { renderSoul } from '../src/assistant-brief.ts';
-import { memoryFreeConfig } from '../src/codex-config.ts';
+import { memoryFreeConfig, privateConfig } from '../src/codex-config.ts';
 
 function usesApprovedPersona() {
   const persona = 'Your name is Willow. Speak warmly and briefly. Value careful, honest work.';
@@ -32,3 +32,12 @@ function replacesTheBuiltInInstructions() {
 }
 it('replaces the built-in identity without enabling project documents',
   replacesTheBuiltInInstructions);
+
+function keepsUnsafeRetriesDisabled() {
+  const configurations = [memoryFreeConfig('test-model'), privateConfig('test-model')];
+  for (const config of configurations) {
+    expect(config).toContain('request_max_retries = 0\n');
+    expect(config).toContain('stream_max_retries = 0\n');
+  }
+}
+it('keeps model retries off while ordinary chat replays can charge again', keepsUnsafeRetriesDisabled);

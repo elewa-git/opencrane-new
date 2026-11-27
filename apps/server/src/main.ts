@@ -1,4 +1,5 @@
 import type { OnboardingOptions } from './onboarding/options.ts';
+import { approvedPersonaReader } from './onboarding/approved-persona.ts';
 import { seedOwnership, providerSecrets, oauthConfigurationFromFile, connectionCustodyFromFile } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { desktopConnection } from './computers/desktop.ts';
@@ -104,6 +105,7 @@ const oauthFile = process.env['MCP_OAUTH_CONFIGURATION_FILE'];
 const custodyFile = process.env['CONNECTION_CUSTODY_FILE'];
 const connectionCustody = custodyFile ? await connectionCustodyFromFile(custodyFile) : undefined;
 const bridgeOptions = chat ? Object.assign(chat, {
+  ...(onboarding ? { readApprovedPersona: approvedPersonaReader(onboarding) } : {}),
   ...(files ? { objects: files.objects, files } : {}),
   ...(catalogue ? { catalogue } : {}),
   ...(oauthFile ? { loadOAuthConfiguration: oauthConfigurationFromFile(oauthFile) } : {}),

@@ -1,10 +1,13 @@
 import { sessionConfiguration } from '@opencrane/events/session-configuration';
 import type { Turn } from './turn-frame.ts';
+import { briefTemplate, defaultSoulFile } from './assistant-brief.ts';
 
 export type ComputerSessionFacts = {
   executionMode?: Turn['executionMode'] | undefined;
   sharingClass?: Turn['sharingClass'] | undefined;
   senderAttemptId?: string | undefined;
+  assistantKind?: 'personal' | 'team' | undefined;
+  tools?: Turn['tools'] | undefined;
 };
 
 export function computerSessionConfiguration(turn: ComputerSessionFacts) {
@@ -15,6 +18,34 @@ export function computerSessionConfiguration(turn: ComputerSessionFacts) {
   return sessionConfiguration({ conversation, sharingClass: turn.sharingClass,
     requestedMode: turn.executionMode ?? 'memory_free',
     memoryEnabled: turn.executionMode === 'restricted' });
+}
+
+export function computerSessionInstructions(turn: ComputerSessionFacts,
+  soulFile = defaultSoulFile) {
+  const configuration = computerSessionConfiguration(turn);
+  let variant = 'personal';
+  if (turn.sharingClass || turn.assistantKind === 'team') variant = 'shared';
+  else if (turn.senderAttemptId) variant = 'routine';
+  const environment = configuration.localTools ? 'environment-tools' : 'environment-private';
+  const tools: string[] = [];
+  for (const server of turn.tools ?? []) {
+    tools.push(...Object.keys(server.modes));
+  }
+  const toolNames = tools.join(', ') || 'none';
+  const environmentTemplate = briefTemplate(environment);
+  const environmentInstructions = environmentTemplate.replace('{{tools}}', toolNames);
+  const instructions = [briefTemplate(`agent-${variant}`), environmentInstructions];
+  return { model_instructions_file: soulFile, developer_instructions: instructions.join('\n\n'),
+    personality: 'none', project_doc_max_bytes: 0 };
+}
+
+function instructionsToml(turn: ComputerSessionFacts) {
+  const configuration = computerSessionInstructions(turn);
+  const lines: string[] = [];
+  for (const [name, value] of Object.entries(configuration)) {
+    lines.push(`${name} = ${JSON.stringify(value)}`);
+  }
+  return lines.join('\n');
 }
 
 export function memoryFreeEnvironments() {
@@ -40,14 +71,7 @@ approval_policy = "on-request"
 sandbox_mode = "danger-full-access"
 web_search = "disabled"
 tool_output_token_limit = 2000
-project_doc_max_bytes = 0
-developer_instructions = """
-Save files to publish under /workspace/artifacts.
-Publish at most 16 files and 20 MiB in total per turn.
-Convert SVG images to PNG before publishing.
-To show a diagram in chat, prefer a mermaid code block.
-To show an image in chat, save it under /workspace/artifacts and reference it with that full path.
-"""
+${instructionsToml({ executionMode: 'memory_free' })}
 [model_providers.local]
 name = "local authenticated proxy"
 base_url = "http://127.0.0.1:8080/v1"
