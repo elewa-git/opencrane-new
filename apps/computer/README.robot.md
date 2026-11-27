@@ -827,8 +827,12 @@ twice and records two dispatches and two one-cent settlements. Automatic stream
 or request replay could therefore charge twice.
 
 `assistant-native.test.ts` runs pinned Codex with a stand-in model in a disposable
-computer. It checks the persona reaches the model, a real shell call completes,
-and an updated persona replaces the old soul after resuming the same chat.
+computer, using the image's installed source without a replacement source mount.
+It checks the model's instructions and developer/system messages for the persona,
+network limits and file-sharing rule. A real shell call completes. An updated
+persona replaces the old soul after resuming the same chat, including after the
+computer restarts. `BRIEF_CAPTURE_DIRECTORY` can save the upstream request bodies
+outside the repository. `COMPUTER_TEST_IMAGE` selects the exact image under test.
 
 - The root supervisor accepts fixed native exec-server and code-mode host launches
   over separate private Unix sockets in root-owned `/run/executor` (0750, group

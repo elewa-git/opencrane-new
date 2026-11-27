@@ -1735,7 +1735,8 @@ else:
 
     def test_computer_package_cannot_keep_an_older_release(self):
         inventory = checker.read_json(source.with_name("licence-inventory.json"))
-        template_path = source.parent.parent.parent / "apps/computer/sandbox-template.json"
+        computer = source.parent.parent.parent / "apps/computer"
+        template_path = computer / "sandbox-template.json"
         template = checker.read_json(template_path)
         template["spec"]["podTemplate"]["spec"]["containers"][0]["image"] = (
             "k3d-ocn-registry:5000/opencrane/computer@sha256:" + "a" * 64)

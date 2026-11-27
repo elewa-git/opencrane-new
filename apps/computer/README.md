@@ -56,7 +56,8 @@ Not built yet:
 1. **A computer starts.** It prepares private folders and starts the agent, desktop
    and bridge. It reports readiness when the required services respond.
 2. **A person sends a message.** The bridge prepares the conversation and reviewed
-   tools, then runs the request. It sends progress, results and changed file details
+   tools, gives the model its approved identity and computer instructions, then
+   runs the request. It sends progress, results and changed file details
    to the server, which checks files before sharing them. Workspace reads keep every
    output chunk, including when a slow process first returns no output.
 3. **A person uploads a file.** The server scans it and sends accepted bytes to the

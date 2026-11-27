@@ -5,7 +5,7 @@
   "nativeLicence": "Apache-2.0",
   "nativeLicenceReview": "apps/computer/reviewed-licences.json",
   "nativeLicenceReviewSha256": "2a0954d0969c7a613825e79b8b533d79018ee08d0fef6dd10775dcd376844dcb",
-  "computerInventorySha256": "0c58af26c94d1ef09ed9498baed4db0bc848df7316badd94112b7f10271bbed9",
+  "computerInventorySha256": "f3818b9c6a98b44a2738d18ea071cb04aa70dad0a5ccf2ccaa2b71d10f2d4ae1",
   "files": {
     "opt/native/node_modules/@openai/codex/bin/codex.js": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
     "opt/native/node_modules/@openai/codex/package.json": "d4e69a623f79ede30c5abb2a4a4bef8b7ff71dbda1362ebe198676ab56113c15",

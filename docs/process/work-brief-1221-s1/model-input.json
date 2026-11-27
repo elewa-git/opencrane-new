@@ -1,0 +1,71 @@
+{
+  "verdict": "PARTIAL",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:23de7279a36001b3aba97de28b64c01bdff3c7cad8770d7aebb2c3542c58b271",
+  "sourceCommit": "dfa486dd86ef5a278a847bd55e4c67cf22f3c702",
+  "codexVersion": "0.159.2",
+  "computerSourceFileCount": 62,
+  "requests": [
+    {
+      "file": "old-package-upstream.jsonl",
+      "requestCount": 2,
+      "sha256": "5aa1d68426e2047c979bcdc84eddaa655d4745b17ea8a8330dd1abdc1130677f",
+      "topLevelInstructions": false,
+      "approvedIdentity": false,
+      "codingIdentity": true,
+      "personalRole": false,
+      "socketRestriction": false,
+      "artifactsRule": false
+    },
+    {
+      "file": "new-thread.jsonl",
+      "requestCount": 2,
+      "sha256": "4183665ec825bff20146808f430a56c631e92ae100a379b7c9eede34e9b44637",
+      "topLevelInstructions": false,
+      "approvedIdentity": true,
+      "codingIdentity": false,
+      "personalRole": true,
+      "socketRestriction": true,
+      "artifactsRule": true
+    },
+    {
+      "file": "loaded-thread.jsonl",
+      "requestCount": 4,
+      "sha256": "4df56bfbf1afcf9777990193ef39458c8699b1ea8b9d7a47102ce9dcf69d0157",
+      "topLevelInstructions": false,
+      "approvedIdentity": true,
+      "codingIdentity": false,
+      "personalRole": true,
+      "socketRestriction": true,
+      "artifactsRule": true
+    },
+    {
+      "file": "resumed-thread.jsonl",
+      "requestCount": 6,
+      "sha256": "342a49fce9b5964750d07e073ea26325d9ab94f338ac98f1ce1a89687d325b58",
+      "topLevelInstructions": false,
+      "approvedIdentity": true,
+      "codingIdentity": false,
+      "personalRole": true,
+      "socketRestriction": true,
+      "artifactsRule": true
+    },
+    {
+      "file": "saved-thread.jsonl",
+      "requestCount": 8,
+      "sha256": "3d66d500f2723a7b723a73bcc2803768a423d73b678e1fca31f42b010631ebdf",
+      "topLevelInstructions": false,
+      "approvedIdentity": true,
+      "codingIdentity": false,
+      "personalRole": true,
+      "socketRestriction": true,
+      "artifactsRule": true
+    }
+  ],
+  "additionalSpendCents": 0,
+  "freshPackage": "NOT RUN",
+  "realModel": "NOT RUN",
+  "sameThreadAcrossAllFourTurns": true,
+  "nativeTestRuns": 2,
+  "licenceTestsPerRun": 85,
+  "licenceTestRuns": 2
+}

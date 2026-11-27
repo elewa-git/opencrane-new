@@ -1,5 +1,62 @@
 # #1221 packaged journey receipt
 
+## Round 7 — model request investigation
+
+**Root cause: the package installed an older computer image.** The package pin
+ended in `40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0`.
+Its image review dates from 22 October. Its installed `codex-config.ts` has no
+assistant brief settings, and `assistant-brief.ts` is absent. Approving a new
+application image updates the server and website, but leaves this separate
+computer image unchanged.
+
+**PASS — reproduced at the model boundary.** A disposable container ran that exact
+package image, its installed bridge and Codex 0.159.2, with a local stand-in model.
+The personal turn frame included `assistantKind: personal` and an approved persona.
+The captured upstream Responses request contained “You are Codex”. It contained
+neither that persona nor `/workspace/artifacts`. The revised native test failed
+because the model instructions lacked the approved name. The earlier test mounted
+current source over the image, hiding the old installed code.
+
+**PASS — checked app-server behaviour with current source.** The same test with
+current installed code captured the approved identity, personal role, socket
+restriction and artifacts sharing rule. It also checked a changed persona on a
+resumed thread and the saved thread after restarting the computer. In this pinned
+version, the top-level Responses `instructions` field is absent. Codex sends the
+base instructions and session rules in developer input messages. The existing
+`model_instructions_file`, `developer_instructions` and `personality` configuration
+works; no alternative thread parameters are needed. The existing unload before a
+changed persona takes effect also works. This run does not show missing persona
+fields in the server as the cause of the old image's behaviour.
+
+The package check now refuses a computer pin that differs from the released
+computer template. It also compares the complete installed source list and its
+SHA-256 checksums with the checkout. This catches two matching but old pins.
+Both new tests first failed because these differences were accepted.
+The native test now uses installed source, without a source mount, and can save
+request bodies outside the repository. Raw files include
+`old-package-upstream.jsonl`, `new-thread.jsonl`, `loaded-thread.jsonl`,
+`resumed-thread.jsonl` and
+`saved-thread.jsonl`.
+
+**PASS — rebuilt image and repeat checks.** The package and released template now
+use computer digest `23de7279a36001b3aba97de28b64c01bdff3c7cad8770d7aebb2c3542c58b271`.
+It was built from product source in `dfa486dd86ef5a278a847bd55e4c67cf22f3c702`.
+Installed source and file permissions passed. All 394 components passed the
+licence check; all 104 installed notices were collected. No dependency was added.
+The native test passed twice on this exact image. Each run made four turns and
+eight upstream requests. The thread stayed the same on load, persona change and
+restart. All 85 package licence tests passed twice. The server's persona and turn
+frame tests passed too. [The safe summary](model-input.json) records request counts,
+checksums and which rules reached the model; the full bodies remain outside the
+repository.
+
+**Qualification: PARTIAL, still running.** Slot 1 remains busy and host load is
+above 6. Slot 2 is the live pilot and is excluded from the wait. No stack has been
+claimed by this task. The fresh packaged real-model journey is pending. The
+stand-in captures prove instruction delivery, but do not prove a real model's
+reply, a chat file card or the browser layout. Additional model spend is
+**0 euro cents**.
+
 ## Run 2 — PARTIAL
 
 **Date:** 27 November 2026
@@ -24,7 +81,7 @@ Safe package logs were copied outside the repository before teardown. The receip
 Run date: 27 November 2026. Fresh packaged slot: 1. Tested product commit:
 `3a9e760e4fbead2cb1b49dae36ea2c18157e6ecd`.
 
-## Verdict
+## Run 1 verdict
 
 **PARTIAL — journey blocked before personal chat.** The packaged installation and
 provider setup completed. The member's four onboarding answers were saved, and

@@ -489,7 +489,13 @@ licence metadata were checked against their source licence files. Pass Syft JSON
 to `check-licences.py` to compare a fresh scan with the reviewed inventory.
 The computer image uses its existing full licence inventory in
 `apps/computer/licences.json`; this package checks that file's digest and its
-image pin before installation.
+image pin before installation. The package pin must also match the released
+computer template in `apps/computer/sandbox-template.json`. An application image
+approval does not rebuild or replace that separate computer image. A computer
+source change needs a rebuilt image, its licence review and updated pins before a
+packaged journey can exercise it. The image record lists SHA-256 checksums of the
+installed computer source. The package check compares the complete source list
+and every checksum with the checkout, so two matching old pins cannot pass.
 
 The deployment build also carries Codex 0.159.2 for the private-memory native
 check. `native-runtime-inventory.json` records the two Apache-2.0 npm packages,

@@ -98,6 +98,70 @@
     "unresolved": []
   },
   {
+    "name": "@secretlint/core",
+    "version": "13.1.0",
+    "type": "npm",
+    "category": "application-osi",
+    "licences": [
+      "MIT"
+    ],
+    "resolved": [
+      "MIT"
+    ],
+    "archives": [],
+    "bundled": [],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "@secretlint/profiler",
+    "version": "13.1.0",
+    "type": "npm",
+    "category": "application-osi",
+    "licences": [
+      "MIT"
+    ],
+    "resolved": [
+      "MIT"
+    ],
+    "archives": [],
+    "bundled": [],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "@secretlint/secretlint-rule-preset-recommend",
+    "version": "13.1.0",
+    "type": "npm",
+    "category": "application-osi",
+    "licences": [
+      "MIT"
+    ],
+    "resolved": [
+      "MIT"
+    ],
+    "archives": [],
+    "bundled": [],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "@secretlint/types",
+    "version": "13.1.0",
+    "type": "npm",
+    "category": "application-osi",
+    "licences": [
+      "MIT"
+    ],
+    "resolved": [
+      "MIT"
+    ],
+    "archives": [],
+    "bundled": [],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
     "name": "adduser",
     "version": "3.134",
     "type": "deb",
@@ -397,6 +461,32 @@
     ],
     "archives": [],
     "bundled": [],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "boundary",
+    "version": "2.0.0",
+    "type": "npm",
+    "category": "application-osi",
+    "licences": [
+      "BSD-2-Clause"
+    ],
+    "resolved": [
+      "BSD-2-Clause"
+    ],
+    "archives": [],
+    "bundled": [
+      {
+        "component": "libc++ notice",
+        "spdx": [
+          "NCSA",
+          "MIT"
+        ],
+        "source": "/app/node_modules/boundary/LICENSE.LIBCXX",
+        "reason": "The installed notice contains the full NCSA and MIT terms for libc++ code."
+      }
+    ],
     "result": "PASS",
     "unresolved": []
   },
@@ -1355,6 +1445,22 @@
         "trusted": true
       }
     ],
+    "bundled": [],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "debug",
+    "version": "4.4.3",
+    "type": "npm",
+    "category": "application-osi",
+    "licences": [
+      "MIT"
+    ],
+    "resolved": [
+      "MIT"
+    ],
+    "archives": [],
     "bundled": [],
     "result": "PASS",
     "unresolved": []
@@ -13663,6 +13769,22 @@
     "unresolved": []
   },
   {
+    "name": "ms",
+    "version": "2.1.3",
+    "type": "npm",
+    "category": "application-osi",
+    "licences": [
+      "MIT"
+    ],
+    "resolved": [
+      "MIT"
+    ],
+    "archives": [],
+    "bundled": [],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
     "name": "ncurses-base",
     "version": "6.4-4",
     "type": "deb",
@@ -15379,6 +15501,22 @@
     "unresolved": []
   },
   {
+    "name": "structured-source",
+    "version": "4.0.0",
+    "type": "npm",
+    "category": "application-osi",
+    "licences": [
+      "BSD-2-Clause"
+    ],
+    "resolved": [
+      "BSD-2-Clause"
+    ],
+    "archives": [],
+    "bundled": [],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
     "name": "systemd",
     "version": "252.39-1~deb12u2",
     "type": "deb",
@@ -16142,6 +16280,22 @@
     "unresolved": []
   },
   {
+    "name": "zod",
+    "version": "4.6.6",
+    "type": "npm",
+    "category": "application-osi",
+    "licences": [
+      "MIT"
+    ],
+    "resolved": [
+      "MIT"
+    ],
+    "archives": [],
+    "bundled": [],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
     "name": "opencrane-computer",
     "version": "p2-1",
     "type": "application",
@@ -16153,7 +16307,19 @@
       "AGPL-3.0-or-later"
     ],
     "archives": [],
-    "bundled": [],
+    "bundled": [
+      {
+        "component": "OpenAI Codex base prompt",
+        "spdx": [
+          "Apache-2.0"
+        ],
+        "source": "/app/src/prompts/LICENSE-Codex",
+        "sources": [
+          "/app/src/prompts/NOTICE-Codex"
+        ],
+        "reason": "The adapted OpenAI Codex base prompt uses Apache-2.0. soul.md links the exact upstream source revision. Retain the upstream licence and notice, including its Ratatui attribution; no Ratatui code is copied with the prompt."
+      }
+    ],
     "result": "PASS",
     "unresolved": []
   }

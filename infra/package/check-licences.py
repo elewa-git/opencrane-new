@@ -369,6 +369,19 @@ def check_manual_component(component, osi_ids):
             raise ValueError("agentgateway review differs from the downloaded binary")
 
 
+def computer_source_hashes():
+    root = PACKAGE.parent.parent
+    source = root / "apps/computer/src"
+    hashes = {}
+    paths = source.rglob("*")
+    for path in sorted(paths):
+        if path.is_file():
+            relative = str(path.relative_to(root))
+            data = path.read_bytes()
+            hashes[relative] = hashlib.sha256(data).hexdigest()
+    return hashes
+
+
 def check_computer_review(image):
     if image["reviewedInventory"] != "apps/computer/licences.json":
         raise ValueError("Computer licence review path changed")
@@ -379,6 +392,13 @@ def check_computer_review(image):
     evidence = read_json(PACKAGE.parent.parent / "apps/computer/evidence.json")
     if evidence["image"] != image["pin"]:
         raise ValueError("Computer licence review covers another image")
+    template = read_json(PACKAGE.parent.parent / "apps/computer/sandbox-template.json")
+    released_image = template["spec"]["podTemplate"]["spec"]["containers"][0]["image"]
+    if released_image != image["pin"]:
+        raise ValueError("Computer package pin differs from its released template")
+    # Check the installed source too: matching pins can both name an older image.
+    if evidence.get("sourceFiles") != computer_source_hashes():
+        raise ValueError("Computer source changed since the image was checked")
     entries = read_json(source)
     if not entries or any(entry["result"] != "PASS" for entry in entries):
         raise ValueError("Computer licence review contains a failed component")

@@ -30,6 +30,7 @@ function lastRequest(capture: string) {
 }
 
 function expectBrief(request: Record<string, unknown>, persona: string) {
+  expect(request['prompt_cache_key']).toBeTypeOf('string');
   const instructions = [request['instructions']];
   const input = request['input'];
   if (!Array.isArray(input)) {
@@ -80,6 +81,7 @@ async function checkSavedThread(computer: Awaited<ReturnType<typeof uploadComput
     const trimmed = capture.trim();
     const lines = trimmed.split('\n');
     const request = record(JSON.parse(lines[beforeLines.length]!));
+    expect(request['prompt_cache_key']).toBe(lastRequest(before)['prompt_cache_key']);
     expectBrief(request, 'Your name is Cedar.');
     expect(JSON.stringify(request)).not.toContain('Your name is Willow.');
   } finally {
@@ -139,6 +141,7 @@ async function usesToolsWithTheReplacementSoul() {
     expect(frames.at(-1)?.['type']).toBe('agent.turn_completed');
     const loadedCapture = await captureRequests(computer, 'loaded-thread');
     expectBrief(lastRequest(loadedCapture), 'Your name is Willow.');
+    expect(lastRequest(loadedCapture)['prompt_cache_key']).toBe(firstRequest['prompt_cache_key']);
     expectedTerminals = 3;
     const nextTurn = { ...turn, id: 'brief-second', approvedPersona: 'Your name is Cedar.' };
     socket.send(JSON.stringify(nextTurn));
@@ -151,6 +154,7 @@ async function usesToolsWithTheReplacementSoul() {
     const loadedRequestLines = loadedLines.split('\n');
     const nextRequest = record(JSON.parse(nextLines[loadedRequestLines.length]!));
     expectBrief(nextRequest, 'Your name is Cedar.');
+    expect(nextRequest['prompt_cache_key']).toBe(firstRequest['prompt_cache_key']);
     expect(JSON.stringify(nextRequest)).not.toContain('Your name is Willow.');
     const sequence = Number(frames.at(-1)?.['sequence']);
     socket.terminate();
@@ -160,5 +164,5 @@ async function usesToolsWithTheReplacementSoul() {
     await computer.close();
   }
 }
-it('runs a real shell tool with the persona soul and a stand-in model',
+it('delivers the installed brief to new, loaded and resumed model turns',
   usesToolsWithTheReplacementSoul, 60_000);
