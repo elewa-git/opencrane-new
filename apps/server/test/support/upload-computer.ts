@@ -23,7 +23,8 @@ export async function openComputerBridge(url: string, credential: string): Promi
 
 /** Start a disposable computer with a local model stub and no shared stack. */
 export async function uploadComputer(deliverCredential = true, nodeOptions = '',
-  fixtureOptions: { image?: string; protected?: boolean; holdPrivateTool?: boolean } = {}) {
+  fixtureOptions: { image?: string; protected?: boolean; holdPrivateTool?: boolean;
+    installedSource?: boolean } = {}) {
   const capture = await mkdtemp(`${tmpdir()}/upload-requests-`);
   const stub = spawn(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'],
     {
@@ -82,7 +83,7 @@ export async function uploadComputer(deliverCredential = true, nodeOptions = '',
           '/home/tool', '/tmp']) {
           runArgs.push('--tmpfs', path);
         }
-      } else {
+      } else if (!fixtureOptions.installedSource) {
         runArgs.push('-v', `${resolve('apps/computer/src')}:/app/src:ro`);
       }
       runArgs.push('-e', 'POD_UID=fixture', '-e', `GATEWAY=http://${gateway}:${relay!.port}`,
