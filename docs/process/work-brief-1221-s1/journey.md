@@ -60,6 +60,17 @@ The one-cent settlements above are synthetic fixture prices.
 
 ## Source checks
 
+The local computer image was rebuilt for the notice review. Its contents check
+passed. A fresh Syft scan and notice collection reproduced
+`unassigned-notices@1`: 394 of 395 entries passed before the assignments.
+The same command and evidence passed after the assignments: 394 of 394 entries.
+The extra failing entry disappears when every notice has an owner; no package
+was removed. The independent notice check found all 104 installed notice files.
+The licence policy tests passed twice. They reject changed prompt notices and an
+additional unassigned notice. The checker and its rules were not changed.
+Raw output remains outside the repository in `image-before.log`,
+`image-after.log`, `build.log`, `sbom.json` and `notices.json`.
+
 | Check | Result |
 | --- | --- |
 | Changed tests | PASS twice: 52 cases across nine files |

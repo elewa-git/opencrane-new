@@ -733,6 +733,10 @@ Installed notices and apt matches form `.state/licence-evidence.json`;
 `.state/licences.json` includes the resulting decisions and archive evidence.
 The inventory also includes OpenCrane code and its inherited native launcher
 under the repository AGPL-3.0-or-later notice, copied into `/app/LICENSE`.
+The same application record assigns exact hashes for `LICENSE-Codex` and
+`NOTICE-Codex` to the adapted OpenAI Codex base prompt under Apache-2.0.
+The source revision is linked in `src/prompts/soul.md`. Both upstream notices
+are retained; an added or changed notice still fails the gate.
 Codex's native npm bundle includes checked Apache, BSD, MIT, Zlib and LGPL
 notices. The scanner's previously unlicensed binary is Node, not Codex.
 
