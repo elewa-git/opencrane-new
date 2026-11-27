@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clearCookie, parseCookieHeader, serializeCookie } from '../src/cookies.ts';
+import { clearCookie, cookieValues, serializeCookie } from '../src/cookies.ts';
 
 describe('serializeCookie', () => {
   it('defaults to HttpOnly, Secure, SameSite=Lax, Path=/', () => {
@@ -20,17 +20,16 @@ describe('clearCookie', () => {
   });
 });
 
-describe('parseCookieHeader', () => {
-  it('parses several cookies from one header', () => {
-    expect(parseCookieHeader('a=1; b=2')).toEqual({ a: '1', b: '2' });
+describe('cookieValues', () => {
+  it('keeps each value of the named cookie in order', function duplicateValues() {
+    expect(cookieValues('a=1; b=2; a=three%20four', 'a')).toEqual(['1', 'three four']);
   });
 
-  it('returns an empty object for a missing header', () => {
-    expect(parseCookieHeader(undefined)).toEqual({});
+  it('returns an empty list for a missing header', function missingHeader() {
+    expect(cookieValues(undefined, 'oc_session')).toEqual([]);
   });
 
-  it('never throws on a malformed percent-escape from a tampered value', () => {
-    expect(() => parseCookieHeader('oc_session=abc%zz')).not.toThrow();
-    expect(parseCookieHeader('oc_session=abc%zz')).toEqual({ oc_session: 'abc%zz' });
+  it('leaves a malformed percent escape in the value for the session check', function malformed() {
+    expect(cookieValues('oc_session=abc%zz', 'oc_session')).toEqual(['abc%zz']);
   });
 });

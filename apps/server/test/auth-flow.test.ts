@@ -140,8 +140,8 @@ describe('OIDC login flow (against a local mock provider)', () => {
       OIDC_REDIRECT_URI: 'https://app.example.test/auth/callback',
       OIDC_COOKIE_SECRET: 'fixture session key'.repeat(2), OIDC_COOKIE_NAME: 'fixture_session',
     });
-    const { cookieName, cookieSecure } = settings;
-    const stack = await startStack({}, { cookieName, cookieSecure });
+    const { cookieName, cookieSecure, legacyCookieName } = settings;
+    const stack = await startStack({}, { cookieName, cookieSecure, legacyCookieName });
     const callback = await signIn(stack);
     const replacement = findCookie(callback, '__Host-fixture_session');
     expect(replacement).toMatchObject({ path: '/', httpOnly: true, secure: true, sameSite: 'Lax' });

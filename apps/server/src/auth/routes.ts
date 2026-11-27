@@ -7,7 +7,6 @@ import { closeSessionSockets } from './session-sockets.ts';
 // Log only fixed reasons through request.log. The logger removes `code` and
 // `state` from callback URLs, and does not record headers or cookies. Do not log
 // errors, because the identity provider's reply may contain credentials.
-import { sessionFor } from '../members/routes.ts';
 import { requireMemberSession } from '../members/guard.ts';
 import { onboardingDestination } from '../onboarding/entry.ts';
 import type { OnboardingOptions } from '../onboarding/options.ts';
@@ -18,19 +17,17 @@ import {
   buildLogoutUrl,
   clearCookie,
   completeLogin,
+  cookieValues,
   decodeFlow,
-  decodeSession,
   encodeFlow,
   encodeSession,
   FlowInvalidError,
   FLOW_MAX_AGE_SECONDS,
   isOrganisationSession,
   OidcLoginError,
-  parseCookieHeader,
+  readSessionCookie,
   sanitizeReturnTo,
   serializeCookie,
-  SessionExpiredError,
-  SessionInvalidError,
   type AuthConfig,
   type SessionData,
   type CookieAttributes,
@@ -41,8 +38,13 @@ function cookieAttrs(config: AuthConfig): Pick<CookieAttributes, 'httpOnly' | 's
   return { httpOnly: true, secure: config.cookieSecure, path: '/' };
 }
 
-function readCookie(request: FastifyRequest, name: string): string | undefined {
-  return parseCookieHeader(request.headers.cookie)[name];
+function signedInCookies(config: AuthConfig, sessionCookie: string): string[] {
+  const attributes = cookieAttrs(config);
+  const cookies = [sessionCookie, clearCookie(config.flowCookieName, attributes)];
+  if (config.legacyCookieName) {
+    cookies.push(clearCookie(config.legacyCookieName, attributes));
+  }
+  return cookies;
 }
 
 function rejectLogin(request: FastifyRequest, reply: FastifyReply, config: AuthConfig, reason: string) {
@@ -96,13 +98,14 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig,
     if (!login.success) {
       return reply.code(400).send({ error: 'Invalid sign-in request' });
     }
-    const session = sessionFor(request, config, new Date());
     const { approval, fresh } = login.data;
-    if (approval && !session) {
-      return reply.code(401).send({ error: 'No session' });
+    let stepUp;
+    if (approval) {
+      const selected = readSessionCookie(config, request.headers.cookie);
+      if (!selected) return reply.code(401).send({ error: 'No session' });
+      const { session, cookie } = selected;
+      stepUp = { approvalId: approval, sub: session.sub, sessionDigest: sha256Hex(cookie) };
     }
-    const stepUp = approval && session ? { approvalId: approval, sub: session.sub,
-      sessionDigest: sha256Hex(readCookie(request, config.cookieName) ?? '') } : undefined;
     const requireFreshAuthentication = stepUp !== undefined || fresh === '1';
     let redirect;
     try {
@@ -124,7 +127,8 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig,
   });
 
   app.get('/auth/callback', async (request, reply) => {
-    const flowCookie = readCookie(request, config.flowCookieName);
+    const flowCookies = cookieValues(request.headers.cookie, config.flowCookieName);
+    const flowCookie = flowCookies.at(-1);
     if (!flowCookie) {
       request.log.warn('sign-in callback refused: no login is in progress');
       return rejectLogin(request, reply, config, 'no login is in progress');
@@ -153,9 +157,9 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig,
     }
 
     if (flow.stepUp) {
-      const previous = sessionFor(request, config, new Date());
-      const digest = sha256Hex(readCookie(request, config.cookieName) ?? '');
-      if (!validStepUp(previous, result.session, flow.stepUp, digest)) {
+      const previous = readSessionCookie(config, request.headers.cookie);
+      if (!previous || !validStepUp(previous.session, result.session, flow.stepUp,
+        sha256Hex(previous.cookie))) {
         return rejectLogin(request, reply, config, 'Recent sign-in for the same requester is required');
       }
       result.session.stepUpApproval = flow.stepUp.approvalId;
@@ -173,10 +177,7 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig,
       return rejectLogin(request, reply, config,
         'Sign-in details are too large for a session cookie');
     }
-    reply.header('set-cookie', [
-      sessionCookieHeader,
-      clearCookie(config.flowCookieName, cookieAttrs(config)),
-    ]);
+    reply.header('set-cookie', signedInCookies(config, sessionCookieHeader));
     request.log.info('sign-in completed');
     let destination = flow.returnTo;
     // Keep invitation acceptance and approval step-up on their own return paths.
@@ -193,13 +194,14 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig,
     if (request.headers.origin !== new URL(config.redirectUri).origin) {
       return reply.code(403).send({ error: 'wrong origin' });
     }
-    const session = sessionFor(request, config, new Date());
-    if (!session) return reply.code(401).send({ error: 'no session' });
+    const selected = readSessionCookie(config, request.headers.cookie);
+    if (!selected) return reply.code(401).send({ error: 'no session' });
+    const { session, cookie } = selected;
     if (!isOrganisationSession(config, session)) {
       return reply.code(403).send({ error: 'wrong organisation' });
     }
     // End live delivery before waiting for the identity provider.
-    closeSessionSockets(app.server, readCookie(request, config.cookieName)!);
+    closeSessionSockets(app.server, cookie);
     // Keep the token in the navigation header; never put it in a response body.
     const address = await buildLogoutUrl(config, session.idToken);
     const provider = z.url({ protocol: /^https?$/u }).safeParse(address);
@@ -214,30 +216,17 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig,
   });
 
   app.get('/auth/me', async (request, reply) => {
-    const cookieValue = readCookie(request, config.cookieName);
-    if (!cookieValue) {
-      reply.send({ authenticated: false, user: null });
-      return;
+    const selected = readSessionCookie(config, request.headers.cookie);
+    if (!selected || !isOrganisationSession(config, selected.session)) {
+      return reply.send({ authenticated: false, user: null });
     }
-    try {
-      const session = decodeSession(config, cookieValue);
-      if (!isOrganisationSession(config, session)) {
-        return reply.send({ authenticated: false, user: null });
-      }
-      const { sub, orgId, roles, authTime, exp, name } = session;
-      reply.send({ authenticated: true, user: { sub, orgId, roles, authTime, exp, name } });
-    } catch (err) {
-      if (err instanceof SessionInvalidError || err instanceof SessionExpiredError) {
-        reply.send({ authenticated: false, user: null });
-        return;
-      }
-      throw err;
-    }
+    const { sub, orgId, roles, authTime, exp, name } = selected.session;
+    return reply.send({ authenticated: true, user: { sub, orgId, roles, authTime, exp, name } });
   });
 }
 
-function validStepUp(previous: SessionData | undefined, current: SessionData, step: { sub: string; sessionDigest: string }, digest: string) {
+function validStepUp(previous: SessionData, current: SessionData, step: { sub: string; sessionDigest: string }, digest: string) {
   const age = Date.now() / 1000 - current.authTime;
-  return previous && digest === step.sessionDigest && previous.sub === step.sub && current.sub === step.sub &&
+  return digest === step.sessionDigest && previous.sub === step.sub && current.sub === step.sub &&
     current.orgId === previous.orgId && current.authTime > 0 && age >= 0 && age <= 300;
 }

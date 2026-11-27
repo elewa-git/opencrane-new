@@ -11,6 +11,7 @@ const configSchema = z
     scopes: z.string().min(1),
     cookieSecret: z.string().min(1),
     cookieName: z.string().min(1),
+    legacyCookieName: z.string().min(1).optional(),
     flowCookieName: z.string().min(1),
     cookieSecure: z.boolean(),
     sessionMaxAgeSeconds: z.number().int().positive(),
@@ -156,12 +157,23 @@ function text(env: NodeJS.ProcessEnv, name: string): string {
   return env[name]?.trim() ?? '';
 }
 
+function readSessionCookieSettings(env: NodeJS.ProcessEnv) {
+  const name = text(env, 'OIDC_COOKIE_NAME') || 'oc_session';
+  const cookieSecure = readBoolean(env['OIDC_COOKIE_SECURE'], true, 'OIDC_COOKIE_SECURE');
+  const hostPrefix = '__Host-';
+  if (cookieSecure && name.startsWith(hostPrefix)) {
+    return { cookieName: name, cookieSecure };
+  }
+  // Use a new name to replace old cookies even when the browser keeps them on other paths.
+  const cookieName = cookieSecure ? `${hostPrefix}${name}` : `${name}_v2`;
+  return { cookieName, legacyCookieName: name, cookieSecure };
+}
+
 function readDefaults(env: NodeJS.ProcessEnv) {
   return {
     scopes: text(env, 'OIDC_SCOPES') || 'openid profile email',
-    cookieName: text(env, 'OIDC_COOKIE_NAME') || 'oc_session',
+    ...readSessionCookieSettings(env),
     flowCookieName: text(env, 'OIDC_FLOW_COOKIE_NAME') || 'oc_auth_flow',
-    cookieSecure: readBoolean(env['OIDC_COOKIE_SECURE'], true, 'OIDC_COOKIE_SECURE'),
     sessionMaxAgeSeconds: readNumber(env['OIDC_SESSION_MAX_AGE_SECONDS'], 12 * 60 * 60),
     orgClaim: text(env, 'OIDC_ORG_CLAIM') || 'org_id',
     rolesClaim: text(env, 'OIDC_ROLES_CLAIM') || 'roles',

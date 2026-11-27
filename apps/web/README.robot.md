@@ -354,6 +354,8 @@ The operator sends the link. `/join/:memberId/:invitationId` checks the session
 via `GET /auth/me` and returns to the same path after single sign-on. It posts
 the two IDs, display name and a command ID to `POST /members/join` only when the
 person presses Accept invitation. Both requests have a ten-second deadline.
+If acceptance returns HTTP 401, the page explains that the session has expired
+and offers sign-in with the same invitation return path.
 After an uncertain reply the person can retry with the same display name and
 command ID. When the provider session is old, **Sign in again to accept**
 asks the provider for fresh authentication and returns to the invitation.

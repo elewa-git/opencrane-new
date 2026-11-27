@@ -1,10 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
-  decodeSession,
   isOrganisationSession,
-  parseCookieHeader,
-  SessionExpiredError,
-  SessionInvalidError,
+  readSessionCookie,
   type AuthConfig,
 } from '@opencrane/auth';
 import type { Query } from '@opencrane/projections';
@@ -18,14 +15,7 @@ export interface MembershipOptions {
 }
 
 export function sessionFor(request: FastifyRequest, config: AuthConfig, now: Date) {
-  const cookie = parseCookieHeader(request.headers.cookie)[config.cookieName];
-  if (!cookie) return undefined;
-  try {
-    return decodeSession(config, cookie, now);
-  } catch (error) {
-    if (error instanceof SessionInvalidError || error instanceof SessionExpiredError) return undefined;
-    throw error;
-  }
+  return readSessionCookie(config, request.headers.cookie, now)?.session;
 }
 
 export function registerMemberRoutes(app: FastifyInstance, config: AuthConfig, options?: MembershipOptions): void {

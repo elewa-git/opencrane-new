@@ -25,7 +25,9 @@ node --experimental-strip-types --input-type=module -e "import { sanitizeReturnT
 ```
 
 It prints `/`. Callers must load validated settings with `loadAuthConfig`, preserve the
-flow cookie through callback, and check session expiry and operation authority.
+flow cookie through callback, and check operation authority. `readSessionCookie`
+chooses the last value under the active cookie name that passes decryption, shape
+and expiry checks. It returns the session and the exact cookie value together.
 Use `hasRecentAuth` for freshness based on the provider's `auth_time`, not login time.
 The provider verifies PKCE, state and nonce through openid-client.
 `SessionInvalidError`, `SessionExpiredError`, `FlowInvalidError` and `OidcLoginError`
@@ -50,7 +52,13 @@ It returns credentials only to the caller; never log the returned value.
 
 The [configuration source](src/config.ts) owns variable names, required settings and defaults.
 Defaults include secure cookies, a 12-hour session, five-minute step-up freshness,
-`oc_session`/`oc_auth_flow`, `openid profile email`, and `org_id`/`roles` claims.
+`oc_session` as the session cookie's base name, `oc_auth_flow` for the sign-in flow,
+`openid profile email`, and `org_id`/`roles` claims. HTTPS uses `__Host-oc_session`
+with `Secure`, `HttpOnly`, `Path=/`, `SameSite=Lax` and no `Domain`. Local HTTP uses
+`oc_session_v2`. The same rule applies to a base name set in `OIDC_COOKIE_NAME`.
+An HTTPS name that already starts with `__Host-` is used as supplied. With a changed
+name, people sign in again and the callback clears the retired cookie at `/`.
+Cookies left at other paths under the retired name have no effect.
 Zitadel needs its provider-specific claim names and matching scopes.
 Production requires an organisation pin. Keep the cookie key in the secret store;
 `OIDC_CLIENT_SECRET_ENV_VAR` names the variable through which a client secret is injected.

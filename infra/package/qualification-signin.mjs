@@ -6,6 +6,7 @@ import { connect } from 'node:net';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { loadAuthConfig } from '@opencrane/auth';
 import { closeFixtureServers } from './tls-cleanup.mjs';
 import { qualifyJoinedWorkspace } from './join-handoff.mjs';
 import { assertMemberTokenRefusal, assertClaimRole } from './qualification-token.mjs';
@@ -22,6 +23,8 @@ const configuration = await import(pathToFileURL(join(root, 'infra/dev-stack/con
 const saved = await configuration.readEnv('settings');
 guard.requireStandInJourney(saved);
 guard.requireJourneyProviderMode(saved);
+const authSettings = await configuration.authEnv();
+const { cookieName } = loadAuthConfig({ ...authSettings, OIDC_COOKIE_SECURE: 'true' });
 const signin = await import(pathToFileURL(join(root, 'infra/dev-stack/browser-signin.ts')));
 const provider = await import(pathToFileURL(join(root, 'infra/dev-stack/zitadel-api.ts')));
 const { chromium } = await import(pathToFileURL(join(root, 'node_modules/playwright/index.mjs')));
@@ -161,7 +164,7 @@ async function session(page, user) {
   assert.equal(body.user.sub, user.id, 'Another account signed in');
   const cookies = await page.context().cookies(input.origin);
   function sessionCookie(value) {
-    return value.name === `oc_session_${slot}`;
+    return value.name === cookieName;
   }
   const cookie = cookies.find(sessionCookie);
   assert(cookie, 'Session cookie is absent');
@@ -390,7 +393,7 @@ async function wrongOrganisation() {
       assert.equal((await response.json()).authenticated, false, 'Another organisation gained a session');
       const cookies = await context.cookies(input.origin);
       function isSession(value) {
-        return value.name === `oc_session_${slot}`;
+        return value.name === cookieName;
       }
       const sessionCookie = cookies.find(isSession);
       assert.equal(sessionCookie, undefined, 'A refused organisation received a session cookie');
