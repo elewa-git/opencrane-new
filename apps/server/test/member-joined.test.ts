@@ -330,11 +330,17 @@ async function refusesBacklog() {
   }
 }
 
-async function readsAsNewOwner() {
+const firstOwnerId = 'bootstrap-owner';
+
+async function saveFirstOwner() {
   clock = new Date();
-  const data = { memberId: 'bootstrap-owner', displayName: 'New owner', email: session.email,
+  const data = { memberId: firstOwnerId, displayName: 'New owner', email: session.email,
     role: 'owner', identity: { issuer: config.issuerUrl, sub: session.sub } };
-  await saveMemberEvent('bootstrap-owner', 'silo.owner_bootstrapped', data);
+  await saveMemberEvent(firstOwnerId, 'silo.owner_bootstrapped', data);
+}
+
+async function readsAsNewOwner() {
+  await saveFirstOwner();
   const reader = await memberReader();
   try {
     const applying = await reader.read('/api/members');
@@ -344,8 +350,8 @@ async function readsAsNewOwner() {
     const waitingForPermission = await reader.read('/api/members');
     expect(waitingForPermission.statusCode).toBe(425);
     expect(waitingForPermission.json()).toEqual({ status: 'access_applying' });
-    const ownership = await saveOwnershipSeed('bootstrap-owner');
-    await reader.applyMember('bootstrap-owner');
+    const ownership = await saveOwnershipSeed(firstOwnerId);
+    await reader.applyMember(firstOwnerId);
     const waitingForOwnership = await reader.read('/api/members');
     expect(waitingForOwnership.statusCode).toBe(425);
     expect(waitingForOwnership.json()).toEqual({ status: 'access_applying' });
@@ -447,18 +453,52 @@ async function checksReceiptOutage() {
   const reader = await joinedReader('admin');
   try {
     await runner.run(members);
-    const canary = 'private fixture contact details';
-    const cause = Object.assign(new Error(canary), { code: 'ECONNREFUSED' });
-    const error = new Error('Authorisation check unavailable', { cause });
-    const unavailable = { allowed: false as const, status: 'unavailable' as const, error };
+    const unavailable = receiptUnavailable();
     vi.spyOn(reader.authorisation, 'checkApplied').mockResolvedValueOnce(unavailable);
     const response = await reader.read('/api/members');
-    expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'unavailable' });
-    const logs = reader.logs.join('');
-    expect(logs).toContain('"reason":"iam_unavailable"');
-    expect(logs).toContain('"dependencyCode":"ECONNREFUSED"');
-    expect(logs).not.toContain(canary);
+    expectReceiptOutage(response, reader.logs);
+  } finally {
+    await reader.close();
+  }
+}
+
+const privateReceiptDetail = 'private fixture contact details';
+
+function receiptUnavailable() {
+  const cause = Object.assign(new Error(privateReceiptDetail), { code: 'ECONNREFUSED' });
+  const error = new Error('Authorisation check unavailable', { cause });
+  return { allowed: false as const, status: 'unavailable' as const, error };
+}
+
+function expectReceiptOutage(response: Awaited<ReturnType<FastifyInstance['inject']>>,
+  lines: string[]) {
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable' });
+  const logs = lines.join('');
+  expect(logs).toContain('"reason":"iam_unavailable"');
+  expect(logs).toContain('"dependencyCode":"ECONNREFUSED"');
+  expect(logs).not.toContain(privateReceiptDetail);
+}
+
+async function checksFirstOwnerReceiptOutage() {
+  vi.stubEnv('LOG_LEVEL', 'error');
+  await saveFirstOwner();
+  const ownership = await saveOwnershipSeed(firstOwnerId);
+  const reader = await memberReader();
+  try {
+    await reader.applyMember(firstOwnerId);
+    const checkReceipt = reader.authorisation.checkApplied;
+
+    async function checkApplied(eventId: string) {
+      if (eventId === ownership.id) {
+        return receiptUnavailable();
+      }
+      return checkReceipt(eventId);
+    }
+
+    vi.spyOn(reader.authorisation, 'checkApplied').mockImplementation(checkApplied);
+    const response = await reader.read('/api/members');
+    expectReceiptOutage(response, reader.logs);
   } finally {
     await reader.close();
   }
@@ -525,6 +565,8 @@ function firstMemberReads() {
     checksIndependentOwnershipReceipt);
   it('checks live permission even after the join receipt is present', checksLivePermissionAfterJoinReceipt);
   it('lets the first owner wait for their saved claim and then open People', readsAsNewOwner);
+  it('logs a safe cause and returns 503 when the first owner’s ownership receipt cannot be checked',
+    checksFirstOwnerReceiptOutage);
 }
 describe('first member reads after accepting an invitation', firstMemberReads);
 
