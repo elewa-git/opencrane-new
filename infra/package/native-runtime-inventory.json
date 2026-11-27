@@ -4,7 +4,7 @@
   "nativeSource": "npm:@openai/codex@0.159.2 and npm:@openai/codex@0.159.2-linux-x64",
   "nativeLicence": "Apache-2.0",
   "nativeLicenceReview": "apps/computer/reviewed-licences.json",
-  "nativeLicenceReviewSha256": "e030e38a5a121c624673e8a137574483eb213a4bef7e8036b6a5e6392dea8db0",
+  "nativeLicenceReviewSha256": "2a0954d0969c7a613825e79b8b533d79018ee08d0fef6dd10775dcd376844dcb",
   "computerInventorySha256": "0c58af26c94d1ef09ed9498baed4db0bc848df7316badd94112b7f10271bbed9",
   "files": {
     "opt/native/node_modules/@openai/codex/bin/codex.js": "61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
