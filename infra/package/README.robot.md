@@ -133,6 +133,25 @@ infra/dev-stack/run.sh package-down --id "$DEV_STACK_ID"
 infra/dev-stack/down.sh --id "$DEV_STACK_ID"
 ```
 
+On a fresh install, the operator command checks the computer image against the
+review for that role. Helm then runs one short Job on each node that accepts
+computer Pods. It skips nodes closed for scheduling and nodes with a
+`NoSchedule` or `NoExecute` taint, a Kubernetes setting that keeps ordinary
+Pods off the node. The Jobs use the same digest and gVisor runtime as computers.
+They reuse an image already on the node. Each Job has two minutes to finish.
+The installer allows for Helm to run the Jobs one at a time, then checks that
+every node that can run computers had a Job. If a new node became available,
+the installer reports a failure so the operator can remove the failed install
+and start again.
+
+Two minutes after a Job finishes, Kubernetes can remove it and any
+remaining Pods. The installer reports the checked Job name and reason.
+Helm 4 reports only that the Job failed. The Pod events give more detail.
+The pull Jobs run only on fresh installs. The pilot reinstalls to pick up a
+new computer image. Its in-place application update uses its own approval check
+and keeps the installed computer image. Pulling a new computer image during an
+in-place update belongs to the next slice.
+
 The forwarder binds only `127.0.0.1`, on port 25106 or 25206. No Tailscale
 Funnel or public listener is created. A package namespace keeps its slot busy
 after the launcher exits, including past the 15 minute claim grace period.
@@ -207,6 +226,15 @@ The chart runs the member, catalogue, computer, conversation, file, budget and
 audit workers, plus the dispatcher. It starts the model gateway beside the server
 and installs the checked computer template and a zero-size warm pool. One computer
 is claimed per assistant, including shared group assistants, and starts when needed.
+On a fresh install, Helm waits for a Job on each uncordoned node without a
+`NoSchedule` or `NoExecute` taint. The Jobs use the same gVisor runtime
+class and the same `images.computer` digest as the computer template. The digest gives
+both Kubernetes' `IfNotPresent` pull policy. The offline render includes the Job image,
+so the existing image and licence checks cover it. The Jobs run `/bin/true` without
+mounts or an API token. Each Job fails after two minutes if it cannot finish.
+Helm removes successful Jobs and keeps failed Jobs for inspection. A failed Job
+stops Helm before it applies the release. `package-up` names the failed pull and
+directs the operator to the Job and its Pod events.
 The installer reads the server Service ClusterIP and puts that IP in the computer ConfigMap. The computer policy permits only TCP
 port 43000 to the server Pod and has no DNS egress. The memory worker needs a
 private key directory and is not started by this package. Object storage and

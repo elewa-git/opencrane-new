@@ -13,6 +13,9 @@ import { secondary, stackId } from './identity.ts';
 import { targetConnection, targetRecorded } from './target.ts';
 import { checkCnpgInstallation } from './cnpg.ts';
 import { checkPackageHosts, type HostCheckOptions, type HostCheckRecord } from './package-hosts.ts';
+import { computerImagePullRefusal } from './package-error.ts';
+import { checkComputerPullCoverage, computerPullArguments, computerPullNodes,
+  computerPullProcessTimeout } from './computer-image-pull.ts';
 import { checkPublicSettings, type PublicPackageValues } from '../package/public-settings.mjs';
 import { checkNatsInputs } from '../package/check-nats-inputs.ts';
 import { requireFleetStandInProvider } from './journey-guard.ts';
@@ -111,7 +114,13 @@ async function command(program: string, args: string[], timeoutMs = 120_000, cwd
     const result = await execute(program, args, options);
     commandTimeout(timeoutMs, limits);
     return result.stdout.trim();
-  } catch {
+  } catch (error) {
+    if (program === 'helm' && args[0] === 'install') {
+      const refusal = computerImagePullRefusal(error, namespace);
+      if (refusal) {
+        throw refusal;
+      }
+    }
     // Discard dependency output because it may contain credentials.
     throw new Error('Package command failed');
   }
@@ -740,6 +749,10 @@ export async function installPackage(valuesFile: string) {
   await checkNatsInputs(secrets);
   await checkRenderedPackage(valuesFile, review, fleetSetting);
   if (await releaseSecret(owner)) throw new Error('A Helm release already uses this namespace');
+  const nodeArgs = ['get', 'nodes', '-o', 'json'];
+  const planned = computerPullNodes(await checkedKubectl(nodeArgs));
+  const pullArguments = computerPullArguments(planned);
+  const timeout = computerPullProcessTimeout(planned);
   // Save the identity before Helm runs so interrupted cleanup can recognise this install.
   owner.installId = randomUUID();
   await saveOwner(owner);
@@ -749,7 +762,7 @@ export async function installPackage(valuesFile: string) {
     await command('helm', ['install', release, chartDirectory,
       '--kube-context', owner.context, '--namespace', namespace, '--values', location.name,
       '--labels', `${installIdLabel}=${owner.installId}`,
-      '--wait=false', '--set', fleetSetting], 180_000, location.directory);
+      '--wait=false', '--set', fleetSetting, ...pullArguments], timeout, location.directory);
   } catch (error) {
     const releaseUid = await ownedReleaseSecretUid(owner);
     if (releaseUid) owner.releaseSecretUid = releaseUid;
@@ -772,6 +785,9 @@ export async function installPackage(valuesFile: string) {
   }
   await waitForPackageDeployments(owner, values.models?.mode === 'provider');
   await checkLiveExposure(owner);
+  // Refuse readiness if a computer could now land on a node that missed the pull.
+  const latest = computerPullNodes(await checkedKubectl(nodeArgs));
+  checkComputerPullCoverage(planned, latest);
 }
 
 async function waitForPackageDeployments(owner: PackageOwner, providerMode: boolean,

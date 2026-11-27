@@ -1,0 +1,19 @@
+{{- if .Release.IsInstall -}}
+  {{- if not (hasKey .Values "computerImagePullNodes") -}}
+    {{- /* Show the image during offline rendering so preflight can check its pin. */ -}}
+    {{- include "opencrane.computerImagePull" (dict "chart" . "name" "computer-image-prepull") -}}
+  {{- else -}}
+    {{- if not .Values.computerImagePullNodes -}}
+      {{- fail "Computer image pre-pull needs a node that accepts computer Pods" -}}
+    {{- end -}}
+    {{- $jobs := list -}}
+    {{- range $node := .Values.computerImagePullNodes -}}
+      {{- $nodeHash := sha256sum $node | trunc 12 -}}
+      {{- $name := printf "computer-image-prepull-%s" $nodeHash -}}
+      {{- $settings := dict "chart" $ "name" $name "node" $node -}}
+      {{- $job := include "opencrane.computerImagePull" $settings -}}
+      {{- $jobs = append $jobs $job -}}
+    {{- end -}}
+    {{- join "\n---\n" $jobs -}}
+  {{- end -}}
+{{- end -}}
