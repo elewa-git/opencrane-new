@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { serverEvent } from '@opencrane/event-store';
 import { envelope } from '@opencrane/models';
@@ -33,7 +33,9 @@ async function start() {
 }
 async function close() {
   await nats?.close();
-  if (directory) rmSync(directory, { recursive: true, force: true });
+  if (directory) {
+    rmSync(directory, { recursive: true, force: true });
+  }
 }
 beforeEach(start);
 afterEach(close);
@@ -79,7 +81,7 @@ async function keepsPersonaWithItsOwner() {
   const other = envelope('test', 'assistant-other', 'assistant.created', {
     assistantId: 'other', ownerId: 'bob', kind: 'personal' });
   const shared = envelope('test', 'assistant-shared', 'assistant.created', {
-    assistantId: 'shared', ownerId: 'team', kind: 'team' });
+    assistantId: 'shared', ownerId: 'alice', kind: 'team' });
   await nats.seed([other, shared]);
   expect(await read('alice', 'other')).toBeUndefined();
   expect(await read('alice', 'shared')).toBeUndefined();
@@ -89,3 +91,46 @@ async function keepsPersonaWithItsOwner() {
   await expect(read('alice', 'assistant')).rejects.toThrow();
 }
 it('keeps the persona with its owner and refuses a removed member', keepsPersonaWithItsOwner);
+
+async function refusesRemovedMemberWithoutAnApproval() {
+  const removed = envelope('test', 'member-alice', 'member.removed', {
+    memberId: 'alice', removedBy: 'owner' });
+  await nats.seed([removed]);
+  await expect(read('alice', 'assistant')).rejects.toThrow('Active silo membership required');
+}
+it('checks membership even when there is no approved persona',
+  refusesRemovedMemberWithoutAnApproval);
+
+async function refusesRemovalDuringThePersonaRead() {
+  await survey();
+  await revision('Your name is Willow.', 1);
+  await append('onboarding.persona_approved', {
+    schemaVersion: 1, memberId: 'alice', generation: 1, revision: 1,
+    revisionId: 'revision-1' }, 'approval');
+  const originalRead = nats.store.readStream.bind(nats.store);
+  let removedDuringRead = false;
+  async function* readWithRemoval(...args: Parameters<typeof originalRead>) {
+    for await (const row of originalRead(...args)) {
+      if (args[0] === 'personal-alice' && args[1] === row.sequence
+        && row.event.id === 'revision-1') {
+        const removed = envelope('test', 'member-alice', 'member.removed', {
+          memberId: 'alice', removedBy: 'owner' });
+        await nats.seed([removed]);
+        removedDuringRead = true;
+      }
+      yield row;
+    }
+  }
+  const pointRead = vi.spyOn(nats.store, 'readStream').mockImplementation(readWithRemoval);
+  const decrypt = vi.spyOn(keys, 'decrypt');
+  try {
+    await expect(read('alice', 'assistant')).rejects.toThrow('Active silo membership required');
+    expect(removedDuringRead).toBe(true);
+    expect(decrypt).not.toHaveBeenCalled();
+  } finally {
+    pointRead.mockRestore();
+    decrypt.mockRestore();
+  }
+}
+it('refuses a member removed during the point read before decrypting the persona',
+  refusesRemovalDuringThePersonaRead);

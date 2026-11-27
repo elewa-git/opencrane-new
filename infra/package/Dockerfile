@@ -54,6 +54,16 @@ COPY --from=build /app/apps/computer/src/private-codex.ts /app/apps/computer/src
 COPY --from=build /app/apps/computer/src/codex-config.ts /app/apps/computer/src/codex-config.ts
 COPY --from=build /app/apps/computer/src/codex-connection.ts /app/apps/computer/src/codex-connection.ts
 COPY --from=build /app/apps/computer/src/http.ts /app/apps/computer/src/http.ts
+COPY --from=build /app/apps/computer/src/assistant-brief.ts /app/apps/computer/src/assistant-brief.ts
+COPY --from=build /app/apps/computer/src/prompts/soul.md /app/apps/computer/src/prompts/soul.md
+COPY --from=build /app/apps/computer/src/prompts/persona.md /app/apps/computer/src/prompts/persona.md
+COPY --from=build /app/apps/computer/src/prompts/agent-personal.md /app/apps/computer/src/prompts/agent-personal.md
+COPY --from=build /app/apps/computer/src/prompts/agent-shared.md /app/apps/computer/src/prompts/agent-shared.md
+COPY --from=build /app/apps/computer/src/prompts/agent-routine.md /app/apps/computer/src/prompts/agent-routine.md
+COPY --from=build /app/apps/computer/src/prompts/environment-tools.md /app/apps/computer/src/prompts/environment-tools.md
+COPY --from=build /app/apps/computer/src/prompts/environment-private.md /app/apps/computer/src/prompts/environment-private.md
+COPY --from=build /app/apps/computer/src/prompts/LICENSE-Codex /app/apps/computer/src/prompts/LICENSE-Codex
+COPY --from=build /app/apps/computer/src/prompts/NOTICE-Codex /app/apps/computer/src/prompts/NOTICE-Codex
 RUN ln -s /opt/native/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex
 ADD --checksum=sha256:65691ff77eb6fa44c908b77a1082c9f092c3b9733b5cefabec0d1104890e21a8 \
   https://dl.k8s.io/release/v1.37.1/bin/linux/amd64/kubectl /usr/local/bin/kubectl

@@ -33,8 +33,11 @@ async function sendsMemoryFreeInstructions(kind: 'personal' | 'team') {
     const path = config['model_instructions_file'];
     expect(typeof path).toBe('string');
     const soul = readFileSync(String(path), 'utf8');
-    if (kind === 'personal') expect(soul).toContain('Your name is Willow.');
-    else expect(soul).not.toContain('Willow');
+    if (kind === 'personal') {
+      expect(soul).toContain('Your name is Willow.');
+    } else {
+      expect(soul).not.toContain('Willow');
+    }
     const developer = String(config['developer_instructions']);
     expect(developer).toContain(kind === 'personal' ? 'personal assistant' : 'shared assistant');
     expect(developer).toContain('/workspace/artifacts');
@@ -74,7 +77,9 @@ async function sendsRestrictedInstructions(variant: 'shared' | 'routine') {
   expect(developer).toContain(variant === 'shared' ? 'shared assistant' : 'Nobody is watching');
   expect(developer).toContain('Shell, file edits and browser tools are');
   expect(developer).not.toContain('Installing software in your sandbox is allowed');
-  if (variant === 'routine') expect(developer).toContain('stop and notify');
+  if (variant === 'routine') {
+    expect(developer).toContain('stop and notify');
+  }
 }
 it.each(['shared', 'routine'] as const)(
   'sends the %s brief without changing private restrictions', sendsRestrictedInstructions);
