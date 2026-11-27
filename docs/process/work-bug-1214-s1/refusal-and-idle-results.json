@@ -1,0 +1,80 @@
+{
+  "results": [
+    {
+      "width": 1280,
+      "step": 1,
+      "idleMs": 0,
+      "status": 200
+    },
+    {
+      "width": 1280,
+      "refusalStatus": 401,
+      "sessionCookies": 0,
+      "unchangedAfterReload": true,
+      "savedStepsBefore": 1,
+      "savedStepsAfter": 1,
+      "positionUnchanged": true
+    },
+    {
+      "width": 1280,
+      "step": 2,
+      "idleMs": 80099,
+      "status": 200
+    },
+    {
+      "width": 1280,
+      "step": 3,
+      "idleMs": 80099,
+      "status": 200
+    },
+    {
+      "width": 1280,
+      "step": 4,
+      "idleMs": 80099,
+      "status": 200
+    },
+    {
+      "width": 1280,
+      "requests": 4,
+      "savedAfterReload": true
+    },
+    {
+      "width": 390,
+      "step": 1,
+      "idleMs": 0,
+      "status": 200
+    },
+    {
+      "width": 390,
+      "refusalStatus": 401,
+      "sessionCookies": 0,
+      "unchangedAfterReload": true,
+      "savedStepsBefore": 1,
+      "savedStepsAfter": 1,
+      "positionUnchanged": true
+    },
+    {
+      "width": 390,
+      "step": 2,
+      "idleMs": 80100,
+      "status": 200
+    },
+    {
+      "width": 390,
+      "step": 3,
+      "idleMs": 80097,
+      "status": 200
+    },
+    {
+      "width": 390,
+      "step": 4,
+      "idleMs": 80100,
+      "status": 200
+    },
+    {
+      "width": 390,
+      "requests": 4,
+      "savedAfterReload": true
+    }
+  ]
+}

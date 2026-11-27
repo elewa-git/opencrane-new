@@ -80,8 +80,9 @@ Not built yet:
    If the admin lowers the ceiling below current spending,
    chat explains the limit and stops the next turn before it reaches the provider.
 5. **A developer opens the website.** A local port forward connects their browser
-   to the private website. The website proxy tells clients how long it keeps idle
-   HTTP connections open. A closed desktop connection leaves other requests available.
+   to the private website. The website tells the browser how long it keeps idle
+   HTTP connections open. It opens a fresh connection to the server for each
+   HTTP request it forwards. A closed desktop connection leaves other requests available.
    A missing or changed cluster target stops forwarding.
 6. **A person uploads a file.** The server scans it before saving and sending it
    to the assistant. Infected files and files without a verified scan stay unavailable.

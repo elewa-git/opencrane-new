@@ -29,9 +29,13 @@ shared `web-page.mjs` renderer.
 The development static server imports the upgrade handler from `web.mjs`;
 importing it does not start a package listener. For ordinary HTTP, the package
 proxy removes connection-specific headers in both directions, including any
-fields named in `Connection`. This lets each connection use its own idle timeout
-and body framing. `web-proxy.test.mjs` checks that a budget read through a forward
-opens a new connection after the website connection expires. The upgrade handler
+fields named in `Connection`. The browser connection keeps its own idle timeout
+and body framing. The proxy uses a fresh server connection for each ordinary
+HTTP request. It logs a failed request with the system error code and sends the
+request only once. `web-proxy.test.mjs` checks that a budget read opens a new
+connection after the website closes its idle connection. It also checks that a
+survey save reaches the server after the server closes its idle connection,
+and that a failed save logs a safe warning without a second send. The upgrade handler
 uses Node's HTTP upgrade response, preserves both initial byte buffers and closes
 both connections on either peer's error or closure. It logs connection errors
 through the structured logger before closing. A failed viewer write cannot stop

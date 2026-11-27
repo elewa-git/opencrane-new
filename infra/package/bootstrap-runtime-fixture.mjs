@@ -17,7 +17,8 @@ for (const name of ['event-store', 'authz', 'handlers']) {
 
 // Load the real service packages before replacing calls to disposable services.
 // Keep their own imports and workspace links subject to Node's normal resolution.
-for (const name of ['pg', '@opencrane/event-store', '@opencrane/authz',
+const { systemClock } = await import('@opencrane/event-store');
+for (const name of ['pg', '@opencrane/authz',
   '@opencrane/handlers', '@opencrane/events', '@opencrane/models', '@nats-io/jetstream']) {
   await import(name);
 }
@@ -156,7 +157,8 @@ const services = {
         return { status: 'appended', sequence };
       }
       async function close() {}
-      return { store: { head, readStream, append }, close };
+      // Provide the real store clock because bootstrap approval reads it in this fixture too.
+      return { store: { clock: systemClock, head, readStream, append }, close };
     },
   },
   '@opencrane/handlers': {
