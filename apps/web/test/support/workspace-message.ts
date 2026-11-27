@@ -1,9 +1,8 @@
 import type { ComponentFixture } from '@angular/core/testing';
-import type { Workspace } from '../../src/app/chat/workspace';
 
 export interface WorkspaceMessageCapture {
   root: HTMLElement;
-  fixture: ComponentFixture<Workspace>;
+  fixture: Pick<ComponentFixture<unknown>, 'detectChanges'>;
 }
 
 export function typeWorkspaceMessage(
