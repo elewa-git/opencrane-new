@@ -129,7 +129,8 @@ async function checkRefusedFile(page: Page, width: number): Promise<void> {
 async function checkWidth(page: Page): Promise<void> {
   const width = page.viewportSize()?.width;
   assert(width === 1280 || width === 390);
-  await page.route('https://example.test/**', remotePage);
+  const context = page.context();
+  await context.route('https://example.test/**', remotePage);
   await page.goto(`${origin}/workspace`);
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   await composer.waitFor();
