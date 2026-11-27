@@ -21,7 +21,12 @@ NATIVE_BINARY = (
 )
 NATIVE_LAUNCHER = "opt/native/node_modules/@openai/codex/bin/codex.js"
 NATIVE_HELPERS = (
-    "private-codex.ts", "codex-config.ts", "codex-connection.ts", "http.ts"
+    "private-codex.ts", "codex-config.ts", "codex-connection.ts", "http.ts",
+    "assistant-brief.ts",
+)
+NATIVE_PROMPTS = (
+    "soul.md", "persona.md", "agent-personal.md", "agent-shared.md", "agent-routine.md",
+    "environment-tools.md", "environment-private.md", "LICENSE-Codex", "NOTICE-Codex",
 )
 
 
@@ -34,6 +39,15 @@ def read_checked_blob(archive, digest):
 
 
 class SourceReviewTests(unittest.TestCase):
+    def test_instruction_files_have_reviewed_hashes(self):
+        review = json.loads(Path("infra/package/native-runtime-inventory.json").read_text())
+        required = ["app/apps/computer/src/assistant-brief.ts"]
+        for name in NATIVE_PROMPTS:
+            required.append("app/apps/computer/src/prompts/" + name)
+        for path in required:
+            with self.subTest(source=path):
+                self.assertIn(path, review["files"])
+
     def test_provider_runtime_paths_are_permitted(self):
         checker = ImageLayerTests("test_development_files_stay_within_the_narrow_allowlist")
         checker.paths = {
@@ -354,6 +368,9 @@ class ImageLayerTests(unittest.TestCase):
         expected = {"app/apps/computer/src"}
         for name in NATIVE_HELPERS:
             expected.add("app/apps/computer/src/" + name)
+        expected.add("app/apps/computer/src/prompts")
+        for name in NATIVE_PROMPTS:
+            expected.add("app/apps/computer/src/prompts/" + name)
         self.assertEqual(computer_paths, expected)
         for name in NATIVE_HELPERS:
             path = "app/apps/computer/src/" + name
@@ -373,7 +390,12 @@ class ImageLayerTests(unittest.TestCase):
             "import('/app/apps/computer/src/codex-config.ts'),"
             "import('/app/apps/computer/src/codex-connection.ts'),"
             "import('/app/apps/computer/src/http.ts')"
-            "]).then(() => process.stdout.write('ready'))"
+            "]).then(([, config]) => {"
+            "for (const facts of [{}, {sharingClass: 'shared'}, {senderAttemptId: 'routine'},"
+            "{executionMode: 'restricted'}]) { config.computerSessionInstructions(facts); }"
+            "return import('/app/apps/computer/src/assistant-brief.ts');"
+            "}).then(brief => { brief.renderSoul('Approved identity');"
+            "process.stdout.write('ready'); })"
         )
         arguments = ["docker", "run", "--rm", "--network", "none", "--read-only",
                      "--entrypoint", "node", image, "--experimental-strip-types", "-e", script]
