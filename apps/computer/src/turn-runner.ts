@@ -541,7 +541,7 @@ class TurnRunner {
       this.signal(started.receipt);
       return started.response;
     }
-    return startPrivateThread(session, input.taskKind);
+    return startPrivateThread(session, input.taskKind, input);
   }
 
   async loadRecall(value: Record<string, unknown>) {

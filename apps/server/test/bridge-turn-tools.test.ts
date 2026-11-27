@@ -165,6 +165,31 @@ function bridgeFixture(options: {
   return { process, sent, reads, rows, link, sentTurns, watchOptions, rowsBySubject };
 }
 
+async function deliversOnlyPersonalIdentity(kind: 'personal' | 'team', memoryFree: boolean) {
+  const fixture = bridgeFixture({ kind, memoryFree });
+  function readApprovedPersona() {
+    return Promise.resolve('Your name is Willow.');
+  }
+  const read = vi.fn(readApprovedPersona);
+  fixture.watchOptions.readApprovedPersona = read;
+  await fixture.process();
+  expect(fixture.sent).toHaveLength(1);
+  const turn = reportObject(fixture.sent[0]!);
+  expect(turn['assistantKind']).toBe(kind);
+  if (kind === 'personal') {
+    expect(turn['approvedPersona']).toBe('Your name is Willow.');
+    expect(read).toHaveBeenCalledWith('person', 'assistant');
+  } else {
+    expect(turn).not.toHaveProperty('approvedPersona');
+    expect(read).not.toHaveBeenCalled();
+  }
+}
+function reportObject(value: string) {
+  return z.record(z.string(), z.unknown()).parse(JSON.parse(value) as unknown);
+}
+it.each([['personal', false], ['team', true], ['team', false]] as const)(
+  'delivers only the owner personal persona: kind=%s, Memory-free=%s', deliversOnlyPersonalIdentity);
+
 it('sends a waiting turn without tools when OpenFGA cannot check a grant', async () => {
   const fixture = bridgeFixture({ binding: true });
   use.mockRejectedValueOnce(new Error('OpenFGA offline'));

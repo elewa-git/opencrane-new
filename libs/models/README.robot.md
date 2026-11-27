@@ -3353,6 +3353,12 @@ access check, and provider, effect and security evidence before a zero release.
 Refusal response tests require fixed text even when the internal error holds private
 values. The memory dispatch tests also stop only the root through allowance exhaustion;
 conversation Stop cannot hide that check.
+
+Ordinary chat calls without a root allowance do not reuse reservations. Replaying
+an identical request can create another dispatch and charge again. Codex request
+and stream retries therefore stay at zero. `chat-retry-cost.test.ts` checks this
+with real NATS, PostgreSQL, OpenFGA and the pinned gateway: two identical requests
+produce two dispatches, each settled at one cent by the stand-in provider.
 Fresh-install qualification and paid calls: NOT RUN.
 
 ## Reviewed drift restoration (#48 PR 3c, first part)

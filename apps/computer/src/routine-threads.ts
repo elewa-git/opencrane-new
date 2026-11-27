@@ -2,6 +2,7 @@ import type { RecallOwner } from './private-recall.ts';
 import { modelForTask } from '@opencrane/models/routing';
 import { record } from './http.ts';
 import { requiredString, type Turn } from './turn-frame.ts';
+import { computerSessionInstructions, type ComputerSessionFacts } from './codex-config.ts';
 
 export interface PrivateSession {
   recallOwner?: RecallOwner | undefined;
@@ -11,9 +12,11 @@ export interface PrivateSession {
   exited?: Promise<void>;
 }
 
-export async function startPrivateThread(session: PrivateSession, taskKind: string) {
+export async function startPrivateThread(session: PrivateSession, taskKind: string,
+  facts: ComputerSessionFacts = { executionMode: 'restricted' }) {
   const params = { model: modelForTask(taskKind), approvalPolicy: 'never',
-    sandbox: 'read-only', ephemeral: true, environments: [] };
+    sandbox: 'read-only', ephemeral: true, environments: [],
+    config: computerSessionInstructions(facts) };
   const response = record(await session.rpc('thread/start', params));
   const thread = record(response['thread']);
   const environments = thread['environments'];
@@ -86,7 +89,8 @@ export function routineThreads(open: (() => Promise<PrivateSession>) | undefined
       }
       prepared.session = session;
       void session.closed.then(expire, expire);
-      const response = await startPrivateThread(session, 'chat_turn');
+      const facts = { executionMode: 'restricted' as const, senderAttemptId: identity.id };
+      const response = await startPrivateThread(session, 'chat_turn', facts);
       if (pending.get(identity.id) !== prepared || expiresAt <= Date.now()) {
         throw new Error('Routine thread unavailable');
       }

@@ -1,8 +1,12 @@
 """Inspect the built filesystem before any entrypoint creates runtime state."""
 from pathlib import Path
 
-for source in Path('/expected/src').glob('*.ts'):
-    assert Path('/app/src', source.name).read_bytes() == source.read_bytes(), source.name
+for source in Path('/expected/src').rglob('*'):
+    if source.is_file():
+        relative = source.relative_to('/expected/src')
+        assert Path('/app/src', relative).read_bytes() == source.read_bytes(), relative
+assert Path('/app/src/prompts').stat().st_mode & 0o111 == 0o111
+assert Path('/app/libs/events/src/memory-text.ts').is_file()
 assert Path('/app/libs/models/src/routing.ts').read_bytes() == Path('/expected/routing.ts').read_bytes()
 assert Path('/app/libs/events/src/tool-call.ts').read_bytes() == Path('/expected/tool-call.ts').read_bytes()
 activity_labels = Path('/app/libs/events/src/command-activity-label.ts')

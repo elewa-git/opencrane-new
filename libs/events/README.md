@@ -21,7 +21,7 @@ flowchart LR
   handlers["libs/handlers<br/>background jobs"] -.-> events
   server["apps/server<br/>back end"] -.->|events and Node digests| events
   models["libs/models<br/>AI access rules"] -.-> events
-  computer["apps/computer<br/>assistant computers"] -.-> events
+  computer["apps/computer<br/>assistant computers"] -.->|session and persona checks| events
   protocol["libs/protocol<br/>browser contracts"] -.->|record ID checks| events
 ```
 
@@ -29,6 +29,7 @@ flowchart LR
 
 - Define each event's type, data and shared details, such as its id and time.
 - Share record ID checks with the apps and libraries that accept the same format.
+- Share the same text checks for approved personas and saved memories.
 - Share SHA-256 hex digests through a separate Node entrypoint.
 - Reject unknown event types and badly formed records.
 - Keep older records readable during [replay](../../GLOSSARY.md#replay).
