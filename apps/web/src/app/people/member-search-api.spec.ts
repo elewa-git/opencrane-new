@@ -44,11 +44,25 @@ async function retriesAtIntervalsAndStops() {
   expect(fetcher).toHaveBeenCalledTimes(2);
   await vi.advanceTimersByTimeAsync(4_500);
   expect(fetcher).toHaveBeenCalledTimes(11);
-  expect(await loading).toEqual({ kind: 'unavailable', status: 425 });
+  expect(await loading).toEqual({ kind: 'access_applying' });
   await vi.advanceTimersByTimeAsync(5_000);
   expect(fetcher).toHaveBeenCalledTimes(11);
 }
 it('waits between reads and stops after eleven applying replies', retriesAtIntervalsAndStops);
+
+async function doesNotCarryApplyingStatusToLaterFailure() {
+  vi.useFakeTimers();
+  const retry = new Response('Too Early', { status: 425 });
+  const fetcher = vi.fn().mockImplementationOnce(applying).mockResolvedValueOnce(retry);
+  vi.stubGlobal('fetch', fetcher);
+  const request = new AbortController();
+  const loading = searchMembers('', '', request.signal);
+  await vi.advanceTimersByTimeAsync(500);
+  expect(await loading).toEqual({ kind: 'unavailable', status: 425 });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+}
+it('reports an unrelated 425 after an applying reply as unavailable',
+  doesNotCarryApplyingStatusToLaterFailure);
 
 function controlledTimeout(ms: number): AbortSignal {
   const deadline = new AbortController();

@@ -94,6 +94,39 @@ async function showsPeopleAfterJoinApplies() {
 it('loads the directory and invite button when the new admin’s access is ready',
   showsPeopleAfterJoinApplies);
 
+async function keepsFirstOwnerAccessPending() {
+  vi.useFakeTimers();
+  let reads = 0;
+  let ownershipApplied = false;
+  const owner = { ...alice, memberId: 'bootstrap-owner', displayName: 'First owner', role: 'owner' };
+
+  function read() {
+    reads += 1;
+    if (ownershipApplied) return response(page([owner], null));
+    return response({ status: 'access_applying' }, 425);
+  }
+
+  const fixture = await mount(read);
+  await vi.advanceTimersByTimeAsync(5_000);
+  fixture.detectChanges();
+  expect(reads).toBe(11);
+  expectEmptyDirectory(fixture);
+  expect(root(fixture).textContent).toContain('Your access is still being set up');
+  expect(root(fixture).textContent).not.toContain('Members are unavailable right now');
+
+  const check = root(fixture).querySelector<HTMLButtonElement>('.members-register .state-action');
+  if (!check) throw new Error('Expected a button to check access again');
+  expect(check.textContent?.trim()).toBe('Check access');
+  ownershipApplied = true;
+  check.click();
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  expect(reads).toBe(12);
+  expect(root(fixture).textContent).toContain('First owner');
+  expect(inviteButton(fixture)?.textContent).toBe('Invite people');
+}
+it('keeps People pending for the first owner after the bounded wait', keepsFirstOwnerAccessPending);
+
 function inviteButton(fixture: ComponentFixture<PeopleScreen>) {
   return root(fixture).querySelector<HTMLButtonElement>('.page-actions button.primary:not([hidden])');
 }
@@ -136,7 +169,7 @@ async function clearsDirectoryWhenNewSessionIsApplying(succeeds: boolean) {
   } else {
     expect(reads).toBe(12);
     expectEmptyDirectory(fixture);
-    expect(root(fixture).textContent).toContain('Members are unavailable right now');
+    expect(root(fixture).textContent).toContain('Your access is still being set up');
   }
 }
 
