@@ -1,6 +1,7 @@
 // Copied from OpenCrane 1 (10abd0ef6); sessions keep the ID token for provider logout.
 import { z } from 'zod';
 import { createEnvelopeCodec, EnvelopeError } from './codec.ts';
+import { cookieValues } from './cookies.ts';
 import type { AuthConfig } from './config.ts';
 
 export const sessionSchema = z
@@ -27,6 +28,11 @@ export const sessionSchema = z
   .strict();
 
 export type SessionData = z.infer<typeof sessionSchema>;
+
+export interface SessionCookie {
+  session: SessionData;
+  cookie: string;
+}
 
 /** Thrown when a session cookie is missing, tampered with, or malformed. */
 export class SessionInvalidError extends Error {}
@@ -68,6 +74,25 @@ export function decodeSession(config: AuthConfig, cookieValue: string, now = new
     throw new SessionExpiredError('session has expired');
   }
   return session;
+}
+
+export function readSessionCookie(
+  config: AuthConfig, header: string | undefined, now = new Date(),
+): SessionCookie | undefined {
+  const candidates = cookieValues(header, config.cookieName);
+  // Keep the last cookie's priority when it still holds a valid session.
+  candidates.reverse();
+  for (const cookie of candidates) {
+    if (!cookie) continue;
+    try {
+      const session = decodeSession(config, cookie, now);
+      return { session, cookie };
+    } catch (error) {
+      if (error instanceof SessionInvalidError || error instanceof SessionExpiredError) continue;
+      throw error;
+    }
+  }
+  return undefined;
 }
 
 /**
