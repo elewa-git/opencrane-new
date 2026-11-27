@@ -344,3 +344,35 @@ async function refusesWrongQualificationKey() {
 }
 test('qualification stand-in deterministically refuses missing and wrong keys with 401',
   { timeout: 15_000 }, refusesWrongQualificationKey);
+
+async function servesChatLinkJourney(): Promise<void> {
+  const environment = { ...process.env, MODEL_STUB_PORT: '0',
+    MODEL_STUB_MCP_GENERATION: randomUUID(), MODEL_STUB_MCP_REVISION: 'qualification' };
+  const stub = spawn(process.execPath, ['--experimental-strip-types', stubPath],
+    { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    const [output] = await once(stub.stdout, 'data');
+    const port = /Stub ready (\d+)/u.exec(String(output))?.[1];
+    assert(port);
+    const url = `http://127.0.0.1:${port}/v1/responses`;
+    const input: unknown[] = [{ type: 'message', role: 'user', content: 'CHAT_LINKS_PROOF' }];
+    const first = await fetch(url, { method: 'POST', body: JSON.stringify({ input }) });
+    const call = await first.text();
+    assert.match(call, /custom_tool_call/u);
+    assert.match(call, /\/workspace\/artifacts\/link-proof\.txt/u);
+    const result = { type: 'custom_tool_call_output', call_id: 'call_chat_links', output: 'Saved' };
+    input.push(result);
+    const second = await fetch(url, { method: 'POST', body: JSON.stringify({ input }) });
+    const reply = await second.text();
+    assert.match(reply, /https:\/\/example\.test/u);
+    assert.match(reply, /file:\/\/\/workspace\/artifacts\/link-proof\.txt/u);
+    assert.match(reply, /javascript:alert/u);
+    assert.match(reply, /event: response.completed/u);
+  } finally {
+    const stopped = once(stub, 'exit');
+    stub.kill('SIGTERM');
+    await stopped;
+  }
+}
+test('the link journey stand-in writes a shared file before replying with link examples',
+  { timeout: 15_000 }, servesChatLinkJourney);
