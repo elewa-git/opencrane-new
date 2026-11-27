@@ -15,7 +15,9 @@ async function openFixtureChat(page: Page, origin: string) {
   const first = available.first();
   await first.waitFor();
   // Let the ordinary chat journey start with a new fixture member on an empty stack.
-  if (await skip.isVisible()) await skip.click();
+  if (await skip.isVisible()) {
+    await skip.click();
+  }
   await composer.waitFor();
   return composer;
 }

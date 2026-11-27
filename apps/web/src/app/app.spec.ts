@@ -73,10 +73,11 @@ function button(rootElement: HTMLElement, label: string): HTMLButtonElement {
 }
 
 describe('opening a workspace address directly', function workspaceRoutes() {
-  afterEach(function restoreBrowser() {
+  function restoreBrowser() {
     vi.restoreAllMocks();
     globalThis.history.replaceState({}, '', '/');
-  });
+  }
+  afterEach(restoreBrowser);
 
   async function opensNextWelcomeStep(path: string, next: string, destination: string) {
     globalThis.history.replaceState({}, '', path);
@@ -112,9 +113,12 @@ describe('opening a workspace address directly', function workspaceRoutes() {
     globalThis.history.replaceState({}, '', path);
     const conversations = { rows: [], nextCursor: null };
     function readWorkspace(input: RequestInfo | URL) {
-      if (input === '/api/onboarding/entry') return Promise.resolve(progress);
+      if (input === '/api/onboarding/entry') {
+        return Promise.resolve(progress);
+      }
       if (typeof input === 'string' && input.startsWith('/api/conversations?section=archived&')) {
-        return Promise.resolve(Response.json(conversations));
+        const reply = Response.json(conversations);
+        return Promise.resolve(reply);
       }
       throw new Error('Unexpected request while opening archived conversations');
     }

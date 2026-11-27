@@ -103,7 +103,9 @@ export class App implements OnInit, OnDestroy {
   protected readonly personalSettingsPageLabel = personalSettingsPageLabel;
 
   ngOnInit(): void {
-    if (this.workspacePath) void this.checkWorkspaceEntry();
+    if (this.workspacePath) {
+      void this.checkWorkspaceEntry();
+    }
   }
 
   ngOnDestroy(): void {
@@ -115,7 +117,9 @@ export class App implements OnInit, OnDestroy {
     const signal = this.entryRequest.signal;
     try {
       const entry = await onboardingEntry(signal);
-      if (signal.aborted) return;
+      if (signal.aborted) {
+        return;
+      }
       if (entry.kind === 'destination' && entry.path !== '/workspace') {
         this.navigate(entry.path);
         return;
@@ -123,7 +127,9 @@ export class App implements OnInit, OnDestroy {
       // Let each page handle sign-in and access refusals from its own requests.
       this.workspaceEntry.set('open');
     } catch (error) {
-      if (signal.aborted) return;
+      if (signal.aborted) {
+        return;
+      }
       reportEntryFailure(error, 'workspace');
       this.workspaceEntry.set('failed');
     }

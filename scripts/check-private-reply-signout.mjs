@@ -36,7 +36,9 @@ function privateText() {
 }
 function connected() {
   const element = globalThis.document.querySelector('oc-workspace');
-  if (!element) return false;
+  if (!element) {
+    return false;
+  }
   const component = globalThis.ng?.getComponent(element);
   return component?.chat.connected() ?? false;
 }
