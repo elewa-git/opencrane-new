@@ -32,14 +32,16 @@ async function mountWorkspace() {
   const posted: unknown[] = [];
   let responseStatus = 201;
   function readRequest(input: RequestInfo | URL, init?: RequestInit) {
-    const path = input instanceof Request ? input.url : String(input);
+    const url = input instanceof Request ? input.url : String(input);
+    const path = new URL(url, location.origin).pathname;
     let body: object = {};
     if (path === '/auth/me') body = { authenticated: true, user: { name: 'Sam' } };
     if (path === '/api/chat') body = { memberId: 'me', assistantId: 'assistant' };
     if (path === '/api/conversations') body = { rows: [conversation] };
     if (path.includes('/messages')) {
       if (init?.method === 'POST') {
-        posted.push(JSON.parse(String(init.body)) as unknown);
+        if (typeof init.body !== 'string') throw new Error('Expected a JSON message');
+        posted.push(JSON.parse(init.body) as unknown);
         return Promise.resolve(new Response('{}', { status: responseStatus }));
       }
       body = { rows: [question, reply, completed], position: 3,
@@ -57,8 +59,15 @@ async function mountWorkspace() {
   const fixture = TestBed.createComponent(Workspace);
   await fixture.whenStable();
   fixture.detectChanges();
-  const root: unknown = fixture.nativeElement;
-  if (!(root instanceof HTMLElement)) throw new Error('Missing workspace');
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Missing workspace');
+  const root = element;
+  function replyLoaded() {
+    fixture.detectChanges();
+    expect(root.querySelector('.workspace-file-note')?.textContent)
+      .toContain('Meet_Aster.html');
+  }
+  await vi.waitFor(replyLoaded);
   const share = root.querySelector<HTMLButtonElement>('.workspace-file-share');
   expect(share?.textContent?.trim()).toBe('Share');
   if (!share) throw new Error('Missing Share action');
