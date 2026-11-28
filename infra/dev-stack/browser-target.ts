@@ -12,10 +12,13 @@ export async function assertTouchTarget(control: Locator) {
 
 async function waitForOpeningAnimations(control: Element) {
   let element: Element | null = control;
-  // Actionability accepts subpixel movement. Finish ancestor transforms before measuring pixels.
+  // Finish parent animations before measuring: Playwright accepts movement smaller than one pixel.
   while (element) {
     for (const animation of element.getAnimations()) {
-      if (animation.effect?.getTiming().iterations !== Infinity) await animation.finished;
+      const timing = animation.effect?.getTiming();
+      if (timing?.iterations !== Infinity) {
+        await animation.finished;
+      }
     }
     element = element.parentElement;
   }

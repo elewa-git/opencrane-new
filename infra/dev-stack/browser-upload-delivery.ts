@@ -15,7 +15,8 @@ export async function holdUploadDelivery(page: Page) {
       const delivery = result.success && result.data.type === 'event'
         && result.data.topic === 'conversation' && result.data.row?.type === 'file.delivered';
       if (holding && (held.length > 0 || delivery)) {
-        held.push({ socket, message });
+        const frame = { socket, message };
+        held.push(frame);
         delivered.resolve();
         return;
       }
@@ -31,7 +32,9 @@ export async function holdUploadDelivery(page: Page) {
     await delivered.promise;
     assert(held.length > 0, 'The real delivery event was held before Ready');
     holding = false;
-    for (const frame of held) frame.socket.send(frame.message);
+    for (const frame of held) {
+      frame.socket.send(frame.message);
+    }
     held.length = 0;
   }
   return release;

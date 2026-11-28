@@ -15,7 +15,7 @@ const endpointSegments = new Set(['', 'admin', 'management', 'v1', 'orgs', 'me',
   'projects', 'apps', 'oidc', 'oidc_config', 'users', 'human', '_import', '_search',
   'grants', 'members']);
 
-// Only messages built here may reach the CLI. Keep private causes for error handling.
+// Show only messages built here in the CLI. Keep private causes for error handling.
 export class ZitadelSetupError extends Error {}
 
 export async function secondaryCredentials() {
@@ -64,13 +64,17 @@ export async function retainCredentialReference(path: string) {
 
 async function credentialFile() {
   const explicitFile = process.env['ZITADEL_KEY_FILE'];
-  if (explicitFile !== undefined) return resolve(explicitFile);
+  if (explicitFile !== undefined) {
+    return resolve(explicitFile);
+  }
   if (secondary) {
     try {
       return await readCredentialReference();
     } catch (error) {
       const missing = missingFileSchema.safeParse(error);
-      if (!missing.success) throw error;
+      if (!missing.success) {
+        throw error;
+      }
     }
   }
   return `${root}/.keys/.zitadel-key`;
@@ -86,7 +90,9 @@ async function readCredential() {
     }
     return credential;
   } catch (cause) {
-    if (cause instanceof ZitadelSetupError) throw cause;
+    if (cause instanceof ZitadelSetupError) {
+      throw cause;
+    }
     const error = credentialErrorSchema.safeParse(cause);
     const code = error.success ? error.data.code : 'unavailable';
     throw new ZitadelSetupError(`Zitadel credentials unavailable (${code}); ` +
@@ -97,7 +103,7 @@ async function readCredential() {
 async function providerCode(response: Response) {
   try {
     const body: unknown = await response.json();
-    // Zitadel uses numeric gRPC codes. Never print arbitrary provider strings or bodies.
+    // Show only Zitadel's numeric gRPC error code, never its response text.
     const parsed = providerCodeSchema.safeParse(body);
     if (parsed.success) {
       const code = parsed.data.code;
@@ -115,7 +121,7 @@ async function providerCode(response: Response) {
 function publicEndpoint(path: string) {
   const segments = path.split('/');
   for (const segment of segments) {
-    // Zitadel entity ids are decimal numbers. Never print other provider-supplied text.
+    // Accept decimal Zitadel ids, but never print other provider-supplied text.
     if (!endpointSegments.has(segment) && !/^\d{1,20}$/u.test(segment)) {
       return '[unrecognised endpoint]';
     }
@@ -127,12 +133,22 @@ export async function zitadelApi(path: string, orgId: string | undefined,
   body?: unknown, method = body === undefined ? 'GET' : 'POST') {
   const credential = await readCredential();
   const endpoint = publicEndpoint(path);
-  const options: RequestInit = {
-    method, redirect: 'error', signal: AbortSignal.timeout(30_000),
-    headers: { Authorization: `Bearer ${credential}`, 'content-type': 'application/json',
-      ...(orgId ? { 'x-zitadel-orgid': orgId } : {}) },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${credential}`,
+    'content-type': 'application/json',
   };
+  if (orgId) {
+    headers['x-zitadel-orgid'] = orgId;
+  }
+  const options: RequestInit = {
+    method,
+    redirect: 'error',
+    signal: AbortSignal.timeout(30_000),
+    headers,
+  };
+  if (body !== undefined) {
+    options.body = JSON.stringify(body);
+  }
   let response: Response;
   try {
     response = await fetch(`${issuer}${path}`, options);

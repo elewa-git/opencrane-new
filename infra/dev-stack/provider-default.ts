@@ -14,7 +14,9 @@ export async function waitForSeededDefault<Bindings extends ProviderBindings>(
   while (Date.now() < deadline) {
     const bindings = await read();
     const previous = bindings?.rows?.find(isDefault);
-    if (bindings && previous) return { bindings, previous };
+    if (bindings && previous) {
+      return { bindings, previous };
+    }
     await delay(100);
   }
   throw new Error('Provider setup default: timeout');

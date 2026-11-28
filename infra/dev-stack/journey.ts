@@ -658,16 +658,16 @@ journeyChecks: try {
       'other audit member authenticated live chat access');
     const ceilings = await modelHistory(events.store, `budget-${silo}`, silo);
     const run = ceilings.some(row => row.event.type === 'budget.ceiling_set' && !['installation', 'dev-only-stub-journey'].includes((row.event.data as { setBy: string }).setBy)) ? 'repeat' : 'fresh';
-    await browserAuditJourney(browser.ownerPage, browser.memberPages, origin, member,
-      identities.get(other)!.cookie, run);
+    const auditAccess = { requesterId: member, otherCookie: identities.get(other)!.cookie };
+    await browserAuditJourney(browser.ownerPage, browser.memberPages, origin, auditAccess, run);
     const budgetAssistant = await prepareBudgetAssistant(browser.ownerPage,
       browser.memberPages, origin, member);
+    const budgetInput = { silo, ...budgetAssistant };
     try {
       await browserBudgetJourney(browser.ownerPage, browser.memberPages, origin, events.store,
-        silo, budgetAssistant.assistantId, budgetAssistant.groupId);
+        budgetInput);
     } finally {
-      await restoreBudgetCeilings(browser.ownerPage, origin, events.store, silo,
-        budgetAssistant.assistantId, budgetAssistant.groupId);
+      await restoreBudgetCeilings(browser.ownerPage, origin, events.store, budgetInput);
     }
   }
   }

@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { copyFile, mkdir, readFile, readdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { Locator, Page, Request, Response } from 'playwright';
+import type { Locator, Page, Request, Response, ViewportSize } from 'playwright';
 import { auditResponseSchema, chatFeedSchema, type AuditRow } from '@opencrane/protocol';
 import { readJourneyApi } from './browser-api.ts';
 import { directory, root } from './config.ts';
@@ -12,53 +12,108 @@ import { project } from './identity.ts';
 
 export const auditPrompt = 'Say hello briefly. p3-19-private-text-canary';
 
-/** Read real stub-turn evidence and check privacy on the running secondary stack. */
-export async function browserAuditJourney(owner: Page, members: Page[], origin: string, requesterId: string,
-  otherCookie: string, run: 'fresh' | 'repeat') {
+export type AuditJourneyAccess = { requesterId: string; otherCookie: string };
+
+/** Check saved test-model calls and privacy on the running spare stack. */
+export async function browserAuditJourney(owner: Page, members: Page[], origin: string,
+  access: AuditJourneyAccess, run: 'fresh' | 'repeat') {
+  const { requesterId, otherCookie } = access;
   const output = `${root}/docs/process/p3-19-live`;
-  const workspaces = members.map(page => ({ page, url: page.url(), viewport: page.viewportSize()! }));
+  const workspaces = [];
+  for (const page of members) {
+    const workspace = { page, url: page.url(), viewport: page.viewportSize()! };
+    workspaces.push(workspace);
+  }
   await mkdir(output, { recursive: true });
-  for (const width of [1280, 390]) await copyFile(`${directory}/workspace-${width}.png`, `${output}/${run}-stub-chat-${width}.png`);
+  for (const width of [1280, 390]) {
+    await copyFile(`${directory}/workspace-${width}.png`, `${output}/${run}-stub-chat-${width}.png`);
+  }
   for (const page of members) {
     const { conversation, row, history } = await readSuccessfulTurnAudit(page, origin, auditPrompt);
-    const path = `/api/conversations/${conversation}/history`;
+    const address = `${origin}/api/conversations/${conversation}/history`;
     assert.equal(row.requesterId, requesterId);
     await assertAuditMoney(owner, origin, row);
     assert(!JSON.stringify(history).includes('canary'));
-    assert.equal((await fetch(`${origin}${path}`, { headers: { cookie: otherCookie } })).status, 403,
+    const otherSession = { headers: { cookie: otherCookie } };
+    const otherResponse = await fetch(address, otherSession);
+    assert.equal(otherResponse.status, 403,
       'Another joined member cannot read this private action history');
-    assert.equal((await readJourneyApi(owner, `${origin}${path}`)).status(), 403,
+    const ownerResponse = await readJourneyApi(owner, address);
+    assert.equal(ownerResponse.status(), 403,
       'The owner role does not grant access to private action history');
     await checkActionHistory(page, `${origin}/history/${conversation}`);
     await capture(page, `${output}/${run}-action-${page.viewportSize()!.width}.png`);
-    console.log(`PASS ${run} audit ${page.viewportSize()!.width}px: own stub turn, allow and success shown separately; other member and owner refused private history`);
+    const width = page.viewportSize()!.width;
+    console.log(`PASS ${run} audit ${width}px: own test-model turn; ` +
+      'allow and success shown separately; other member and owner refused private history');
   }
   const publication = await assertPublishedAudit(owner, origin);
-  assert.equal((await readJourneyApi(members[0]!, `${origin}/api/org/history`)).status(), 403);
+  const member = members[0]!;
+  const memberHistory = await readJourneyApi(member, `${origin}/api/org/history`);
+  assert.equal(memberHistory.status(), 403);
   for (const width of [1280, 390]) {
-    await owner.setViewportSize({ width, height: 900 });
+    const viewport = { width, height: 900 };
+    await owner.setViewportSize(viewport);
     await openChangeHistory(owner, `${origin}/org/history`);
     await checkChangeHistory(owner, publication, `${output}/${run}-category-${width}.png`);
     await capture(owner, `${output}/${run}-change-${width}.png`);
-    await members[0]!.setViewportSize({ width, height: 900 });
-    await members[0]!.goto(`${origin}/org/history`);
-    await members[0]!.getByText('Access changed. Protected history has been cleared.', { exact: true }).waitFor();
-    assert.equal(await members[0]!.locator('oc-audit article').count(), 0);
-    await capture(members[0]!, `${output}/${run}-refused-${width}.png`);
-  }
-  const canaries = ['p3-19-private-text-canary', 'p3-19-query-canary', 'p3-19-conversation-canary', 'p3-19-bearer-canary'];
-  for (const method of ['GET', 'POST', 'OPTIONS']) {
-    await fetch(`${origin}/api/conversations/p3-19-conversation-canary/history/?requestId=p3-19-query-canary`, {
-      method, headers: { authorization: 'Bearer p3-19-bearer-canary' },
+    await member.setViewportSize(viewport);
+    await member.goto(`${origin}/org/history`);
+    const refusal = member.getByText('Access changed. Protected history has been cleared.', {
+      exact: true,
     });
+    await refusal.waitFor();
+    assert.equal(await member.locator('oc-audit article').count(), 0);
+    await capture(member, `${output}/${run}-refused-${width}.png`);
+  }
+  await checkAuditLogPrivacy(origin);
+  console.log(`PASS ${run} audit: owner organisation metadata without private text; ` +
+    'member organisation history refused; private markers absent from process and model logs');
+  await restoreWorkspaces(workspaces);
+}
+
+async function checkAuditLogPrivacy(origin: string) {
+  // Send made-up private values through the app's requests.
+  // Check that the logs never show those values.
+  const canaries = [
+    'p3-19-private-text-canary',
+    'p3-19-query-canary',
+    'p3-19-conversation-canary',
+    'p3-19-bearer-canary',
+  ];
+  const address = `${origin}/api/conversations/p3-19-conversation-canary/history/` +
+    '?requestId=p3-19-query-canary';
+  for (const method of ['GET', 'POST', 'OPTIONS']) {
+    const request = { method, headers: { authorization: 'Bearer p3-19-bearer-canary' } };
+    await fetch(address, request);
   }
   await delay(200);
-  assert((await readFile(`${directory}/server.log`, 'utf8')).includes('/api/org/history'), 'The live server logs audit requests');
-  const logs = await Promise.all((await readdir(directory)).filter(name => name.endsWith('.log')).map(name => readFile(`${directory}/${name}`, 'utf8')));
+  const serverLog = await readFile(`${directory}/server.log`, 'utf8');
+  assert(serverLog.includes('/api/org/history'), 'The live server logs audit requests');
+  const files = await readdir(directory);
+  const pendingLogs = [];
+  for (const name of files) {
+    if (name.endsWith('.log')) {
+      pendingLogs.push(readFile(`${directory}/${name}`, 'utf8'));
+    }
+  }
+  const logs = await Promise.all(pendingLogs);
   logs.push(await readFile(`${directory}/models/usage.jsonl`, 'utf8'));
-  const models = await promisify(execFile)('docker', ['logs', `${project}-models-1`], { maxBuffer: 8 * 1024 * 1024 });
-  for (const canary of canaries) assert(![...logs, models.stdout, models.stderr].some(log => log.includes(canary)), 'Live logs exclude private text, filter, conversation and bearer canaries');
-  console.log(`PASS ${run} audit: owner organisation metadata without private text; member organisation history refused; live process and model/gateway log canaries absent`);
+  const execute = promisify(execFile);
+  const processOptions = { maxBuffer: 8 * 1024 * 1024 };
+  const models = await execute('docker', ['logs', `${project}-models-1`], processOptions);
+  logs.push(models.stdout, models.stderr);
+  for (const canary of canaries) {
+    for (const log of logs) {
+      assert(!log.includes(canary),
+        'Live logs exclude private text, filter, conversation and bearer canaries');
+    }
+  }
+}
+
+type SavedWorkspace = { page: Page; url: string; viewport: ViewportSize };
+
+async function restoreWorkspaces(workspaces: SavedWorkspace[]) {
   for (const { page, url, viewport } of workspaces) {
     await page.setViewportSize(viewport);
     await page.goto(url);
@@ -68,13 +123,18 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
 
 export async function readSuccessfulTurnAudit(page: Pick<Page, 'request' | 'url'>, origin: string,
   prompt: string) {
-  const conversation = new URL(page.url()).searchParams.get('conversation');
+  const location = new URL(page.url());
+  const conversation = location.searchParams.get('conversation');
   assert(conversation, 'The member has a saved conversation');
   const path = `${origin}/api/conversations/${conversation}`;
   const messages = await readJourneyApi(page, `${path}/messages`);
   assert.equal(messages.status(), 200);
-  const feed = chatFeedSchema.parse(await messages.json());
-  const turn = feed.rows.find(row => row.type === 'message.posted' && row.data['text'] === prompt);
+  const messageBody: unknown = await messages.json();
+  const feed = chatFeedSchema.parse(messageBody);
+  function matchesPrompt(row: typeof feed.rows[number]) {
+    return row.type === 'message.posted' && row.data['text'] === prompt;
+  }
+  const turn = feed.rows.find(matchesPrompt);
   assert(turn, 'The member posted the expected message in chat');
   const turnId = turn.id;
   function successfulCall(row: AuditRow) {
@@ -85,7 +145,8 @@ export async function readSuccessfulTurnAudit(page: Pick<Page, 'request' | 'url'
     const response = await readJourneyApi(page, `${path}/history?turnId=${turnId}`);
     if (response.status() !== 503) {
       assert.equal(response.status(), 200);
-      const history = auditResponseSchema.parse(await response.json());
+      const historyBody: unknown = await response.json();
+      const history = auditResponseSchema.parse(historyBody);
       for (const entry of history.rows) {
         assert(!('reservedCents' in entry) && !('settledCents' in entry),
           'Member action history does not expose money amounts');
@@ -161,11 +222,16 @@ export async function assertPublishedAudit(owner: Pick<Page, 'request'>, origin:
     const query = before === undefined ? '' : `?before=${before}`;
     const response = await readJourneyApi(owner, `${origin}/api/org/history${query}`);
     assert.equal(response.status(), 200);
-    const changes = auditResponseSchema.parse(await response.json());
+    const body: unknown = await response.json();
+    const changes = auditResponseSchema.parse(body);
     assert(!JSON.stringify(changes).includes('canary'));
     const publication = changes.rows.find(hasPublication);
-    if (publication) return publication;
-    if (changes.nextBefore === undefined) break;
+    if (publication) {
+      return publication;
+    }
+    if (changes.nextBefore === undefined) {
+      break;
+    }
     assert(before === undefined || changes.nextBefore < before,
       'Older change history moves towards earlier events');
     before = changes.nextBefore;
@@ -174,16 +240,32 @@ export async function assertPublishedAudit(owner: Pick<Page, 'request'>, origin:
 }
 
 async function checkChangeHistory(page: Page, publication: AuditRow, screenshot: string) {
-  while (await page.locator('oc-audit article .family-icon').filter({ hasText: '👤' }).count() === 0) {
+  const familyIcons = page.locator('oc-audit article .family-icon');
+  const memberIcons = familyIcons.filter({ hasText: '👤' });
+  while (await memberIcons.count() === 0) {
     const older = page.getByRole('button', { name: 'Older history', exact: true });
     assert(await older.count(), 'An older page shows a member change');
     const previousCount = await page.locator('oc-audit article').count();
     await older.focus();
     await older.press('Enter');
-    await page.locator('oc-audit article').nth(previousCount).waitFor();
+    const articles = page.locator('oc-audit article');
+    await articles.nth(previousCount).waitFor();
   }
-  assert(await page.locator('oc-audit article .family-icon').filter({ hasText: '👤' }).count() > 0,
+  assert(await memberIcons.count() > 0,
     'The unfiltered screen shows a member change');
+  const categoryHistory = await selectToolsCategory(page);
+  await page.getByText('History loaded', { exact: true }).waitFor();
+  assert.equal(await page.locator('oc-audit article').count(), categoryHistory.rows.length);
+  assert.equal(await memberIcons.count(), 0,
+    'The Tools & models screen excludes member changes');
+  const category = page.getByRole('button', { name: 'Tools & models', exact: true });
+  assert(await category.evaluate(isFocused), 'Keyboard selection keeps focus on the category');
+  await capture(page, screenshot);
+  const publicationIndex = await findPublishedChange(page, categoryHistory.rows, publication.id);
+  await checkPublishedChange(page, publicationIndex);
+}
+
+async function selectToolsCategory(page: Page) {
   function categoryResponse(response: Response) {
     const url = new URL(response.url());
     return url.pathname === '/api/org/history' && url.searchParams.get('family') === 'tools'
@@ -195,45 +277,56 @@ async function checkChangeHistory(page: Page, publication: AuditRow, screenshot:
   await category.press('Enter');
   const categoryReply = await categoryLoaded;
   assert.equal(categoryReply.status(), 200);
-  const categoryHistory = auditResponseSchema.parse(await categoryReply.json());
+  const categoryBody: unknown = await categoryReply.json();
+  const categoryHistory = auditResponseSchema.parse(categoryBody);
   assert(categoryHistory.rows.length > 0, 'The tools category contains saved changes');
+  const toolEventPattern = /^(tool|mcp|connection|egress|credential|provider|model)\./u;
   for (const row of categoryHistory.rows) {
-    assert(/^(tool|mcp|connection|egress|credential|provider|model)\./u
-      .test(row.records[0]?.type ?? ''), 'Every listed change belongs to Tools & models');
+    const eventType = row.records[0]?.type ?? '';
+    assert(toolEventPattern.test(eventType), 'Every listed change belongs to Tools & models');
   }
-  await page.getByText('History loaded', { exact: true }).waitFor();
-  assert.equal(await page.locator('oc-audit article').count(), categoryHistory.rows.length);
-  assert.equal(await page.locator('oc-audit article .family-icon').filter({ hasText: '👤' }).count(), 0,
-    'The Tools & models screen excludes member changes');
-  assert(await category.evaluate(isFocused), 'Keyboard selection keeps focus on the category');
-  await capture(page, screenshot);
-  const visibleRows = [...categoryHistory.rows];
-  while (!visibleRows.some(row => row.id === publication.id)) {
+  return categoryHistory;
+}
+
+async function findPublishedChange(page: Page, initialRows: AuditRow[], publicationId: string) {
+  const visibleRows = [...initialRows];
+  function isPublication(row: AuditRow) {
+    return row.id === publicationId;
+  }
+  function olderResponse(response: Response) {
+    const url = new URL(response.url());
+    return url.pathname === '/api/org/history' && url.searchParams.get('family') === 'tools'
+      && url.searchParams.has('before');
+  }
+  while (!visibleRows.some(isPublication)) {
     const older = page.getByRole('button', { name: 'Older history', exact: true });
     assert(await older.count(), 'The publication is on an older Tools & models page');
-    function olderResponse(response: Response) {
-      const url = new URL(response.url());
-      return url.pathname === '/api/org/history' && url.searchParams.get('family') === 'tools'
-        && url.searchParams.has('before');
-    }
     const olderLoaded = page.waitForResponse(olderResponse);
     await older.focus();
     await older.press('Enter');
     const olderReply = await olderLoaded;
     assert.equal(olderReply.status(), 200);
-    const olderHistory = auditResponseSchema.parse(await olderReply.json());
+    const olderBody: unknown = await olderReply.json();
+    const olderHistory = auditResponseSchema.parse(olderBody);
     assert(olderHistory.rows.length > 0, 'An older page contains saved changes');
     visibleRows.push(...olderHistory.rows);
-    await page.locator('oc-audit article').nth(visibleRows.length - 1).waitFor();
-    assert.equal(await page.locator('oc-audit article').count(), visibleRows.length);
+    const articles = page.locator('oc-audit article');
+    await articles.nth(visibleRows.length - 1).waitFor();
+    assert.equal(await articles.count(), visibleRows.length);
   }
-  const publicationIndex = visibleRows.findIndex(row => row.id === publication.id);
-  const entry = page.locator('oc-audit article .row-button').nth(publicationIndex);
+  return visibleRows.findIndex(isPublication);
+}
+
+async function checkPublishedChange(page: Page, publicationIndex: number) {
+  const entries = page.locator('oc-audit article .row-button');
+  const entry = entries.nth(publicationIndex);
   const visibleTitle = await entry.locator('strong').innerText();
-  assert.equal(visibleTitle.replace(/\s+/gu, ' ').trim(), '• Organisation change',
+  const singleLineTitle = visibleTitle.replace(/\s+/gu, ' ');
+  assert.equal(singleLineTitle.trim(), '• Organisation change',
     'The publication has the title shown on the shipped screen');
   const visibleSummary = await entry.locator('small').innerText();
-  assert.equal(visibleSummary.replace(/\s+/gu, ' ').trim(),
+  const singleLineSummary = visibleSummary.replace(/\s+/gu, ' ');
+  assert.equal(singleLineSummary.trim(),
     'Decision: Not recorded · Observation: Change recorded',
     'The publication has its visible decision and observation');
   await entry.focus();
@@ -262,11 +355,21 @@ async function captureHistoryFailure(page: Page, error: unknown, reads: HistoryR
 }
 
 async function capture(page: Page, path: string) {
-  assert(!(await page.locator('body').innerText()).includes('canary'));
-  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  const body = page.locator('body');
+  const text = await body.innerText();
+  assert(!text.includes('canary'));
+  assert(await page.evaluate(fitsViewport));
   const controls = page.locator('oc-audit button, oc-audit input, oc-audit select');
-  for (const control of await controls.all()) assert((await control.boundingBox())!.height >= 44);
-  await page.screenshot({ path, fullPage: true });
+  for (const control of await controls.all()) {
+    const box = await control.boundingBox();
+    assert(box!.height >= 44);
+  }
+  const screenshot = { path, fullPage: true };
+  await page.screenshot(screenshot);
+}
+
+function fitsViewport() {
+  return document.documentElement.scrollWidth <= innerWidth;
 }
 
 type HistoryRead = { status?: number; error?: string };
@@ -278,7 +381,8 @@ async function openChangeHistory(page: Page, url: string) {
 }
 
 async function checkActionHistory(page: Page, url: string) {
-  const loaded = page.getByText(/Decision: allow\s*· Observation: Confirmed/u).first();
+  const confirmed = page.getByText(/Decision: allow\s*· Observation: Confirmed/u);
+  const loaded = confirmed.first();
   await openHistory(page, url, loaded);
 }
 
@@ -290,7 +394,9 @@ async function openHistory(page: Page, url: string, loaded: Locator) {
     }
   }
   function recordFailure(request: Request) {
-    if (!isHistoryRead(request.url())) return;
+    if (!isHistoryRead(request.url())) {
+      return;
+    }
     const error = request.failure()?.errorText ?? '';
     const code = /^net::[A-Z_]+$/u.test(error) ? error : 'transport_failed';
     reads.push({ error: code });

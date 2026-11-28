@@ -60,7 +60,8 @@ async function restoresChosenScopes() {
   }
   const store = { head } as EventStore;
   try {
-    await restoreBudgetCeilings(owner, origin, store, 'test', 'team-sales', 'sales');
+    const input = { silo: 'test', assistantId: 'team-sales', groupId: 'sales' };
+    await restoreBudgetCeilings(owner, origin, store, input);
     assert.deepEqual(restored, ['paying_group', 'assistant', 'global']);
     for (const ceiling of budget.ceilings) assert.equal(ceiling.ceilingCents, 20000);
     assert.equal(budget.ceilingCents, 20000);
@@ -171,8 +172,8 @@ async function refusesPersonalAssistant() {
   }
   const store = { readStream } as EventStore;
   const owner = {} as Page;
-  const journey = browserBudgetJourney(owner, [], 'http://localhost', store, 'test',
-    'personal-alice', 'sales');
+  const input = { silo: 'test', assistantId: 'personal-alice', groupId: 'sales' };
+  const journey = browserBudgetJourney(owner, [], 'http://localhost', store, input);
   const refusal = { name: 'AssertionError',
     message: 'Budget notices must use a shared assistant that the owner can choose in Spending' };
   await assert.rejects(journey, refusal);
@@ -308,8 +309,8 @@ async function retainsEditorLoadFailure(statusCode = 503, failPageState = false,
       return { width: 1280, height: 900 };
     }
     const member = { viewportSize } as Page;
-    const journey = isolated.browserBudgetJourney(owner, [member], 'http://fixture.test', store,
-      'test', 'team-sales', 'sales');
+    const input = { silo: 'test', assistantId: 'team-sales', groupId: 'sales' };
+    const journey = isolated.browserBudgetJourney(owner, [member], 'http://fixture.test', store, input);
     let failure: unknown;
     try {
       await journey;

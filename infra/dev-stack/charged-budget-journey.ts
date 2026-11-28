@@ -3,7 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { Locator, Page } from 'playwright';
 import { assertAuditMoney, openTurnSpending, readSuccessfulTurnAudit } from './browser-audit.ts';
 import { findBudgetNoticeForPrompt, loadBudgetEditor, readBudgetSummary, saveBudgetCeiling,
-  scopedBudget } from './browser-budgets.ts';
+  scopedBudget, type JourneyBudgetCeiling } from './browser-budgets.ts';
 import { openBudgetConversation, prepareBudgetAssistant, type BudgetAssistant }
   from './budget-fixture.ts';
 import { answer, sendForReply } from './real-model-journey.ts';
@@ -40,24 +40,30 @@ async function showSettledCost(admin: Page, origin: string, groupId: string, cen
   beforeNavigate?: BeforePageNavigation) {
   await loadBudgetEditor(admin, origin, undefined, beforeNavigate);
   const heading = admin.getByRole('heading', { name: `Paying group · ${groupId}`, exact: true });
-  const card = admin.getByRole('article').filter({ has: heading });
-  const settled = card.locator('dt').filter({ hasText: /^Settled$/u });
+  const cards = admin.getByRole('article');
+  const card = cards.filter({ has: heading });
+  const labels = card.locator('dt');
+  const settled = labels.filter({ hasText: /^Settled$/u });
   const amount = settled.locator('xpath=following-sibling::dd[1]');
-  await amount.filter({ hasText: `(${cents} cents)` }).waitFor({ state: 'visible' });
+  const expectedAmount = amount.filter({ hasText: `(${cents} cents)` });
+  await expectedAmount.waitFor({ state: 'visible' });
 }
 
 export async function chooseMemoryFreeTurn(member: Page) {
   const mode = member.getByRole('group', { name: 'Turn memory mode', exact: true });
   const choice = { name: 'Start a fresh memory-free turn', exact: true };
-  await mode.getByRole('button', choice).click();
+  const button = mode.getByRole('button', choice);
+  await button.click();
 }
 
 async function refuseNextTurn(member: Page, prompt: string) {
   await chooseMemoryFreeTurn(member);
   await sendForReply(member, prompt);
   const notice = await findBudgetNoticeForPrompt(member, prompt);
-  await notice.getByText(/^Group monthly limit reached/u).waitFor({ state: 'visible' });
-  await notice.getByText(/Ask an admin to review the limit/u).waitFor({ state: 'visible' });
+  const reached = notice.getByText(/^Group monthly limit reached/u);
+  await reached.waitFor({ state: 'visible' });
+  const nextStep = notice.getByText(/Ask an admin to review the limit/u);
+  await nextStep.waitFor({ state: 'visible' });
 }
 
 async function showTurnCost(journey: ChargedBudgetJourney, auditId: string, width: number) {
@@ -89,9 +95,10 @@ async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssi
   step(`save monthly ceiling at ${width}px`, 'Spending must confirm the saved group ceiling.');
   const scope = 'paying_group';
   const ceilingCents = 500;
-  const starting = await saveBudgetCeiling(admin, origin, { scope, scopeId: groupId,
-    cents: ceilingCents }, beforeNavigate);
-  const previousCents = scopedBudget(starting, scope, groupId).monthCents;
+  const initialLimit: JourneyBudgetCeiling = { scope, scopeId: groupId, cents: ceilingCents };
+  const starting = await saveBudgetCeiling(admin, origin, initialLimit, beforeNavigate);
+  const startingGroup = scopedBudget(starting, scope, groupId);
+  const previousCents = startingGroup.monthCents;
   await capture(admin, 'monthly-ceiling', width);
 
   step(`open member chat at ${width}px`, 'The shared assistant session must open for the member.');
@@ -108,8 +115,14 @@ async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssi
   assert.equal(row.requesterId, journey.memberId, 'History shows the member who sent the turn');
   const { auditId, reservedCents, chargedCents } = await assertAuditMoney(admin, origin, row);
   const requestsAfterReply = await readRequestCount();
-  const observation = { reservedCents, chargedCents, spentCents, previousCents,
-    requestsBefore, requestsAfterReply };
+  const observation = {
+    reservedCents,
+    chargedCents,
+    spentCents,
+    previousCents,
+    requestsBefore,
+    requestsAfterReply,
+  };
   assertChargedTurn(observation);
   await capture(member, 'charged-reply', width);
   step(`read turn spending at ${width}px`,
@@ -120,8 +133,8 @@ async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssi
 
   step(`lower monthly ceiling at ${width}px`, 'The saved ceiling must be below recorded spending.');
   const loweredCents = spentCents - 1;
-  const lowered = await saveBudgetCeiling(admin, origin, { scope, scopeId: groupId,
-    cents: loweredCents }, beforeNavigate);
+  const loweredLimit: JourneyBudgetCeiling = { scope, scopeId: groupId, cents: loweredCents };
+  const lowered = await saveBudgetCeiling(admin, origin, loweredLimit, beforeNavigate);
   const loweredGroup = scopedBudget(lowered, scope, groupId);
   assertBelowRecordedSpending(loweredGroup.monthCents, loweredCents);
   await capture(admin, 'lowered-ceiling', width);
@@ -132,9 +145,19 @@ async function qualifyWidth(journey: ChargedBudgetJourney, assistant: BudgetAssi
   const requestsAfterRefusal = await readRequestCount();
   assertRefusedRequestCount(requestsAfterRefusal, requestsAfterReply);
   await capture(member, 'budget-refused', width);
-  return { check: `monthly spending and chat refusal at ${width}px`, result: 'PASS', width,
-    ceilingCents, reservedCents, chargedCents, spentCents, loweredCents,
-    requestsBefore, requestsAfterReply, requestsAfterRefusal };
+  return {
+    check: `monthly spending and chat refusal at ${width}px`,
+    result: 'PASS',
+    width,
+    ceilingCents,
+    reservedCents,
+    chargedCents,
+    spentCents,
+    loweredCents,
+    requestsBefore,
+    requestsAfterReply,
+    requestsAfterRefusal,
+  };
 }
 
 export async function chargedBudgetJourney(journey: ChargedBudgetJourney) {

@@ -4,8 +4,12 @@ import { once } from 'node:events';
 /** Reach the same private Kubernetes proxy from the host and the models container. */
 export async function startConnectionCustodyBridge(socketPath: string, port: number) {
   function forward(incoming: IncomingMessage, response: ServerResponse) {
-    const options = { socketPath, path: incoming.url, method: incoming.method,
-      headers: { ...incoming.headers, host: '127.0.0.1' } };
+    const options = {
+      socketPath,
+      path: incoming.url,
+      method: incoming.method,
+      headers: { ...incoming.headers, host: '127.0.0.1' },
+    };
     function receive(upstream: IncomingMessage) {
       response.writeHead(upstream.statusCode ?? 503, upstream.headers);
       upstream.pipe(response);
@@ -13,7 +17,9 @@ export async function startConnectionCustodyBridge(socketPath: string, port: num
     const outgoing = request(options, receive);
     function failed() {
       outgoing.destroy();
-      if (!response.headersSent) response.writeHead(503);
+      if (!response.headersSent) {
+        response.writeHead(503);
+      }
       response.end();
     }
     outgoing.on('error', failed);

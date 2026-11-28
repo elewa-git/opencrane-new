@@ -22,8 +22,9 @@ export async function prepareBudgetAssistant(owner: Page, members: Page[],
   await save(owner, origin, '/api/assistants', assistant);
   const assistantChange = `/api/assistants/${assistantId}/changes/${assistant.commandId}`;
   await waitForChange(owner, origin, assistantChange);
+  const chosen = { groupId, assistantId };
   for (const member of members) {
-    await openBudgetConversation(member, origin, { groupId, assistantId });
+    await openBudgetConversation(member, origin, chosen);
   }
   return { groupId, assistantId };
 }
