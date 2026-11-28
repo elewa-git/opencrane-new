@@ -1,15 +1,60 @@
 {
-  "journey": "FAIL",
-  "successfulUpdateWidths": [
-    1280,
-    390
-  ],
-  "automaticRollbackImagesAndHealth": "PASS",
-  "postRollbackSignIn1280": "FAIL: rehearsal cleanup removed the installation",
-  "postRollbackFileAndReply": "NOT RUN",
-  "postRollback390": "NOT RUN",
-  "slot": 1,
-  "released": true,
-  "productCommit": "860daa5725ab8ca09bc380d42a810148ae88d2c8",
-  "finalServiceLogCapture": "PARTIAL: earlier logs retained; final capture unavailable after cleanup"
+  "verdict": "PASS",
+  "date": "2026-11-28",
+  "fresh": true,
+  "stackId": 1,
+  "previousMainSha": "86a33d13014cb72f785cfb1f3619573a70745961",
+  "productSha": "860daa5725ab8ca09bc380d42a810148ae88d2c8",
+  "imagePins": {
+    "previousMain": {
+      "server": "k3d-ocn-registry:5000/opencrane/package@sha256:667e126d97966d916f2649dae8e60d3e034b6f30b3c7b0cf1250f38200b8500c",
+      "web": "k3d-ocn-registry:5000/opencrane/package@sha256:667e126d97966d916f2649dae8e60d3e034b6f30b3c7b0cf1250f38200b8500c",
+      "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
+      "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
+      "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
+      "computer": "k3d-ocn-registry:5000/opencrane/computer@sha256:c9c92d8376363be6c1de511d499b4ff0007c24a73d0c551345049635fcd5a132",
+      "scanner": "k3d-ocn-registry:5000/opencrane/scanner@sha256:fe7d7d882917965a8e81b93a8b73d60728898f20a9a4bc3d23b940205fe3abb6",
+      "objects": "k3d-ocn-registry:5000/opencrane/objects@sha256:adf12617265bc7ff63369b81854605493964424a90d9e713c14ae62a8cd3e31c"
+    },
+    "updated": {
+      "computer": "k3d-ocn-registry:5000/opencrane/computer@sha256:a4b84544da921f785a1b9d953893508e6c99d16b1fa0a50f81ded7b561409037",
+      "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
+      "objects": "k3d-ocn-registry:5000/opencrane/objects@sha256:adf12617265bc7ff63369b81854605493964424a90d9e713c14ae62a8cd3e31c",
+      "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
+      "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
+      "scanner": "k3d-ocn-registry:5000/opencrane/scanner@sha256:60bd25af90b99c36d7c4ea4067f84678fafb84317afc9269e0a80c5332acdbdc",
+      "server": "k3d-ocn-registry:5000/opencrane/package@sha256:4827b3422d380b89a5263786ecd8fbe7e2ee0cf053de13e75a9c38aeb010536a",
+      "web": "k3d-ocn-registry:5000/opencrane/package@sha256:4827b3422d380b89a5263786ecd8fbe7e2ee0cf053de13e75a9c38aeb010536a"
+    },
+    "automaticRollback": {
+      "computer": "k3d-ocn-registry:5000/opencrane/computer@sha256:c9c92d8376363be6c1de511d499b4ff0007c24a73d0c551345049635fcd5a132",
+      "nats": "k3d-ocn-registry:5000/opencrane/nats@sha256:301a9c3b2784494116e94ad6ad108e2b20fd9655c4e3d4b59106b031f5c59ef3",
+      "objects": "k3d-ocn-registry:5000/opencrane/objects@sha256:adf12617265bc7ff63369b81854605493964424a90d9e713c14ae62a8cd3e31c",
+      "openfga": "k3d-ocn-registry:5000/opencrane/openfga@sha256:53b782878ca260da1118ba36b6b9a7cf0cc376c4522755bafd036abed0e09796",
+      "postgres": "postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f",
+      "scanner": "k3d-ocn-registry:5000/opencrane/scanner@sha256:fe7d7d882917965a8e81b93a8b73d60728898f20a9a4bc3d23b940205fe3abb6",
+      "server": "k3d-ocn-registry:5000/opencrane/package@sha256:667e126d97966d916f2649dae8e60d3e034b6f30b3c7b0cf1250f38200b8500c",
+      "web": "k3d-ocn-registry:5000/opencrane/package@sha256:667e126d97966d916f2649dae8e60d3e034b6f30b3c7b0cf1250f38200b8500c"
+    }
+  },
+  "checks": {
+    "widths": [
+      1280,
+      390
+    ],
+    "postRollback": [
+      "sign-in",
+      "saved chat",
+      "original PDF download",
+      "new assistant reply"
+    ],
+    "automaticRollback": true
+  },
+  "hostRiskAcceptance": "accepted-dev-box-366 used for local packaged install and updates",
+  "logs": [
+    "source-run.log",
+    "upgrade-run.log",
+    "package-upgrade.log",
+    "expected-update-failure.log"
+  ]
 }
