@@ -11,7 +11,8 @@ const execute = promisify(execFile);
 async function includesPrivateProviderStartup() {
   const directory = await mkdtemp(join(tmpdir(), 'provider-build-context-'));
   const files = ['infra/package/model-settings.ts', 'infra/package/provider-secrets.mjs',
-    'infra/dev-stack/journey-guard.ts'];
+    'infra/dev-stack/journey-guard.ts', 'infra/dev-stack/model-stub.ts',
+    'infra/dev-stack/chat-links-model.ts'];
   const dockerfile = join(directory, 'Dockerfile');
   const output = join(directory, 'output');
   try {
