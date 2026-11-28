@@ -2660,7 +2660,9 @@
         "AGPL-3.0-or-later"
       ],
       "files": {
-        "/app/LICENSE": "sha256:d2bf217acea2905d58d065b0c95e57ce0ce637a82181c72cb494e258a74d8f19"
+        "/app/LICENSE": "sha256:d2bf217acea2905d58d065b0c95e57ce0ce637a82181c72cb494e258a74d8f19",
+        "/app/src/prompts/LICENSE-Codex": "sha256:d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+        "/app/src/prompts/NOTICE-Codex": "sha256:9d71575ecfd9a843fc1677b0efb08053c6ba9fd686a0de1a6f5382fd3c220915"
       },
       "primary": {
         "spdx": [
@@ -2672,7 +2674,19 @@
           "/app/LICENSE"
         ]
       },
-      "bundled": []
+      "bundled": [
+        {
+          "component": "OpenAI Codex base prompt",
+          "spdx": [
+            "Apache-2.0"
+          ],
+          "source": "/app/src/prompts/LICENSE-Codex",
+          "sources": [
+            "/app/src/prompts/NOTICE-Codex"
+          ],
+          "reason": "The adapted OpenAI Codex base prompt uses Apache-2.0. soul.md links the exact upstream source revision. Retain the upstream licence and notice, including its Ratatui attribution; no Ratatui code is copied with the prompt."
+        }
+      ]
     },
     "npm:ws@8.22.0": {
       "detected": [

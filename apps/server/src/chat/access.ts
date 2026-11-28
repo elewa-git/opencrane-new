@@ -13,6 +13,7 @@ import type { RetainedCall } from '@opencrane/models';
 import type { createRoutineWake } from './routine-wake.ts';
 
 export interface ChatOptions {
+  readApprovedPersona?: (memberId: string, assistantId: string) => Promise<string | undefined>;
   silo: string;
   store: EventStore;
   db: Query;

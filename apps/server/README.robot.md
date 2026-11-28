@@ -1,5 +1,16 @@
 # Server
 
+## Approved assistant identity
+
+The chat bridge receives `readApprovedPersona` from the configured onboarding
+service. It reads the approved revision from encrypted personal history and checks
+the assistant owner and current membership. Only personal Memory-free turn frames
+carry `approvedPersona`. Every frame names its saved `assistantKind` so the computer
+can choose its personal or shared instructions. The persona is bounded by the
+existing 4 KiB `memoryTextSchema`; it supplies identity, not Memory access or tools.
+Persona history loads before the turn-start access deadline. Private Memory turns,
+shared turns, routine admission and the deployment qualification gate stay unchanged.
+
 ## Session defaults for the browser
 
 Authorised conversation list replies keep their existing fields. The browser derives

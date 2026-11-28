@@ -1,0 +1,44 @@
+{
+  "diagnosticCommit": "9320df924ca88c1acf40c754ce2b08922dc7ff81",
+  "baselineCommit": "d592e9890742a40abf69d61f81a1c4bcb4297952",
+  "productCommit": "3a9e760e4fbead2cb1b49dae36ea2c18157e6ecd",
+  "tests": {
+    "branchHttpWrongAccount": "FAIL: expected 200, received 403",
+    "mainHttpWrongAccount": "FAIL: expected 200, received 403",
+    "branchHttpJoinedAccountFirstRun": {
+      "result": "PASS",
+      "tests": 2
+    },
+    "branchHttpJoinedAccountSecondRun": {
+      "result": "PASS",
+      "tests": 2
+    },
+    "mainHttpJoinedAccount": {
+      "result": "PASS",
+      "tests": 2
+    },
+    "branchWebFirstRun": {
+      "result": "PASS",
+      "tests": 11
+    },
+    "branchWebSecondRun": {
+      "result": "PASS",
+      "tests": 11
+    },
+    "mainWeb": {
+      "result": "PASS",
+      "tests": 11
+    }
+  },
+  "gates": {
+    "typecheck": "PASS",
+    "checkEvents": "PASS: 175 event types",
+    "knip": "PASS: 2 configuration hints",
+    "changelogLint": "PASS",
+    "changedFileEslint": "PASS",
+    "markdownLint": "PASS"
+  },
+  "preservedServiceLogLines": 2964,
+  "freshPackagedRerun": "NOT RUN: stopped after reproducing the same state on main",
+  "stackClaimed": false
+}

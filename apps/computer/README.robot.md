@@ -733,6 +733,10 @@ Installed notices and apt matches form `.state/licence-evidence.json`;
 `.state/licences.json` includes the resulting decisions and archive evidence.
 The inventory also includes OpenCrane code and its inherited native launcher
 under the repository AGPL-3.0-or-later notice, copied into `/app/LICENSE`.
+The same application record assigns exact hashes for `LICENSE-Codex` and
+`NOTICE-Codex` to the adapted OpenAI Codex base prompt under Apache-2.0.
+The source revision is linked in `src/prompts/soul.md`. Both upstream notices
+are retained; an added or changed notice still fails the gate.
 Codex's native npm bundle includes checked Apache, BSD, MIT, Zlib and LGPL
 notices. The scanner's previously unlicensed binary is Node, not Codex.
 
@@ -792,6 +796,43 @@ Its Windows-only Visual C++ paragraph does not describe this Linux bundle.
 The bridge derives session settings in `src/codex-config.ts` with
 `sessionConfiguration` from `@opencrane/events/session-configuration`. It uses
 the same shared settings as server admission and the browser defaults.
+
+### Assistant instructions
+
+`src/prompts/` holds editable Markdown for the soul, approved persona, personal,
+shared and routine roles, and the tool-enabled and restricted environments.
+`assistant-brief.ts` writes a soul for each personal Memory-free session beneath
+`/run/codex/briefs/`, outside the writable workspace and persistent disk. The
+conversation id and soul content choose hashed filenames. Files are mode 0600,
+inside mode 0700 folders. Codex receives the path as `model_instructions_file`.
+Its normal Memory-free thread history may retain those identity instructions.
+The soul includes adapted Apache-2.0 Codex guidance and its notice and licence.
+
+`computerSessionInstructions` chooses `developer_instructions` from the admitted
+assistant kind, sharing class and routine sender attempt. It lists admitted tool
+names and derives local-tool availability from the existing session settings.
+`personality` is `none`; `project_doc_max_bytes` stays zero. AGENTS.md is not used.
+An identity or tool-list change uses the existing unload and resume path, because
+Codex ignores changed configuration on an already loaded thread. Other chats stay loaded.
+Restricted turns keep their existing isolation, tool refusals and Memory admission.
+They receive neither the new instructions nor a personal onboarding persona.
+The routine templates enable no routine.
+
+Network access and desktop launching remain unavailable to shell commands. The
+instructions allow attempts, installations and any deliverable format, but explain
+these current tool limits and ask for an honest failure report and an alternative.
+Both model retry limits remain zero: the real gateway fixture in
+`libs/models/test/chat-retry-cost.test.ts` sends an identical ordinary chat request
+twice and records two dispatches and two one-cent settlements. Automatic stream
+or request replay could therefore charge twice.
+
+`assistant-native.test.ts` runs pinned Codex with a stand-in model in a disposable
+computer, using the image's installed source without a replacement source mount.
+It checks the model's instructions and developer/system messages for the persona,
+network limits and file-sharing rule. A real shell call completes. An updated
+persona replaces the old soul after resuming the same chat, including after the
+computer restarts. `BRIEF_CAPTURE_DIRECTORY` can save the upstream request bodies
+outside the repository. `COMPUTER_TEST_IMAGE` selects the exact image under test.
 
 - The root supervisor accepts fixed native exec-server and code-mode host launches
   over separate private Unix sockets in root-owned `/run/executor` (0750, group
@@ -957,7 +998,7 @@ prepared turns retry; executed turns fail. Private context is rebuilt by the
 server after admission and never stored on the computer. Memory-free turns do
 not receive it and cannot resume a former private thread.
 
-Both configs switch shared prompt files and skill instructions off. Personal
+Both configs switch project documents and skill instructions off. Personal
 and memory-free tools otherwise retain their existing persistent home and work.
 No fallback is enabled without a failing pinned-image check. The live canary probe
 and its local provider are `test/private-turns.mjs` and `test/private-provider.mjs`.

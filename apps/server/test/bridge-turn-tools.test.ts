@@ -165,6 +165,39 @@ function bridgeFixture(options: {
   return { process, sent, reads, rows, link, sentTurns, watchOptions, rowsBySubject };
 }
 
+async function deliversOnlyPersonalIdentity(kind: 'personal' | 'team', memoryFree: boolean) {
+  const fixture = bridgeFixture({ kind, memoryFree });
+  function readApprovedPersona() {
+    return Promise.resolve('Your name is Willow.');
+  }
+  const read = vi.fn(readApprovedPersona);
+  fixture.watchOptions.readApprovedPersona = read;
+  try {
+    await initialQualificationFixture();
+    await fixture.process();
+    expect(fixture.sent).toHaveLength(1);
+    const turn = reportObject(fixture.sent[0]!);
+    expect(turn['assistantKind']).toBe(kind);
+    expect(turn['executionMode']).toBe(memoryFree ? 'memory_free' : 'restricted');
+    if (kind === 'personal' && memoryFree) {
+      expect(turn['approvedPersona']).toBe('Your name is Willow.');
+      expect(read).toHaveBeenCalledWith('person', 'assistant');
+    } else {
+      expect(turn).not.toHaveProperty('approvedPersona');
+      expect(read).not.toHaveBeenCalled();
+    }
+  } finally {
+    vi.restoreAllMocks();
+  }
+}
+function reportObject(value: string) {
+  const schema = z.record(z.string(), z.unknown());
+  const input: unknown = JSON.parse(value);
+  return schema.parse(input);
+}
+it.each([['personal', true], ['personal', false], ['team', true], ['team', false]] as const)(
+  'delivers only the owner personal persona: kind=%s, Memory-free=%s', deliversOnlyPersonalIdentity);
+
 it('sends a waiting turn without tools when OpenFGA cannot check a grant', async () => {
   const fixture = bridgeFixture({ binding: true });
   use.mockRejectedValueOnce(new Error('OpenFGA offline'));

@@ -10,6 +10,7 @@ import { bridgeChannel } from '../../computer/test/server.ts';
 import { reportJournal, type BridgeReport } from '../../computer/test/server.ts';
 import type { PrivateSession, TurnDriver, Turn } from '../../computer/test/server.ts';
 import { parseTurn } from '../../computer/test/server.ts';
+import { computerSessionInstructions } from '../../computer/test/server.ts';
 import { PRIVATE_TURN_NOTE, CONTEXT_PREAMBLE, privateTurnInput } from '../../computer/test/server.ts';
 
 function until(check: () => boolean | Promise<boolean>) {
@@ -486,7 +487,9 @@ const resumesOnlyEarlierMemoryFreeWorkAfterA = async () => {
     expect(test.persistentRpc).toHaveBeenCalledWith('thread/unsubscribe', {
       threadId: 'persistent-thread' });
     expect(test.persistentRpc).toHaveBeenCalledWith('thread/resume', {
-      threadId: 'persistent-thread', config: { mcp_servers: {} } });
+      threadId: 'persistent-thread', config: {
+        ...computerSessionInstructions({ executionMode: 'memory_free' }), mcp_servers: {},
+      } });
   } finally {
     await test.close();
   }

@@ -1,6 +1,7 @@
 import { recordIdPattern } from '@opencrane/events/ids';
 import { modelForTask } from '@opencrane/models/routing';
 import { record } from './http.ts';
+import { memoryTextSchema } from '@opencrane/events/memory-text';
 
 export interface ToolServer {
   key: string;
@@ -12,6 +13,8 @@ export interface ToolServer {
 }
 
 export interface Turn {
+  assistantKind?: 'personal' | 'team' | undefined;
+  approvedPersona?: string | undefined;
   executionMode: 'restricted' | 'memory_free';
   sharingClass?: 'shared_only';
   messageId?: string;
@@ -73,10 +76,29 @@ export function parseTurn(value: Record<string, unknown>): Turn {
     omittedAttachments,
   };
   readRoutineTurn(value, turn);
+  readAssistantIdentity(value, turn);
   if (sharingClass) turn.sharingClass = sharingClass;
   if (typeof requesterId === 'string') turn.requesterId = requesterId;
   if (value['tools'] !== undefined) turn.tools = parseTools(value['tools']);
   return turn;
+}
+
+function readAssistantIdentity(value: Record<string, unknown>, turn: Turn) {
+  const kind = value['assistantKind'];
+  if (kind !== undefined && kind !== 'personal' && kind !== 'team') {
+    throw new Error('Invalid assistant kind');
+  }
+  if (kind) {
+    turn.assistantKind = kind;
+  }
+  if (value['approvedPersona'] !== undefined) {
+    // Keep personal identity off shared, routine and private Memory turns.
+    // Require restricted mode for shared and routine input before reaching this check.
+    if (kind !== 'personal' || turn.executionMode !== 'memory_free') {
+      throw new Error('Persona not allowed');
+    }
+    turn.approvedPersona = memoryTextSchema.parse(value['approvedPersona']);
+  }
 }
 
 function readRoutineTurn(value: Record<string, unknown>, turn: Turn) {

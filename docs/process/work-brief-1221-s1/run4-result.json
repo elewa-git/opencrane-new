@@ -1,0 +1,63 @@
+{
+  "verdict": "PASS",
+  "executionModes": [
+    "default",
+    "default",
+    "default",
+    "default",
+    "default"
+  ],
+  "steps": {
+    "welcome": "PASS",
+    "preChatComputer": "PASS",
+    "identity": "PASS",
+    "capabilities": "PASS with explicit follow-up; initial unprompted answer omitted installs and browser control",
+    "deck": "PASS",
+    "deckAfterReload": "PASS",
+    "fetch": "PASS",
+    "memoryOff": "PASS: personal defaults on fresh install; no Memory qualification or restricted turns",
+    "deckAfterSecondReload": "PASS"
+  },
+  "computer": {
+    "pin": "k3d-ocn-registry:5000/opencrane/computer@sha256:c9c92d8376363be6c1de511d499b4ff0007c24a73d0c551345049635fcd5a132",
+    "checkedPods": 2,
+    "assistantBriefExists": true
+  },
+  "intro": "Hi Sam, I\u2019m Aster, your personal assistant. I help with drafts, shared files and practical research, keeping things warm, concise and clear.\n\nI\u2019ll ask when something is unclear, cite sources where useful, and suggest next steps\u2014then wait for your go-ahead. I can work with files you share, but I can\u2019t reach the internet from my computer yet.",
+  "capabilities": "I can help you:\n\nDraft and polish emails, reports, briefs and meeting notes.\nTurn rough notes into plans, actions and checklists.\nReview uploaded documents and analyse spreadsheets.\nCreate downloadable documents, spreadsheets and other files.\nResearch and summarise material you provide, with citations where useful.\n\nI work with files in my own sandbox, not directly in your shared drives or apps. I cannot reach the internet from my computer yet. Web pages, downloads and online installs fail.\n\nShare a file or tell me what you\u2019re working on, and I\u2019ll suggest a useful next step.",
+  "deck": "I\u2019ll make a short deck introducing Aster, what I can help with, and how we\u2019ll work together.\n\n Download **Meet Aster**  \u2014 a short, four-slide introduction to what I do and how we\u2019ll work together.",
+  "deckCard": "PPTX\nMeet_Aster.pptx\nAg\nCreated by assistant\n 03:29\nOpen\nFiles\nDownload",
+  "fetch": "I tried fetching https://example.com, but it failed with \u201cTemporary failure in name resolution\u201d, so I couldn\u2019t inspect the page.\n\nYou can upload a saved copy or paste its contents here, and I\u2019ll summarise it.",
+  "capabilities-followup": "Share files here: Yes. I can create downloadable files and link them in this chat\u2014up to 16 files and 20 MiB per turn.\nInstall software: Allowed, but limited. I can install software inside my sandbox if the necessary packages are available. Online installs currently fail. I\u2019ll tell you what I install.\nAccess the internet: Not currently. I cannot reach the internet from my computer yet. Web pages, downloads and online installs fail. My attempt to fetch example.com failed.\nControl a browser: No. This session has no browser-control tool, built-in web search or desktop launcher.\n\nI can work with files you upload, but I don\u2019t have direct access to your computer, shared drives or apps.",
+  "sourceSha": "b23192dad1cf71bd64cb62fe12906407fd832390",
+  "approvals": {
+    "application": 46101000479,
+    "scanner": 46101002974
+  },
+  "spending": {
+    "settledCents": 17,
+    "reservations": 15,
+    "settlements": 15,
+    "unknown": 0,
+    "heldCents": 0
+  },
+  "delivery": {
+    "historyStatus": 200,
+    "turnStartModes": [
+      "omitted",
+      "omitted",
+      "omitted",
+      "omitted",
+      "omitted"
+    ],
+    "downloadStatus": 200,
+    "deckBytes": 33803
+  },
+  "deckInspection": {
+    "slideCount": 4,
+    "namesAster": true,
+    "bytes": 33803
+  },
+  "slot": "1",
+  "fresh": true
+}

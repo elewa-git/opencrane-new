@@ -1,330 +1,108 @@
 {
-  "date": "2026-10-22T13:33:05.055296+00:00",
-  "status": "PARTIAL: image release, lifecycle and stand-in proof passed; the broader fresh startup journey failed at typed integration rows",
-  "sourceCommit": "4f97ddbf248f0c75097c78ff5cd7208a00d026f8",
-  "mainCommit": "560c4fab27e085720a018c6e877b3729b933df19",
-  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
-  "releaseDigest": "sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
-  "qualificationDigest": "sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
-  "releaseTag": "k3d-ocn-registry:5000/opencrane/computer:p2-1",
-  "qualificationTag": "k3d-ocn-registry:5000/opencrane/computer:qualification",
-  "uncompressedBytes": 2913455431,
-  "environment": "Existing k3d-ocn with gVisor; claimed secondary slot 1; throwaway PostgreSQL 17.6; nice -n 10.",
-  "cause": {
-    "oldImage": "The previous pin lacks the explicit terminal reasons already present in the checkout.",
-    "firstBuild": "An added private-turn assertion wrongly required Stop to mean interruption; that turn reported model_error. The release tag did not move.",
-    "testCorrection": "Keep the existing private checks and require stop_interrupted after a separate personal reply starts streaming. This fails on the old pin and passes on the new image."
-  },
+  "date": "2026-11-28",
+  "status": "PARTIAL: rebuilt image and captured model requests passed; fresh real-model journey requires an operator run",
+  "sourceCommit": "197ca0ceeb07ee8759c0da8a9ce332305e07a753",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:c9c92d8376363be6c1de511d499b4ff0007c24a73d0c551345049635fcd5a132",
+  "releaseDigest": "sha256:c9c92d8376363be6c1de511d499b4ff0007c24a73d0c551345049635fcd5a132",
+  "uncompressedBytes": 2925868951,
+  "codexVersion": "0.159.2",
+  "previousImage": "k3d-ocn-registry:5000/opencrane/computer@sha256:23de7279a36001b3aba97de28b64c01bdff3c7cad8770d7aebb2c3542c58b271",
   "checks": {
     "build": {
-      "check": "build",
-      "result": "FAIL",
-      "exitCode": 1,
-      "durationSeconds": 464.29
-    },
-    "personal-stop-red": {
-      "check": "personal-stop-red",
-      "result": "FAIL",
-      "exitCode": 1,
-      "durationSeconds": 269.22
-    },
-    "build-final": {
-      "check": "build-final",
       "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 622.89
+      "record": "computer-build.log"
     },
-    "private-second": {
-      "check": "private-second",
+    "contents": {
       "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 495.3
+      "runs": 2
     },
-    "typecheck": {
-      "check": "typecheck",
+    "licences": {
       "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 381.66
+      "runs": 2,
+      "acceptedComponents": 394,
+      "installedNotices": 104
     },
-    "security-rules": {
-      "check": "security-rules",
+    "modelInstructions": {
       "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 5.04
+      "runs": 2,
+      "detail": "Plain internet limit reaches new, loaded, changed-persona and saved threads after restart; real shell calls complete."
     },
-    "credentials": {
-      "check": "credentials",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 107.76
+    "freshPackagedJourney": {
+      "result": "NOT RUN",
+      "reason": "Fleet tasks require the stand-in model; the real-model journey requires an operator run."
     },
-    "events": {
-      "check": "events",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 0.8
+    "realModel": {
+      "result": "NOT RUN",
+      "reason": "Paid-provider journeys are refused for this fleet task."
     },
-    "knip": {
-      "check": "knip",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 8.72
-    },
-    "changelog": {
-      "check": "changelog",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 0.63
-    },
-    "lifecycle": {
-      "check": "lifecycle",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 796.08
-    },
-    "lint-first": {
-      "check": "lint",
-      "result": "FAIL",
-      "exitCode": 134,
-      "durationSeconds": 616.75
-    },
-    "lint-spacing": {
-      "check": "lint",
-      "result": "FAIL",
-      "exitCode": 1,
-      "durationSeconds": 548.3
-    },
-    "lint": {
-      "check": "lint-final",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 619.26
-    },
-    "package-licences": {
-      "check": "package-licences",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 0.66
-    },
-    "package-licence-tests": {
-      "check": "package-licence-tests",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 1.0
-    },
-    "new-up-first": {
-      "check": "new-up",
-      "result": "FAIL",
-      "exitCode": 1,
-      "durationSeconds": 76.39
-    },
-    "new-up": {
-      "check": "new-up",
-      "result": "FAIL",
-      "exitCode": 1,
-      "durationSeconds": 1035.89
-    },
-    "browser": {
-      "check": "browser",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 152.85
-    },
-    "new-down": {
-      "check": "new-down",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 62.79
-    },
-    "pg-cleanup": {
-      "check": "pg-cleanup",
-      "result": "PASS",
-      "exitCode": 0,
-      "durationSeconds": 0.56
+    "browser1280And390": {
+      "result": "NOT RUN",
+      "reason": "No fresh real-model package was started."
     }
   },
-  "imageChecks": {
-    "date": "2026-10-22T11:25:09.748Z",
-    "source": "4f97ddbf248f0c75097c78ff5cd7208a00d026f8",
-    "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
-    "receipts": [
-      {
-        "name": "Pod ready",
-        "result": "PASS",
-        "detail": "6128 ms from claim apply, fresh Pod; local registry/layers may be cached"
-      },
-      {
-        "name": "runtime",
-        "result": "PASS",
-        "detail": "CRI confirms gVisor, 512 MiB limit"
-      },
-      {
-        "name": "health",
-        "result": "PASS",
-        "detail": "ready endpoint and ready report after Codex initialisation"
-      },
-      {
-        "name": "storage",
-        "result": "PASS",
-        "detail": "per-UID persistent directory ownership/modes and separate memory-backed credential mounts"
-      },
-      {
-        "name": "proxy grants",
-        "result": "PASS",
-        "detail": "dropped thread, overlong grant and cross-thread token refused; unauthenticated caller refused below"
-      },
-      {
-        "name": "executor isolation",
-        "result": "PASS",
-        "detail": "real custom exec host and native exec-server: UID 1001, no_new_privs, clean host environment and private filesystem; shell seccomp EPERM for proxy/gateway/IPv6 and process tokens denied"
-      },
-      {
-        "name": "desktop",
-        "result": "PASS",
-        "detail": "UID 1002 + no_new_privs, private home denied; sandbox-enabled Playwright launches real Chromium and renders text"
-      },
-      {
-        "name": "documents",
-        "result": "PASS",
-        "detail": "MarkItDown converts generated sample PDF and Office DOCX/XLSX/PPTX without network"
-      },
-      {
-        "name": "network policy",
-        "result": "PASS",
-        "detail": "gateway-only TCP 3000 egress and server-only health ingress; removed-policy positive control"
-      },
-      {
-        "name": "fresh image checks",
-        "result": "PASS",
-        "detail": "all isolation, proxy, desktop, document and network assertions passed"
-      },
-      {
-        "name": "hostile PVC symlink",
-        "result": "PASS",
-        "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
-      },
-      {
-        "name": "hostile PVC fifo",
-        "result": "PASS",
-        "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
-      },
-      {
-        "name": "hostile PVC dangling",
-        "result": "PASS",
-        "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
-      },
-      {
-        "name": "PVC resume",
-        "result": "PASS",
-        "detail": "same PVC, new Pod after native suspension; retained file and safely repaired 0777 volume root"
-      },
-      {
-        "name": "runtime",
-        "result": "PASS",
-        "detail": "CRI confirms gVisor, 512 MiB limit"
-      },
-      {
-        "name": "health",
-        "result": "PASS",
-        "detail": "ready endpoint and ready report after Codex initialisation"
-      },
-      {
-        "name": "storage",
-        "result": "PASS",
-        "detail": "per-UID persistent directory ownership/modes and separate memory-backed credential mounts"
-      },
-      {
-        "name": "proxy grants",
-        "result": "PASS",
-        "detail": "dropped thread, overlong grant and cross-thread token refused; unauthenticated caller refused below"
-      },
-      {
-        "name": "executor isolation",
-        "result": "PASS",
-        "detail": "real custom exec host and native exec-server: UID 1001, no_new_privs, clean host environment and private filesystem; shell seccomp EPERM for proxy/gateway/IPv6 and process tokens denied"
-      },
-      {
-        "name": "desktop",
-        "result": "PASS",
-        "detail": "UID 1002 + no_new_privs, private home denied; sandbox-enabled Playwright launches real Chromium and renders text"
-      },
-      {
-        "name": "documents",
-        "result": "PASS",
-        "detail": "MarkItDown converts generated sample PDF and Office DOCX/XLSX/PPTX without network"
-      },
-      {
-        "name": "network policy",
-        "result": "PASS",
-        "detail": "gateway-only TCP 3000 egress and server-only health ingress; removed-policy positive control"
-      },
-      {
-        "name": "resumed image checks",
-        "result": "PASS",
-        "detail": "all isolation, proxy, desktop, document and network assertions passed"
-      },
-      {
-        "name": "cleanup",
-        "result": "PASS",
-        "detail": "p21-computer deleted"
-      }
-    ]
-  },
-  "privateTurns": {
-    "result": "PASS",
-    "checks": 84,
-    "evidence": "../../docs/process/demo-kit/image-refresh-private.json.gz",
-    "memoryAdmission": "DISABLED"
-  },
-  "licences": {
-    "result": "PASS",
-    "packages": 385,
-    "installedNotices": 92,
-    "inventory": "licences.json",
-    "reviewedMapping": "reviewed-licences.json",
-    "sbom": "sbom.spdx.json.gz",
-    "sbomSha256": "1c4c548b054a3ba4ba0f364ecd81d9097a066309ce73ba8edae1ef0fe4ec3909"
-  },
-  "logs": "/tmp/demo-kit-image-refresh",
-  "notRun": [
-    "Full root suite (excluded by the task)",
-    "Real model calls",
-    "Owner-stack update or computer restart",
-    "Managed-cluster qualification",
-    "Approval journey (skipped by the existing fresh-stack runner)"
-  ],
-  "security": {
-    "result": "PASS",
-    "tests": 9,
-    "bridgeArguments": "--disable-sigusr1",
-    "bridgeNodeOptions": "absent",
-    "inheritedInspectorOptions": "ignored",
-    "publicCredentialReplacement": "Refused; no replacement value in the response",
-    "credentialDelivery": "Authenticated root Pod exec; no runtime protection changed"
-  },
-  "stopQualification": {
-    "result": "PASS",
-    "stopMilliseconds": [
-      1109,
-      2545
-    ],
-    "viewportWidths": [
-      390,
-      1280
-    ],
-    "partialReplyAfterReload": "Hello ",
-    "reason": "stop_interrupted",
-    "failureLabelsOnStoppedReply": 0,
-    "providerFailureReason": "model_error",
-    "providerFailureShownBeforeAndAfterReload": true,
-    "runningPodDigestVerified": true,
-    "evidence": "../../docs/process/demo-kit/image-refresh.json.gz"
-  },
-  "cleanup": {
-    "result": "PASS",
-    "slot": 1,
-    "slotReleased": true,
-    "throwawayPostgresAndVolumeRemoved": true,
-    "ownerStackUntouched": true
+  "additionalSpendCents": 0,
+  "sourceFiles": {
+    "apps/computer/src/approval-holds.ts": "571676fedac953a4a91e79c0428475ed12123f805f92e4749835a84485027177",
+    "apps/computer/src/artifacts.py": "9778aa50a589635352dd466329b8d22e38243f819e2c1a624d944bf0f2300698",
+    "apps/computer/src/artifacts.ts": "9d919bd4bda6a204fd8e5dbe5da3c8606f786c4d122c6bf6f2857c62a3c58599",
+    "apps/computer/src/assistant-brief.ts": "ee0cccff8d0d3b1d28f488cc45ba56603190a53ab6cd915b4332036bbbf623e6",
+    "apps/computer/src/bridge-gate-authority.ts": "e9b09e28edb1c818a78fcd5712889e9fa63c74c36e8b645e5a985d095a1cf321",
+    "apps/computer/src/bridge-gate.ts": "4b218703874b49b97a9cec0a50731237c1f47daea0f73cd267498a6ee75d00a6",
+    "apps/computer/src/bridge-socket.ts": "968f3f1b17e538fb20285a236c230632906cd81e1680b9bce32bfeb02c33973f",
+    "apps/computer/src/bridge.ts": "9a4a83347ef66af95515ecc8db7d050e02421704191268259a2cfa6629d7313a",
+    "apps/computer/src/channel.ts": "07bf5ae6db120382d81666811175eda3a04c56f3dfa7e299151ddd690ae4cc57",
+    "apps/computer/src/codex-config.ts": "6f2286e1ba4280f9ed9e4e832ec7a8dd029484afbea3a15c97e7dbcc59a2a3de",
+    "apps/computer/src/codex-connection.ts": "b3ad1d74cabc65151eacac402f42a71f779287b1a017ae50e37e0774c6a9f330",
+    "apps/computer/src/command-label.ts": "2da743a742314877328f3bf3973437d5e7a69e6e461c19ce83f9e54190b548dd",
+    "apps/computer/src/command-redaction.ts": "f3d448e9f84f33acf3cf2840bcd07dd8b59e866fad572b4e41870be026df1f37",
+    "apps/computer/src/credential-identity.ts": "12bdae6b9c32b4413cfaa69fbeaeee9e2293614b66989b34d210974b9e3f5229",
+    "apps/computer/src/desktop.ts": "2a216714b7c7dcb187d576cc51ed3ea22bd2563bb022ce429d1a5c5980efb253",
+    "apps/computer/src/display-lock.ts": "b2294deb1dd34bf156b9fddaf3dbf2d9c72969a144f55cd05bd288264302dbd2",
+    "apps/computer/src/entrypoint.ts": "a67d0ed93fe72c18a30c1e6b9d6951b952c7eb9fe6b955e44551927fe45f9b91",
+    "apps/computer/src/execution-inventory.ts": "38f94500489e0b04c6f3c07e65bdbef0def10e69bffb081feea03e00fea1cdd4",
+    "apps/computer/src/file-rules.ts": "a001c5c530f8826f55cbe5150dbece617a508dbb5e5977f6aa658aa50794e159",
+    "apps/computer/src/files.ts": "e484ca0798cc2ba997e1d2cd228f86bc0c575f58b39afbea4137b90bf98afe42",
+    "apps/computer/src/http.ts": "00651afc84257edbd9cb5a784ec2c67a6e1919112a66c47ec7925f7e64da86e6",
+    "apps/computer/src/install-credential.ts": "f1f3fb355116e86ce89f2ab5a590da3257d7b214af76c3e7f491e6130d85db6e",
+    "apps/computer/src/item-reports.ts": "efcb55af31f8f77e99ba2b7f703d162029c1e12dfd612a8d142b6ea5c7de4020",
+    "apps/computer/src/mcp-proxy.ts": "00cf55c4e8afee0ebbb63178b52237fe6e4233e41b41a22fe6a9806c8b603192",
+    "apps/computer/src/native-requests.ts": "7d298b4fdc948175a06f226003033b21be7d5940939c4c607991092f30aadda8",
+    "apps/computer/src/private-codex.ts": "97f8dfee3ca713a5b759d62c9d0adfa4a99eff78c383a658b8f3726ec63b62c9",
+    "apps/computer/src/private-launch-context.ts": "f5a0112514410397cddc4468fbabeed13c4499018f7d1faf74b2e900ddd9c32b",
+    "apps/computer/src/private-launch.ts": "64b22d921d3df32db847b34a259e7f3ba09cf839c9e4f1548a3812d73dd58167",
+    "apps/computer/src/private-recall.ts": "5abf877f8b4a72d9b2266d6c08cc2d166de9a71f703ba1b706f49e88dfe632f9",
+    "apps/computer/src/private-session.ts": "4bd15db1ad4a28c1a9ae8531530d30d1ca28aec87813aceca2be0462b6624918",
+    "apps/computer/src/private-supervisor.ts": "02b64ba65c55c4a762f4e083119785476ea13e0980ccd6bc27b0d135d1cbd0b7",
+    "apps/computer/src/prompts/LICENSE-Codex": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+    "apps/computer/src/prompts/NOTICE-Codex": "9d71575ecfd9a843fc1677b0efb08053c6ba9fd686a0de1a6f5382fd3c220915",
+    "apps/computer/src/prompts/README.md": "d49752a04bc433a401f54fb48aa591a99bb228de16cd19d8677f02653ff84948",
+    "apps/computer/src/prompts/README.robot.md": "7d1a9ca663d142e835c6169baf6b2d7710f3e275e2e75a4bc242e2af83f44813",
+    "apps/computer/src/prompts/agent-personal.md": "ba9e7966299479b517f457f9eb7fd8f98e33f0d3686d8e68d154ceab2aa2e10b",
+    "apps/computer/src/prompts/agent-routine.md": "a133f848f378e9ef64d668c6ff7af36b880ec298438ab144af51401a7c501bf4",
+    "apps/computer/src/prompts/agent-shared.md": "99c0e239c83767f68ac83150db40d6e2167c00e786f4fe1338fea8db2b8edb2b",
+    "apps/computer/src/prompts/environment-private.md": "7caab3864bcaaa5fba9e2176dd907dee65df59d2ee52c831d6ccd596e5345bb6",
+    "apps/computer/src/prompts/environment-tools.md": "b63b9904fbe4c1df56167c8cbd2bf6b6b433482d884d7645a4a309a4250662a7",
+    "apps/computer/src/prompts/persona.md": "d12cc10dcf04a4b99f4e6e49359ffdafd36905f3eded450ac12ff4ee9c37f506",
+    "apps/computer/src/prompts/soul.md": "7e28fefb947d1798c11e2124786c5b8db8f0ba83bd976bda89d000c668b8506f",
+    "apps/computer/src/proxy-control.ts": "8d4319bbe33a83c40b83899090e45742c3fe9734979b37f0c37b9bd55dd7ac9f",
+    "apps/computer/src/proxy-requests.ts": "daaedd600d23e3e0a9a8b0072a57b64d652f1097e66613a14d319e2d2139e11b",
+    "apps/computer/src/proxy.ts": "fe506a044cbb90af61eb26dca47ce573f2f5b1cb10f3a3caee3c46a847936292",
+    "apps/computer/src/read-attachment.py": "ac3ec8f5fdfc520780b45c95b64647419f8977727d44fd8303022dfb29b7ab6b",
+    "apps/computer/src/receive-file.py": "53748c002363fa58390b8447105ee7e42aae4add81a77e03b1ef883fe26533bf",
+    "apps/computer/src/report-journal.ts": "dcea477481ede5e4421a59398354570f0af1230a31c50383af096aa16e2a6532",
+    "apps/computer/src/routine-threads.ts": "a45095353113990b6a7ebd5dadc5edf21bd93e7cb8226d7601f4c6fc95736d4f",
+    "apps/computer/src/stop-executor.ts": "52c9a60ef4727dcb3f6597983d3136842a1c3e0bf42c8c2ce3344a393757c6ac",
+    "apps/computer/src/stop-processes.py": "9dc843c3972db6ae0a59801cb1d93873bd358a18fb56fbf6451e9f50c48353a9",
+    "apps/computer/src/supervisor-stop.ts": "3f496049479c866ede1185cb7020891fd46e89c79042c04eb0e8e84558c9d27f",
+    "apps/computer/src/thread-loads.ts": "4b962fdd52e2e7068410ed2f3ac2e9f3cede8b041c8dc0ce3ed00340c437a3d3",
+    "apps/computer/src/turn-frame.ts": "b2b40d50c5c5ea0f9a4fea83d9b0e73724e0db8b8683b0dbe667a2c97254d4c5",
+    "apps/computer/src/turn-input.ts": "73749a76984d6f3342724f69992b846546c78196fe6e5f7b9da6d93ae3f22a07",
+    "apps/computer/src/turn-runner.ts": "56dabff8be869f6d59d6271104d6c9cf5b5866779aa30702a14771f107b0f1a6",
+    "apps/computer/src/turn-stop.ts": "9a3a79d89ca95ea60f401e81e9a6406ff2c318f06d5b17bc740ae4cd4e2ae4e2",
+    "apps/computer/src/worker-dispatch.ts": "373e34c16c3813ac3a525a4cffd7b7890f7e9ffcdba6b503780bb61ee14e0f77",
+    "apps/computer/src/worker-executor.ts": "a978554da49b9c6612dc5c7a020874dff4ac8b4f9bbecae5a1d3cfdbc344b9f9",
+    "apps/computer/src/worker-input.ts": "66a9fd041bf59ada5af07b52d2cdf9d749c1a1f4947096a23e1f4716e864d150",
+    "apps/computer/src/worker-registrations.ts": "d3152f0cf236830db5398b5245d707303c6e99c7ecef50cd93fe86e3440dbc3d",
+    "apps/computer/src/worker-request.ts": "cc79b914316b6ecc59110baaea4258ed1bd4a40c3be643f877fa5b270a8f428f"
   }
 }

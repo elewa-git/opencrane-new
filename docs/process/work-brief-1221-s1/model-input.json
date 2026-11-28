@@ -1,0 +1,87 @@
+{
+  "verdict": "PARTIAL",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:23de7279a36001b3aba97de28b64c01bdff3c7cad8770d7aebb2c3542c58b271",
+  "sourceCommit": "dfa486dd86ef5a278a847bd55e4c67cf22f3c702",
+  "codexVersion": "0.159.2",
+  "computerSourceFileCount": 62,
+  "requests": [
+    {
+      "file": "old-package-upstream.jsonl",
+      "requestCount": 2,
+      "sha256": "5aa1d68426e2047c979bcdc84eddaa655d4745b17ea8a8330dd1abdc1130677f",
+      "topLevelInstructions": false,
+      "approvedIdentity": false,
+      "codingIdentity": true,
+      "personalRole": false,
+      "socketRestriction": false,
+      "artifactsRule": false
+    },
+    {
+      "file": "new-thread.jsonl",
+      "requestCount": 2,
+      "sha256": "6156bb18eb51327086df78c46145f322a36d96e4bd6c61d0c21afad2406c0999",
+      "topLevelInstructions": false,
+      "approvedIdentity": true,
+      "codingIdentity": false,
+      "personalRole": true,
+      "socketRestriction": true,
+      "artifactsRule": true
+    },
+    {
+      "file": "loaded-thread.jsonl",
+      "requestCount": 4,
+      "sha256": "4c38677409f9e9891c8d1b5f9e221bc46e58c007f2223af16ab1847ebb0fbeda",
+      "topLevelInstructions": false,
+      "approvedIdentity": true,
+      "codingIdentity": false,
+      "personalRole": true,
+      "socketRestriction": true,
+      "artifactsRule": true
+    },
+    {
+      "file": "resumed-thread.jsonl",
+      "requestCount": 6,
+      "sha256": "d31a4c972fa10df3becddf84d75a13d2f7bc107b80af878a7b8caef44f0fce0a",
+      "topLevelInstructions": false,
+      "approvedIdentity": true,
+      "codingIdentity": false,
+      "personalRole": true,
+      "socketRestriction": true,
+      "artifactsRule": true
+    },
+    {
+      "file": "saved-thread.jsonl",
+      "requestCount": 8,
+      "sha256": "5b879283fa1afc466038d227652bc285521052e09434ab944ce3a868e1dc6fa6",
+      "topLevelInstructions": false,
+      "approvedIdentity": true,
+      "codingIdentity": false,
+      "personalRole": true,
+      "socketRestriction": true,
+      "artifactsRule": true
+    }
+  ],
+  "additionalSpendCents": 0,
+  "freshPackage": "NOT RUN",
+  "realModel": "NOT RUN",
+  "sameThreadAcrossAllFourTurns": true,
+  "nativeTestRuns": 2,
+  "licenceTestsPerRun": 85,
+  "licenceTestRuns": 2,
+  "testedCodeCommit": "b0f109a5d1b39746508f01a0aace3fccbd047994",
+  "captureFormat": "Each file contains all requests captured up to that stage.",
+  "standInBoundary": "PASS",
+  "browser1280And390": "NOT RUN",
+  "applicationApprovalRunId": 46083456844,
+  "scannerApprovalRunId": 46083459643,
+  "approvalArtifactsPresent": true,
+  "slotWait": {
+    "waitedAtLeastMinutes": 45,
+    "recordedSamples": 75,
+    "firstReportedFree": "23:46:36 UTC",
+    "maximumRecordedQuietSeconds": 97,
+    "requiredQuietSeconds": 300,
+    "claimed": false,
+    "outcome": "The slot became free, but host load did not remain below 6 for five minutes."
+  }
+}

@@ -1,9 +1,9 @@
 {
   "images": {
     "computer": {
-      "pin": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
+      "pin": "k3d-ocn-registry:5000/opencrane/computer@sha256:c9c92d8376363be6c1de511d499b4ff0007c24a73d0c551345049635fcd5a132",
       "reviewedInventory": "apps/computer/licences.json",
-      "reviewedInventorySha256": "0c58af26c94d1ef09ed9498baed4db0bc848df7316badd94112b7f10271bbed9"
+      "reviewedInventorySha256": "f3818b9c6a98b44a2738d18ea071cb04aa70dad0a5ccf2ccaa2b71d10f2d4ae1"
     },
     "server": {
       "pin": "k3d-ocn-registry:5000/opencrane/package@sha256:80c2433e8644f5fd01f5deaf912ecab9ca93ed2475187c1f4467196a4def8c17",

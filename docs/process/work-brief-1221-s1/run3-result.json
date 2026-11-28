@@ -1,0 +1,43 @@
+{
+  "status": "PARTIAL",
+  "date": "2026-11-28",
+  "productCommit": "b0f109a5d1b39746508f01a0aace3fccbd047994",
+  "computerDigest": "sha256:23de7279a36001b3aba97de28b64c01bdff3c7cad8770d7aebb2c3542c58b271",
+  "computerBriefPresent": true,
+  "gateway": "http://10.43.62.135:43000",
+  "memoryEnabled": false,
+  "hostRiskSwitch": "accepted-dev-box-366",
+  "outcomes": [
+    {
+      "step": "member onboarding and approved persona Aster",
+      "result": "PASS"
+    },
+    {
+      "step": "personal chat at 1280 and 390 px with Memory off",
+      "result": "PASS"
+    },
+    {
+      "step": "introduces itself as Aster, not Codex",
+      "result": "PASS"
+    },
+    {
+      "step": "truthful capabilities including no internet yet",
+      "result": "FAIL"
+    },
+    {
+      "step": "short PowerPoint deck shared to chat",
+      "result": "PASS",
+      "file": "Aster_introduction.pptx",
+      "evidence": "file.uploaded event"
+    },
+    {
+      "step": "fetch example.com fails with plain explanation",
+      "result": "PARTIAL",
+      "detail": "turn completed but browser could not display completion"
+    }
+  ],
+  "budget": {
+    "settledCents": 13,
+    "settlements": 11
+  }
+}

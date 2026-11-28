@@ -19,7 +19,7 @@ flowchart LR
   ci -->|reports line counts| summary["Job summary<br/>test size and weekly changes"]
   debt["scripts/check-lint-debt<br/>size limits"] -->|reads base commit| ci
   ci -->|runs files with one or two workers| vitest["Vitest<br/>root tests"]
-  actions -->|builds for image, native configuration and demo read tests| computer["apps/computer<br/>test image"]
+  actions -->|builds for assistant, native configuration and demo tests| computer["apps/computer<br/>test image"]
   ci -->|installs for browser use| chromium["Chromium<br/>test browser"]
   ci -->|pulls exact Linux images and retries downloads| docker["Docker<br/>test containers"]
 ```
@@ -45,6 +45,7 @@ files run one at a time because concurrent Angular servers miss their startup
 deadlines. A development build prepares Angular before tests start their own servers.
 
 The image job runs the offline demo read through a real computer and local services.
+It also checks assistant personas and shell tools with a local stand-in model.
 It also checks native private tool discovery and recall calls with the generated
 configuration. It checks delayed workspace output with the real native executor.
 The recall check uses local scripted replies and no external model.

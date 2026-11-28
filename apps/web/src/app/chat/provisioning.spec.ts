@@ -481,3 +481,32 @@ async function opensDraftWhileSavedTranscriptLoads(): Promise<void> {
 
 it('shows the live reply after opening a draft before the saved transcript loads',
   opensDraftWhileSavedTranscriptLoads);
+
+async function showsAccessChangedForSignedInNonMember(): Promise<void> {
+  function read(input: RequestInfo | URL): Promise<Response> {
+    if (requestPath(input) === '/api/chat') {
+      return Promise.resolve(Response.json({ status: 'refused' }, { status: 403 }));
+    }
+    return fetchFixture(input);
+  }
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockImplementation(read);
+  const loads = vi.spyOn(ChatSession.prototype, 'load');
+  const fixture = mountWorkspace('');
+  try {
+    await loads.mock.results[0]!.value;
+    fixture.detectChanges();
+    const root = workspaceRoot(fixture);
+    expect(root.textContent).toContain('Conversation access changed');
+    const newSession = root.querySelector<HTMLButtonElement>('button.new-session')!;
+    expect(newSession.disabled).toBe(true);
+    expect(root.textContent).toContain('You no longer have access');
+  } finally {
+    fixture.destroy();
+    loads.mockRestore();
+    vi.unstubAllGlobals();
+  }
+}
+
+it('shows access changed and disables New session for a signed-in non-member',
+  showsAccessChangedForSignedInNonMember);

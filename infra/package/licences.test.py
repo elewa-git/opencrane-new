@@ -1733,6 +1733,45 @@ else:
         with self.assertRaisesRegex(ValueError, "Computer licence review changed"):
             checker.check_computer_review(image)
 
+    def test_computer_package_cannot_keep_an_older_release(self):
+        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        computer = source.parent.parent.parent / "apps/computer"
+        template_path = computer / "sandbox-template.json"
+        template = checker.read_json(template_path)
+        template["spec"]["podTemplate"]["spec"]["containers"][0]["image"] = (
+            "k3d-ocn-registry:5000/opencrane/computer@sha256:" + "a" * 64)
+        read_json = checker.read_json
+
+        def read_with_newer_computer(path):
+            if path == template_path:
+                return template
+            return read_json(path)
+
+        with patch.object(checker, "read_json", side_effect=read_with_newer_computer):
+            with self.assertRaisesRegex(ValueError, "Computer package pin differs"):
+                checker.check_computer_review(inventory["images"]["computer"])
+
+    def test_computer_package_requires_the_checked_source(self):
+        inventory = checker.read_json(source.with_name("licence-inventory.json"))
+        image = inventory["images"]["computer"]
+        computer = source.parent.parent.parent / "apps/computer"
+        evidence = checker.read_json(computer / "evidence.json")
+        evidence["sourceFiles"] = {"apps/computer/src/bridge.ts": "0" * 64}
+        template = checker.read_json(computer / "sandbox-template.json")
+        template["spec"]["podTemplate"]["spec"]["containers"][0]["image"] = image["pin"]
+        read_json = checker.read_json
+
+        def read_with_changed_source(path):
+            if path == computer / "evidence.json":
+                return evidence
+            if path == computer / "sandbox-template.json":
+                return template
+            return read_json(path)
+
+        with patch.object(checker, "read_json", side_effect=read_with_changed_source):
+            with self.assertRaisesRegex(ValueError, "Computer source changed"):
+                checker.check_computer_review(image)
+
 
 if __name__ == "__main__":
     unittest.main()

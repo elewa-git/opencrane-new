@@ -40,6 +40,13 @@ decrypting or appending a revision.
 The approval survives a later revision, survey edit, restart and projection replay.
 Only a later explicit approval changes the approved reference.
 
+`approvedPersonaReader` point-reads that revision after loading the existing survey
+summary. It verifies the personal assistant's owner and checks current membership
+before decrypting. `main.ts` supplies the reader to the chat bridge through
+`readApprovedPersona`. Only personal Memory-free frames carry `approvedPersona`;
+shared and private Memory frames omit it. No saved memory or deployment qualification
+setting is read or changed by this delivery. Missing approval uses the default identity.
+
 See [apps/server/README.robot.md](../../README.robot.md) for the shared member
 guard, response codes and private key custody rules.
 

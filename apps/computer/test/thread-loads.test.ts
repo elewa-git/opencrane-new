@@ -135,7 +135,7 @@ async function reloadsChangedList(empty: boolean) {
     expect(operations[0]!.params).toEqual({ threadId: 'thread-chat-A' });
     const resumeConfig = operations[3]!.params['config'];
     expect(operations[3]!.params['threadId']).toBe('thread-chat-A');
-    if (empty) expect(resumeConfig).toEqual({ mcp_servers: {} });
+    if (empty) expect(record(resumeConfig)['mcp_servers']).toEqual({});
     else {
       const config = record(resumeConfig);
       const servers = record(config['mcp_servers']);

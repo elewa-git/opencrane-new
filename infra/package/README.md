@@ -20,7 +20,7 @@ in the recorded Kubernetes cluster.
 flowchart LR
   stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>Helm install and update"]
   ci["GitHub packaging job<br/>approved images"] --> package
-  package --> apps["Website, server and workers<br/>sign-in, chat, history and spending"]
+  package --> apps["Apps and assistant computers<br/>sign-in, chat, history and spending"]
   tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
   package --> services["Private databases, event log,<br/>keys, file store and scanner"]
   apps --> models["Model gateway"]
@@ -60,7 +60,9 @@ Not built yet:
    local services. Preparation records ownership and creates private settings for
    the package in the chosen cluster.
 2. **The package starts.** Host, image and settings checks run before Helm installs anything.
-   On a fresh install, Helm pulls the approved assistant computer image onto each
+   The computer image is released separately from the website and server. Its
+   package pin must match the released computer template. On a fresh install,
+   Helm pulls the approved assistant computer image onto each
    node that can run computers before it installs the apps. A failed pull stops the
    install. A setup job prepares the databases and event log. Private development installs
    create the test owner; public-address mode waits for a signed-in person to claim

@@ -1,0 +1,26 @@
+{
+  "run": 2,
+  "status": "PARTIAL",
+  "packageCommit": "3a9e760e4fbead2cb1b49dae36ea2c18157e6ecd",
+  "checks": {
+    "memberOnboarding": "PASS",
+    "personaApproved": "PASS",
+    "personalChatMemoryOff": "PASS",
+    "assistantIntroducedAsAster": "FAIL",
+    "capabilityTruthfulness": "FAIL",
+    "deckSharedToChat": "FAIL",
+    "fetchFailsGracefully": "PASS"
+  },
+  "spend": {
+    "settledCentsToday": 20,
+    "reservedCents": 0,
+    "dailyCeilingCents": 2000
+  },
+  "gateway502Observed": false,
+  "screenshots": [
+    "member-persona-approved-1280.png",
+    "welcome-complete-1280.png",
+    "chat-desktop-1280.png",
+    "chat-mobile-390.png"
+  ]
+}

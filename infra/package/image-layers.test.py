@@ -21,7 +21,12 @@ NATIVE_BINARY = (
 )
 NATIVE_LAUNCHER = "opt/native/node_modules/@openai/codex/bin/codex.js"
 NATIVE_HELPERS = (
-    "private-codex.ts", "codex-config.ts", "codex-connection.ts", "http.ts"
+    "private-codex.ts", "codex-config.ts", "codex-connection.ts", "http.ts",
+    "assistant-brief.ts",
+)
+NATIVE_PROMPTS = (
+    "soul.md", "persona.md", "agent-personal.md", "agent-shared.md", "agent-routine.md",
+    "environment-tools.md", "environment-private.md", "LICENSE-Codex", "NOTICE-Codex",
 )
 
 
@@ -34,6 +39,27 @@ def read_checked_blob(archive, digest):
 
 
 class SourceReviewTests(unittest.TestCase):
+    def test_instruction_files_have_reviewed_hashes(self):
+        review = json.loads(Path("infra/package/native-runtime-inventory.json").read_text())
+        required = ["app/apps/computer/src/assistant-brief.ts"]
+        for name in NATIVE_PROMPTS:
+            required.append("app/apps/computer/src/prompts/" + name)
+        for path in required:
+            with self.subTest(source=path):
+                self.assertIn(path, review["files"])
+
+    def test_native_review_input_hashes_match_repository_source(self):
+        review = json.loads(Path("infra/package/native-runtime-inventory.json").read_text())
+        inputs = (
+            (review["sourceLock"], "sourceLockSha256"),
+            (review["nativeLicenceReview"], "nativeLicenceReviewSha256"),
+            ("apps/computer/licences.json", "computerInventorySha256"),
+        )
+        for path, hash_field in inputs:
+            with self.subTest(source=path):
+                actual = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+                self.assertEqual(actual, review[hash_field])
+
     def test_provider_runtime_paths_are_permitted(self):
         checker = ImageLayerTests("test_development_files_stay_within_the_narrow_allowlist")
         checker.paths = {
@@ -354,6 +380,9 @@ class ImageLayerTests(unittest.TestCase):
         expected = {"app/apps/computer/src"}
         for name in NATIVE_HELPERS:
             expected.add("app/apps/computer/src/" + name)
+        expected.add("app/apps/computer/src/prompts")
+        for name in NATIVE_PROMPTS:
+            expected.add("app/apps/computer/src/prompts/" + name)
         self.assertEqual(computer_paths, expected)
         for name in NATIVE_HELPERS:
             path = "app/apps/computer/src/" + name
@@ -367,14 +396,32 @@ class ImageLayerTests(unittest.TestCase):
 
     def test_native_launcher_and_helpers_load_without_network(self):
         image = self.inspection["Id"]
-        script = (
-            "Promise.all(["
-            "import('/app/apps/computer/src/private-codex.ts'),"
-            "import('/app/apps/computer/src/codex-config.ts'),"
-            "import('/app/apps/computer/src/codex-connection.ts'),"
-            "import('/app/apps/computer/src/http.ts')"
-            "]).then(() => process.stdout.write('ready'))"
-        )
+        script = """
+            function loadAssistantBrief([, config]) {
+                const sessions = [
+                    {},
+                    {sharingClass: 'shared_only', executionMode: 'restricted'},
+                    {senderAttemptId: 'routine', executionMode: 'restricted'},
+                    {executionMode: 'restricted'},
+                ];
+                for (const facts of sessions) {
+                    config.computerSessionInstructions(facts);
+                }
+                return import('/app/apps/computer/src/assistant-brief.ts');
+            }
+            function renderAssistantBrief(brief) {
+                brief.renderSoul('Approved identity');
+                process.stdout.write('ready');
+            }
+            const helpers = Promise.all([
+                import('/app/apps/computer/src/private-codex.ts'),
+                import('/app/apps/computer/src/codex-config.ts'),
+                import('/app/apps/computer/src/codex-connection.ts'),
+                import('/app/apps/computer/src/http.ts'),
+            ]);
+            const assistantBrief = helpers.then(loadAssistantBrief);
+            assistantBrief.then(renderAssistantBrief);
+        """
         arguments = ["docker", "run", "--rm", "--network", "none", "--read-only",
                      "--entrypoint", "node", image, "--experimental-strip-types", "-e", script]
         result = subprocess.run(arguments, capture_output=True, text=True, timeout=30)

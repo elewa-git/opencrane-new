@@ -1,12 +1,14 @@
-import { sha256Hex } from '@opencrane/events/digest';
+import { sha256HexOfJson } from '@opencrane/events/digest';
 import { randomBytes } from 'node:crypto';
 import { setTimeout as pause } from 'node:timers/promises';
 import { record } from './http.ts';
 import { parseTools, type Turn } from './turn-frame.ts';
 import type { privateCallers } from '@opencrane/models/private-callers';
 import { modelForTask } from '@opencrane/models/routing';
+import { computerSessionInstructions } from './codex-config.ts';
 
 export interface ThreadLoadDriver {
+  instructions?(turn: Turn): ReturnType<typeof computerSessionInstructions>;
   rpc(method: string, params: Record<string, unknown>): Promise<unknown>;
   catalogue?(loadKey: string, conversation: string, tools: NonNullable<Turn['tools']>,
     thread: string | undefined, turnId: string,
@@ -121,6 +123,19 @@ function threadToolsConfig(tools: Turn['tools'], loadKey: string) {
   return { mcp_servers: servers };
 }
 
+function threadInstructions(driver: ThreadLoadDriver, input: Turn) {
+  const instructions = driver.instructions?.(input) ?? computerSessionInstructions(input);
+  const tools = input.tools ?? [];
+  const fingerprint = sha256HexOfJson({ tools, instructions });
+  return { instructions, fingerprint };
+}
+
+function instructionToolConfig(tools: Turn['tools'], loadKey: string,
+  instructions: ReturnType<typeof computerSessionInstructions>) {
+  const toolConfig = threadToolsConfig(tools, loadKey);
+  return { ...instructions, ...toolConfig };
+}
+
 export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<string> = new Set()) {
   let stopped = false;
   const keys = new Set<string>();
@@ -176,8 +191,7 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
 
   async function prepare(input: Turn, previousThread: string | undefined,
     startParams: Record<string, unknown>) {
-    const tools = JSON.stringify(input.tools ?? []);
-    const fingerprint = sha256Hex(tools);
+    const { instructions, fingerprint } = threadInstructions(driver, input);
     const previousLoad = previousThread && loaded.get(previousThread);
     if (previousLoad && previousLoad.fingerprint === fingerprint) {
       try {
@@ -189,8 +203,9 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
         throw error;
       }
     }
+    // Unload before resuming: Codex ignores changed identity settings on a loaded thread.
     if (previousThread) await unloadPrevious(previousThread);
-    return startLoad(input, previousThread, startParams, fingerprint);
+    return startLoad(input, previousThread, startParams, fingerprint, instructions);
   }
 
   async function unloadPrevious(thread: string) {
@@ -214,13 +229,14 @@ export function threadLoads(driver: ThreadLoadDriver, cancelled: ReadonlySet<str
   }
 
   async function startLoad(input: Turn, previousThread: string | undefined,
-    startParams: Record<string, unknown>, fingerprint: string) {
+    startParams: Record<string, unknown>, fingerprint: string,
+    instructions: ReturnType<typeof computerSessionInstructions>) {
     const loadKey = randomBytes(16).toString('hex');
     preparing.set(input.id, loadKey);
     let newThread: string | undefined;
     try {
       await register(input, loadKey, previousThread);
-      const config = threadToolsConfig(input.tools, loadKey);
+      const config = instructionToolConfig(input.tools, loadKey, instructions);
       let method = 'thread/start';
       let params: Record<string, unknown> = { ...startParams, config };
       if (previousThread) {

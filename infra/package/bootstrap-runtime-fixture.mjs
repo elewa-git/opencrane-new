@@ -5,6 +5,7 @@ import { homedir, userInfo } from 'node:os';
 import { rootCertificates } from 'node:tls';
 import * as files from 'node:fs/promises';
 import { registerHooks } from 'node:module';
+import { systemClock } from '@opencrane/event-store';
 
 assert.equal(process.getuid(), 1000);
 assert.equal(process.cwd(), '/app');
@@ -17,7 +18,6 @@ for (const name of ['event-store', 'authz', 'handlers']) {
 
 // Load the real service packages before replacing calls to disposable services.
 // Keep their own imports and workspace links subject to Node's normal resolution.
-const { systemClock } = await import('@opencrane/event-store');
 for (const name of ['pg', '@opencrane/authz',
   '@opencrane/handlers', '@opencrane/events', '@opencrane/models', '@nats-io/jetstream']) {
   await import(name);
@@ -157,7 +157,7 @@ const services = {
         return { status: 'appended', sequence };
       }
       async function close() {}
-      // Provide the real store clock because bootstrap approval reads it in this fixture too.
+      // Bootstrap approval reads the real store clock in this fixture too.
       return { store: { clock: systemClock, head, readStream, append }, close };
     },
   },

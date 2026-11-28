@@ -4,6 +4,8 @@
 It assigns files to `fixtures-image` and `fixtures-browser`.
 The image group includes screenshot-browser, which also needs Chromium, and the
 offline demo read test, which uses packaged Codex and local services.
+`assistant-native.test.ts` checks the approved persona and real shell tool with a
+stand-in model in the image job, where the computer image is built.
 It also runs `codex-config.test.ts` with pinned native Codex, the generated private
 configuration and the real MCP proxy inside a disposable container.
 `workspace-native-output.test.ts` checks stdout arriving after an empty native
