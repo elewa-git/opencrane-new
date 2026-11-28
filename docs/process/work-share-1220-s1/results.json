@@ -1,0 +1,45 @@
+{
+  "verdict": "PASS",
+  "provider": "free stand-in",
+  "spentCents": 0,
+  "results": [
+    {
+      "width": 1280,
+      "file": "Meet_Aster.pdf",
+      "bytes": 1306,
+      "preview": "PASS",
+      "download": "PASS"
+    },
+    {
+      "width": 1280,
+      "file": "Aster_notes.txt",
+      "bytes": 30,
+      "preview": "PASS",
+      "download": "PASS"
+    },
+    {
+      "width": 1280,
+      "sharing": "PASS",
+      "scannerRefusal": "PASS"
+    },
+    {
+      "width": 390,
+      "file": "Meet_Aster.pdf",
+      "bytes": 1306,
+      "preview": "PASS",
+      "download": "PASS"
+    },
+    {
+      "width": 390,
+      "file": "Aster_notes.txt",
+      "bytes": 30,
+      "preview": "PASS",
+      "download": "PASS"
+    },
+    {
+      "width": 390,
+      "sharing": "PASS",
+      "scannerRefusal": "PASS"
+    }
+  ]
+}

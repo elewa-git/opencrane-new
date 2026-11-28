@@ -17,7 +17,7 @@ The browser uses the website's own address for server connections.
 ```mermaid
 flowchart LR
   browser["Person's browser<br/>pages and controls"] -->|opens pages| web["apps/web<br/>the website"]
-  web -->|checks welcome progress, joins teams, sends invitations, settings, messages and computer view requests| server["apps/server<br/>back end"]
+  web -->|checks welcome progress, joins teams, sends invitations, settings, messages, file sharing requests and computer view requests| server["apps/server<br/>back end"]
   server -->|returns saved and live results and personal assignment updates| web
   web -.-> protocol["libs/protocol<br/>shared messages"]
 ```
@@ -34,6 +34,7 @@ flowchart LR
 - Open recent and archived chats, load older messages and show saved action details.
 - Open web addresses, email addresses, shared files and app pages from chat messages.
 - Upload and preview files, explain refusals and show when files are ready to send.
+  Offer Share when an assistant mentions a file it has not shared.
 - Show tool approvals and let people watch their personal assistant's running computer
   from the chat.
 - Show permitted memory facts and support personal saving, correction and forgetting.

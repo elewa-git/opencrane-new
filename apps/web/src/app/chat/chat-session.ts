@@ -285,7 +285,7 @@ export class ChatSession implements OnDestroy {
     }
     finally { if (revision === this.revision) this.busy.set(false); }
   }
-  private canSend(text: string): boolean {
+  canSend(text: string): boolean {
     const hasContent = Boolean(text.trim() || this.uploadBatch.readyIds().length);
     const waitingForFiles = this.uploadWaitReason();
     return Boolean(hasContent && !this.busy() && !this.active() && !waitingForFiles

@@ -113,7 +113,14 @@ try {
   await writeFile(`${output}/image.json`, JSON.stringify({ base, digest, namespace, label }));
   // A separate labelled Pod is the entire model boundary; it has no provider keys or forwarding code.
   const stub = (await readFile('infra/dev-stack/model-stub.ts', 'utf8')).replace("Number(process.env['MODEL_STUB_PORT'] ?? process.env['STUB_PORT'] ?? 43003), '127.0.0.1'", "3000, '0.0.0.0'");
-  await apply({ apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'model-stub' }, data: { 'stub.ts': stub } });
+  const data: Record<string, string> = { 'stub.ts': stub };
+  for (const helper of ['file-sharing-model.ts', 'exec-tool-call.ts']) {
+    data[helper] = await readFile(`infra/dev-stack/${helper}`, 'utf8');
+  }
+  const modelStubConfig = {
+    apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'model-stub' }, data,
+  };
+  await apply(modelStubConfig);
   await apply({ apiVersion: 'v1', kind: 'Pod', metadata: { name: 'model-stub', labels: { app: 'opencrane-gateway' } }, spec: { automountServiceAccountToken: false,
     containers: [{ name: 'stub', image: base, command: ['node', '--experimental-strip-types', '/fixture/stub.ts'], env: [
       { name: 'MODEL_STUB_MCP_REVISION', value: catalogueDigest([approvalJourneyTool()]) },
