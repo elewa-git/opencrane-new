@@ -43,7 +43,9 @@ async function sendsMemoryFreeInstructions(kind: 'personal' | 'team') {
     expect(developer).toContain('/workspace/artifacts');
     expect(developer).toContain('16 files and 20 MiB');
     expect(developer).toContain('Installing software');
-    expect(developer).toContain('cannot open network sockets');
+    expect(developer).toContain('cannot reach the internet from your computer yet');
+    expect(developer).toContain('Web pages, downloads and online installs fail');
+    expect(developer).toContain("organisation's gateway will decide access later");
     expect(developer).toContain('gateway');
     expect(developer).toContain('missing tools');
     expect(developer).toContain('Admitted external tools: none');
