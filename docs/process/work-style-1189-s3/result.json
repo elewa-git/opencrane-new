@@ -1,0 +1,94 @@
+{
+  "date": "2026-11-28",
+  "productCommit": "071cec7074ef9e6214690e5adc8c30c5b34cf81c",
+  "journey": "PASS",
+  "fresh": true,
+  "slot": 1,
+  "hostNode": "22.23.3",
+  "widths": [
+    1280,
+    390
+  ],
+  "passingCheckpoints": 37,
+  "startupExit": 0,
+  "statusExit": 0,
+  "runningProcesses": 14,
+  "composeContainers": 7,
+  "healthyEndpoints": 5,
+  "screenshotsCopiedBeforeTeardown": 8,
+  "serviceLogsCopiedBeforeTeardown": 16,
+  "loadCheck": {
+    "status": "PASS",
+    "qualifiedAt": "2026-11-28T16:56:19.911033+00:00",
+    "waitSeconds": 303,
+    "quietSeconds": 300,
+    "samples": 11,
+    "maximumLoad": 5.78,
+    "slot": 1,
+    "pilotExcluded": true
+  },
+  "teardown": {
+    "command": "PARTIAL",
+    "wrapperExit": 143,
+    "statusAfter": "free",
+    "statusExit": 0,
+    "remainingSlotComposeContainers": 0,
+    "cleanup": "PASS"
+  },
+  "ci": {
+    "run": 46161263353,
+    "status": "PASS",
+    "attempt": 2,
+    "scope": {
+      "models": {
+        "files": 107,
+        "tests": 2852,
+        "passed": 2850,
+        "skipped": 2
+      },
+      "packageVitest": {
+        "files": 20,
+        "tests": 260,
+        "passed": 260,
+        "skipped": 0
+      },
+      "skippedFiles": {
+        "libs/models/test/gateway.test.ts": 1,
+        "libs/models/test/codex-native-capture.test.ts": 1
+      }
+    },
+    "infraNodePassed": 2362,
+    "initialFailure": "Existing server fixture shutdown timed out; recheck passed without source, assertion or timeout changes."
+  },
+  "imageApprovals": {
+    "application": 46161258822,
+    "scanner": 46161261392,
+    "status": "PASS",
+    "artifactsPresentAndUnexpiredBeforeClaim": true
+  },
+  "localChecks": {
+    "focused": {
+      "passed": 253,
+      "files": 9
+    },
+    "packageVitestPreFinal": {
+      "passed": 260,
+      "files": 20
+    },
+    "packageNodeInitial": {
+      "passed": 809,
+      "failed": 6,
+      "files": 19
+    },
+    "preparationFileIsolated": {
+      "passed": 19,
+      "failed": 0
+    },
+    "broadModels": "PARTIAL; no final report; complete package evidence is from CI"
+  },
+  "shippedCodeLines": 424,
+  "sourceFiles": 17,
+  "independentReview": "NOT RUN",
+  "generatedReceiptFilesRestored": 19,
+  "generatedFilesMovedToPrivateStorage": 2
+}
