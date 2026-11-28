@@ -1,5 +1,53 @@
 # #1221 packaged journey receipt
 
+## Round 8 — plain internet wording
+
+**Date:** 28 November 2026. **Verdict: PARTIAL.** Source checks pass; a fresh
+real-model and browser journey is NOT RUN.
+
+The prompt now plainly says that the computer cannot reach the internet yet.
+Web pages, downloads and online installs fail. The organisation's gateway will
+decide access later. The assistant may still try a request and must explain a
+refusal plainly and offer an alternative. No execution or access rule changed.
+
+**PASS — failing test first.** Commit `5af828cd4` records the changed template
+expectations. Both personal and shared cases failed on the old wording. The native
+check also failed on the previous installed image because the plain internet limit
+was absent from the model request. Commit `197ca0cee` changes the prompt.
+
+**PASS — installed instructions, twice.** All nine focused tests passed on rebuilt
+image `c9c92d8376363be6c1de511d499b4ff0007c24a73d0c551345049635fcd5a132`.
+Each native run made four turns and eight upstream requests through the installed
+bridge, without mounting replacement source. The plain internet wording reached
+new, loaded, changed-persona and saved threads after restart. The same thread was
+retained, and real shell calls completed. Raw request bodies remain outside the
+repository in `new-thread.jsonl`, `loaded-thread.jsonl`, `resumed-thread.jsonl` and
+`saved-thread.jsonl`, in a separate folder for each run.
+
+**PASS — source gates.** Full typecheck, the event catalogue (175 event types),
+Knip (two existing configuration hints), changed-file ESLint without warnings,
+changelog lint and Markdown lint passed. The complete package licence check,
+all 85 package licence tests and all four source-review tests passed twice.
+Computer licence policy tests also passed twice. Fetched `origin/main` was already
+included; no rebase was needed or left in progress.
+
+**NOT RUN — fresh real-model/browser journey.** This session carries
+`OPENCRANE_FLEET_TASK`. The existing journey guard refuses paid-provider runs from
+fleet tasks. Run 3 was a separate operator run without that marker. This task keeps
+the marker and guard intact. No secondary stack was claimed, and the owner and
+pilot stacks were not touched. Additional model spend is **0 euro cents**.
+An operator run is still needed to check real replies at 1280 and 390 px.
+
+**PASS — image checks, twice.** Installed source, file permissions, a fresh Syft
+scan, notice collection and the independent notice completeness check passed on
+the new digest. Each licence scan accepted all 394 components and collected all
+104 installed notices. The licence inventory is unchanged. Package and template
+pins, installed-source checksums and the application template checksum now match.
+The previous pin was rejected before refresh because the source had changed.
+
+Pushed product commit, GitHub approval artifacts and CI results will be recorded
+after they finish. The PR remains draft.
+
 ## Run 3 — PARTIAL
 
 **Date:** 28 November 2026
@@ -36,6 +84,11 @@ repository before teardown.
 
 **Spend:** 13 euro cents settled across 11 settlements in the slot 1 budget stream, including
 provider setup and the chat turns. This was an operator run with no `OPENCRANE_FLEET_TASK`.
+
+The browser reload failure after the deck was shared matches the conversation-feed
+bug fixed in #1225 / PR #1226: `agent.file_publication_started` rows break history
+reads. That repair belongs to the separate PR; this change only adjusts the
+assistant's explanation of internet access.
 
 ## Round 7 — model request investigation
 

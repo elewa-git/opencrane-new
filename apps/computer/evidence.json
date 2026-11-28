@@ -1,12 +1,12 @@
 {
-  "date": "2026-11-27",
-  "status": "PARTIAL: stand-in model request proof passed; fresh packaged real-model journey not run after the slot wait",
-  "sourceCommit": "dfa486dd86ef5a278a847bd55e4c67cf22f3c702",
-  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:23de7279a36001b3aba97de28b64c01bdff3c7cad8770d7aebb2c3542c58b271",
-  "releaseDigest": "sha256:23de7279a36001b3aba97de28b64c01bdff3c7cad8770d7aebb2c3542c58b271",
-  "uncompressedBytes": 2925905384,
+  "date": "2026-11-28",
+  "status": "PARTIAL: rebuilt image and captured model requests passed; fresh real-model journey requires an operator run",
+  "sourceCommit": "197ca0ceeb07ee8759c0da8a9ce332305e07a753",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:c9c92d8376363be6c1de511d499b4ff0007c24a73d0c551345049635fcd5a132",
+  "releaseDigest": "sha256:c9c92d8376363be6c1de511d499b4ff0007c24a73d0c551345049635fcd5a132",
+  "uncompressedBytes": 2925868951,
   "codexVersion": "0.159.2",
-  "previousImage": "k3d-ocn-registry:5000/opencrane/computer@sha256:40e715076ce0c19f0610b0fbe7872112c971d50a444487126f4465b3d8d4c3f0",
+  "previousImage": "k3d-ocn-registry:5000/opencrane/computer@sha256:23de7279a36001b3aba97de28b64c01bdff3c7cad8770d7aebb2c3542c58b271",
   "checks": {
     "build": {
       "result": "PASS",
@@ -14,41 +14,30 @@
     },
     "contents": {
       "result": "PASS",
-      "detail": "Installed computer source, routing and tool checks match the checkout; executable ownership and removed build files checked."
+      "runs": 2
     },
     "licences": {
       "result": "PASS",
+      "runs": 2,
       "acceptedComponents": 394,
       "installedNotices": 104
     },
     "modelInstructions": {
       "result": "PASS",
       "runs": 2,
-      "detail": "New, loaded, changed-persona and saved threads after restart; real shell calls through the installed bridge."
+      "detail": "Plain internet limit reaches new, loaded, changed-persona and saved threads after restart; real shell calls complete."
     },
     "freshPackagedJourney": {
       "result": "NOT RUN",
-      "reason": "No valid startup window within the 45-minute wait."
+      "reason": "Fleet tasks require the stand-in model; the real-model journey requires an operator run."
     },
     "realModel": {
       "result": "NOT RUN",
-      "reason": "No valid startup window within the 45-minute wait."
+      "reason": "Paid-provider journeys are refused for this fleet task."
     },
     "browser1280And390": {
       "result": "NOT RUN",
-      "reason": "No valid startup window within the 45-minute wait."
-    },
-    "applicationApproval": {
-      "result": "PASS",
-      "runId": 46083456844,
-      "sourceCommit": "b0f109a5d1b39746508f01a0aace3fccbd047994",
-      "artifactsPresent": true
-    },
-    "scannerApproval": {
-      "result": "PASS",
-      "runId": 46083459643,
-      "sourceCommit": "b0f109a5d1b39746508f01a0aace3fccbd047994",
-      "artifactsPresent": true
+      "reason": "No fresh real-model package was started."
     }
   },
   "additionalSpendCents": 0,
@@ -92,7 +81,7 @@
     "apps/computer/src/prompts/agent-routine.md": "a133f848f378e9ef64d668c6ff7af36b880ec298438ab144af51401a7c501bf4",
     "apps/computer/src/prompts/agent-shared.md": "99c0e239c83767f68ac83150db40d6e2167c00e786f4fe1338fea8db2b8edb2b",
     "apps/computer/src/prompts/environment-private.md": "7caab3864bcaaa5fba9e2176dd907dee65df59d2ee52c831d6ccd596e5345bb6",
-    "apps/computer/src/prompts/environment-tools.md": "63c9237a6e5810cb27747d6ec55cbd114bc6db6e709fd79988f374e2b8d92c51",
+    "apps/computer/src/prompts/environment-tools.md": "b63b9904fbe4c1df56167c8cbd2bf6b6b433482d884d7645a4a309a4250662a7",
     "apps/computer/src/prompts/persona.md": "d12cc10dcf04a4b99f4e6e49359ffdafd36905f3eded450ac12ff4ee9c37f506",
     "apps/computer/src/prompts/soul.md": "7e28fefb947d1798c11e2124786c5b8db8f0ba83bd976bda89d000c668b8506f",
     "apps/computer/src/proxy-control.ts": "8d4319bbe33a83c40b83899090e45742c3fe9734979b37f0c37b9bd55dd7ac9f",
