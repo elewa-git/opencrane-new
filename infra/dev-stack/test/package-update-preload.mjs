@@ -7,6 +7,7 @@ const calls = [];
 let gateway = 'http://10.0.0.8:43000';
 let revision = '2';
 let failed = false;
+let sourceReads = 0;
 const directory = process.env.UPDATE_FIXTURE_DIRECTORY;
 const oldImage = `registry.invalid/package@sha256:${'a'.repeat(64)}`;
 const newImage = `registry.invalid/package@sha256:${'b'.repeat(64)}`;
@@ -103,7 +104,13 @@ async function execute(program, args) {
       throw new Error('Fixture rollout failed');
     }
   } else if (program === 'git') {
-    if (args[0] === 'rev-parse') stdout = 'a'.repeat(40);
+    if (args[0] === 'rev-parse') {
+      sourceReads++;
+      stdout = 'a'.repeat(40);
+      if (process.env.UPDATE_FIXTURE_CONDITION === 'source-changed-before-helm' && sourceReads > 1) {
+        stdout = 'b'.repeat(40);
+      }
+    }
     if (args[0] === 'rev-parse' && process.env.UPDATE_FIXTURE_CONDITION === 'changed-source') {
       stdout = 'b'.repeat(40);
     }

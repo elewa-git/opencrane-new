@@ -132,6 +132,16 @@ async function retainsLockWhenRollbackCannotRestart() {
   assert.equal(result.calls.some(releasesLock), false);
 }
 
+async function releasesLockWhenSourceChangesBeforeHelm() {
+  const result = await updateFixture(false, 'source-changed-before-helm');
+  assert.match(result.output, /source revision changed/u);
+  assert.equal(result.calls.some(isUpgrade), false);
+  function releasesLock(args: string[]) {
+    return args.at(-1) === 'release';
+  }
+  assert.equal(result.calls.some(releasesLock), true);
+}
+
 test('an in-place update repairs the gateway that Helm resets', restoresGatewayAfterUpgrade);
 test('a failed update restores the recorded revision and its gateway', restoresGatewayAfterRollback);
 test('the update verifies its backup before changing the release', backsUpBeforeChangingRelease);
@@ -144,3 +154,5 @@ test('manual rollback refuses another installation even when the revision number
 test('an update refuses a recovery installation', refusesRecoveryInstall);
 test('an expired scanner prevents rollback and keeps backup maintenance locked',
   retainsLockWhenRollbackCannotRestart);
+test('a source change before Helm releases the update lock without changing service',
+  releasesLockWhenSourceChangesBeforeHelm);
