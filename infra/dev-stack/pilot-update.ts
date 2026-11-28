@@ -170,7 +170,7 @@ export async function updatePilot(owner: PackageOwner, previous: string, setting
   await saveUpdateRecord(record);
   const image = await buildComputer(record);
   await updateBackupLock(owner, record.id);
-  let serviceRestored = false;
+  let releaseBackupLock = true;
   try {
     await requireIdleBackup(owner, record.id);
     await checkRecordedTarget(owner, record);
@@ -182,6 +182,7 @@ export async function updatePilot(owner: PackageOwner, previous: string, setting
       '--history-max', '0', '--wait=false', '--set-string', `images.computer=${image}`];
     for (const setting of settings) args.push('--set-string', setting);
     try {
+      releaseBackupLock = false;
       await releaseCommand(owner, [...args, '--set', 'pilotUpdatePaused=true'], 180_000);
       await ownedKubectl(owner, ['-n', owner.namespace, 'wait', '--for=delete', 'pod',
         '-l', 'app in (server,worker-dispatcher,worker-computers)', '--timeout=60s'], 70_000);
@@ -192,12 +193,12 @@ export async function updatePilot(owner: PackageOwner, previous: string, setting
       await checkPilotHealth(owner);
       await checkComputerImages(owner, record.computers, image);
       await checkRecordedTarget(owner, record);
-      serviceRestored = true;
+      releaseBackupLock = true;
     } catch (cause) {
       logger.error({ err: cause }, 'Pilot update failed; restoring the recorded release');
       try {
         await restoreRelease(owner, record);
-        serviceRestored = true;
+        releaseBackupLock = true;
       } catch (rollback) {
         throw new AggregateError([cause, rollback], 'Pilot update and rollback could not be confirmed');
       }
@@ -205,7 +206,7 @@ export async function updatePilot(owner: PackageOwner, previous: string, setting
     }
   } finally {
     // Retain the backup lock if neither the update nor rollback could restore service.
-    if (serviceRestored) await updateBackupLock(owner, record.id, true);
+    if (releaseBackupLock) await updateBackupLock(owner, record.id, true);
   }
 }
 
