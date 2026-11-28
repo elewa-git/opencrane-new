@@ -298,8 +298,12 @@
             <oc-icon [name]="chat.waiting() === 'starting' ? 'agent' : 'working'" />
             <span>
               @if (chat.waiting() === 'queued') {
-                We couldn't tell whether your message was recorded. Retry checks its status before
-                sending again. Reference: {{ chat.queuedReference() }}. Reload discards this draft.
+                @if (chat.messageOutcomeUnknown()) {
+                  We couldn't tell whether your message was recorded. Retry checks its status before
+                  sending again. Reference: {{ chat.queuedReference() }}. Reload discards this draft.
+                } @else {
+                  Your draft is still on this page. Retry to send it.
+                }
               } @else if (chat.waitingForMaintenance()) {
                 The assistant service is waiting for maintenance. Your message is saved and will
                 run afterwards.

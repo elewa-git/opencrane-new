@@ -4,25 +4,23 @@ import { memberAuthorisation } from '@opencrane/authz';
 import { readEventAt } from '@opencrane/event-store';
 import { getEventDefinition } from '@opencrane/events';
 import { ChatRefused, writeChatAccess, type ChatOptions } from './access.ts';
-import { ChatConflict } from './commands.ts';
+import { ChatConflict, matchesHumanChatCommand } from './commands.ts';
 import { readChatCommandFacts } from './chat-summary.ts';
 import { privateSessionCreation, requirePrivateReader } from './private-session.ts';
 
 const closeInput = z.object({ id: z.string().min(1) }).strict();
 const closeData = z.object({ conversationId: z.string(), closedBy: z.string() }).strict();
 
-function savedCloseMatches(row: NonNullable<Awaited<ReturnType<typeof readEventAt>>>,
+export function savedCloseMatches(row: NonNullable<Awaited<ReturnType<typeof readEventAt>>>,
   commandId: string, options: ChatOptions, memberId: string, conversationId: string) {
   const event = row.event;
   const data = closeData.safeParse(event.data);
-  return event.id === commandId && event.commandId === commandId &&
-    event.type === 'conversation.closed' && event.silo === options.silo &&
-    event.subject === `conversation-${conversationId}` &&
-    event.principal?.kind === 'human' && event.principal.id === memberId &&
+  const context = { silo: options.silo, memberId };
+  return event.commandId === commandId && event.type === 'conversation.closed' &&
+    matchesHumanChatCommand(event, commandId, conversationId, context) &&
     data.success && data.data.conversationId === conversationId &&
     data.data.closedBy === memberId;
 }
-
 async function closeAccess(options: ChatOptions, memberId: string, conversationId: string) {
   const fresh = await writeChatAccess(options, { memberId, conversationId });
   if (fresh.mode === 'group' || fresh.contextKind === 'shared_child') {
@@ -89,18 +87,4 @@ export async function closeCommand(options: ChatOptions, memberId: string,
     return { status: 'appended' as const, sequence: previous.sequence };
   }
   throw new ChatConflict('Conversation changed; retry close');
-}
-
-export async function closeChange(options: ChatOptions, memberId: string,
-  conversationId: string, commandId: string, historyPosition: number) {
-  const facts = await readChatCommandFacts(options.store, options.silo, conversationId, commandId);
-  if (facts.position === undefined || facts.position < historyPosition) return undefined;
-  const row = await readEventAt(options.store, `conversation-${conversationId}`,
-    facts.position, performance.now() + 10_000);
-  if (!row || !savedCloseMatches(row, commandId, options, memberId, conversationId)) {
-    return undefined;
-  }
-  return { status: 'appended' as const, conversationId, commandId,
-    type: 'conversation.closed', sequence: row.sequence,
-    projection: { content: 'applying' as const, iam: 'current' as const } };
 }
