@@ -126,3 +126,50 @@ screenshots directly to this receipt folder, outside the slot directory.
 
 Raw command output and service logs stay in the private task receipt. Independent
 review is left to the orchestrator.
+
+## CI corrections, 28 November 2026
+
+Source: `e40358bcf3370c36b8f81815edcf70554d3f2a0b`.
+
+The two reported browser failures came from tests assuming that only assistant
+replies used `oc-assistant-markdown`. Member messages now use that renderer too.
+The Mermaid test selected the first assistant reply, which had two diagrams,
+when it meant to select the second reply. The sign-out test read the member's
+question while waiting for private text. Both failures reproduced locally.
+
+The browser checks now select the articles labelled “Agent reply”. The Mermaid
+check keeps its strict image lookup, exact diagram counts and network refusals.
+The sign-out check keeps both tab scenarios, disconnection and late-reply checks.
+The private-reply memory and display checks use the same article label. They also
+check that the saved question remains after the private reply disappears.
+The memory check starts observing after the saved question renders, so it still
+requires all three private operations to cancel. Both its collection checks and
+its deliberate retained-callback failure remain in place.
+
+The failed hosted run also exposed a missing packaged import. The model stand-in
+imports `chat-links-model.ts`, but the Docker context excluded that file.
+The source import check and a real Docker build both failed for this reason.
+The context now includes that exact helper. The image checks require it and allow
+it in the small list of development files that ship.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Original browser failures | FAIL, reproduced | Both reported failures occurred in `browser-red.log`; sign-out also failed in `signout-red.log`. |
+| Original packaged import | FAIL, reproduced | `package-red.log` names the missing helper; `context-red.log` shows Docker refusing to copy it. |
+| Real Docker context, twice | PASS | Both builds copied the required files and compared their contents with the source. |
+| Packaged source imports, twice | PASS | The recursive import check found every required development file in the context. |
+| Web unit tests | PASS | 92 files and 1,689 tests; 71.44 seconds. |
+| Other web source tests | PASS | Four files and 11 tests. |
+| All web browser and source tests | PASS | Six files and 17 tests; 429.71 seconds. This includes the two reported browser files. |
+| Both reported browser files, second run | PASS | Two files and six tests; 476.15 seconds. Both runs include sign-out, private memory collection, the deliberate memory-leak failure and private-reply display. |
+| Production web build | PASS | Existing style-budget and vendor warnings remain. |
+| Typecheck | PASS | All workspaces, package and dev-stack checks completed. |
+| Event catalogue | PASS | 175 event types agree. |
+| Changed-file ESLint | PASS | No errors or warnings in files covered by the repository's ESLint configuration. |
+| Knip | PASS | No unused code findings; two existing configuration hints. |
+| Changelog and Markdown | PASS | Both checks completed. |
+| Fresh journey in this correction | NOT RUN | Link rendering is unchanged. The focused fresh-stack journey above remains PASS at 390 and 1280 px. |
+| Full application image archive locally | NOT RUN | The Docker context was tested directly; no complete application image was built locally. |
+
+Raw output stays in the private task receipt. No development stack was claimed
+or changed during these corrections.
