@@ -4,12 +4,12 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { Locator, Page } from 'playwright';
+import { chromium, type Browser, type Frame, type Locator, type Page } from 'playwright';
 import { loadAuthConfig } from '@opencrane/auth';
 import { authEnv, readEnv, root } from './config.ts';
 import { requireStageBStack } from './stage-b-guard.ts';
 import { requireStandInJourney } from './journey-guard.ts';
-import { browserSessions } from './browser-signin.ts';
+import { completeProviderSignIn, testUsers } from './browser-signin.ts';
 import { sendUploadedMessage } from './browser-upload-message.ts';
 
 assert.equal(process.env['DEV_STACK_ID'], '1');
@@ -23,10 +23,35 @@ const privateOutput = join(homedir(), '.fleet', 'receipts', 'share-1220-s1');
 await mkdir(output, { recursive: true });
 await mkdir(privateOutput, { recursive: true, mode: 0o700 });
 const config = loadAuthConfig(await authEnv());
-const sessions = await browserSessions(config, origin);
+const browser = await chromium.launch({ headless: false, channel: 'chromium' });
 const results: object[] = [];
 
+async function signInMembers(browser: Browser, origin: string): Promise<Page[]> {
+  const users = await testUsers();
+  const member = users.member;
+  const password = await readFile(member.passwordFile, 'utf8');
+  const pages: Page[] = [];
+  for (const width of [1280, 390]) {
+    const options = { viewport: { width, height: width === 390 ? 844 : 900 } };
+    const context = await browser.newContext(options);
+    const page = await context.newPage();
+    page.setDefaultTimeout(30_000);
+    await page.goto(origin);
+    const signIn = page.getByRole('button', { name: 'Continue with single sign-on', exact: true });
+    await signIn.click();
+    await completeProviderSignIn(page, member.login, password, origin, config.issuerUrl);
+    pages.push(page);
+  }
+  return pages;
+}
+
+function nextAnimationFrame(): Promise<number> {
+  return new Promise<number>(requestAnimationFrame);
+}
+
 async function screenshot(page: Page, name: string, width: number): Promise<void> {
+  await page.evaluate(nextAnimationFrame);
+  await page.evaluate(nextAnimationFrame);
   const path = `${output}/${name}-${width}.png`;
   const mask = [page.locator('.current-user')];
   await page.screenshot({ path, fullPage: true, mask });
@@ -78,6 +103,44 @@ async function approvePersona(page: Page): Promise<void> {
 
 }
 
+async function preparePersona(page: Page): Promise<void> {
+  await page.goto(`${origin}/welcome/persona`);
+  const approved = page.getByText('Approved revision r2', { exact: true });
+  const absent = page.getByText('No persona yet. Finish the survey first.', { exact: true });
+  const personaState = approved.or(absent);
+  await personaState.waitFor();
+  if (await approved.isVisible()) {
+    const persona = page.locator('.persona-text');
+    const text = await persona.innerText();
+    assert(text.startsWith('Your name is Aster.'));
+    await screenshot(page, 'approved-persona', page.viewportSize()!.width);
+    return;
+  }
+  await approvePersona(page);
+}
+
+function isPdfViewer(frame: Frame): boolean {
+  return frame.url().startsWith('chrome-extension:');
+}
+
+function pdfPagesLoaded(): boolean {
+  const viewer = document.querySelector('pdf-viewer');
+  if (!viewer) return false;
+  const check: unknown = Reflect.get(viewer, 'getLoadSucceededForTesting');
+  if (typeof check !== 'function') return false;
+  const loaded: unknown = Reflect.apply(check, viewer, []);
+  return loaded === true;
+}
+
+async function waitForPdfPages(page: Page): Promise<void> {
+  const frames = page.frames();
+  let viewer = frames.find(isPdfViewer);
+  if (!viewer) {
+    viewer = await page.waitForEvent('framenavigated', isPdfViewer);
+  }
+  await viewer.waitForFunction(pdfPagesLoaded);
+}
+
 async function openAndDownload(page: Page, name: string, width: number): Promise<void> {
   const card = sharedFileCard(page, name);
   const openOptions = { name: `Open ${name}`, exact: true };
@@ -89,6 +152,7 @@ async function openAndDownload(page: Page, name: string, width: number): Promise
   if (name.endsWith('.pdf')) {
     const pdfFrame = preview.locator('iframe[title="Document preview"]');
     await pdfFrame.waitFor();
+    await waitForPdfPages(page);
   } else {
     const notes = preview.getByText('Aster: clear and useful work.', { exact: true });
     await notes.waitFor();
@@ -153,6 +217,8 @@ async function checkScanRefusal(page: Page, width: number): Promise<void> {
   const reply = replies.nth(priorReplies);
   const done = reply.getByText('Done', { exact: true });
   await done.waitFor({ timeout: 120_000 });
+  const failedAction = reply.locator('oc-tool-activity-line button:has([data-state="failed"])');
+  await failedAction.click();
   const refusal = reply.getByText('File refused: malware detected.', { exact: false });
   await refusal.waitFor();
   const card = sharedFileCard(page, 'antivirus-test.txt');
@@ -171,6 +237,8 @@ async function checkWidth(page: Page): Promise<void> {
   await page.goto(`${origin}/workspace`);
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   await composer.waitFor();
+  const sessionsLoaded = page.getByText('Sessions loaded', { exact: true });
+  await sessionsLoaded.waitFor();
   await page.keyboard.press('Control+n');
   const draft = page.getByText('Draft', { exact: true });
   await draft.waitFor();
@@ -198,14 +266,15 @@ function isDesktopPage(page: Page): boolean {
 }
 
 try {
-  const desktop = sessions.memberPages.find(isDesktopPage);
+  const pages = await signInMembers(browser, origin);
+  const desktop = pages.find(isDesktopPage);
   assert(desktop);
-  await approvePersona(desktop);
-  for (const page of sessions.memberPages) {
+  await preparePersona(desktop);
+  for (const page of pages) {
     await checkWidth(page);
   }
   const summary = { verdict: 'PASS', provider: 'free stand-in', spentCents: 0, results };
   await writeFile(`${output}/results.json`, JSON.stringify(summary, null, 2) + '\n');
 } finally {
-  await sessions.browser.close();
+  await browser.close();
 }

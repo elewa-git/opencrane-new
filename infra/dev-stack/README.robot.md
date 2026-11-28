@@ -61,9 +61,12 @@ create notes or the EICAR antivirus test file outside the publication folder. Sh
 copies them into that folder through a real shell call. Normal scanning and access
 checks decide whether they become chat files. These examples check transport and
 browser behaviour; they do not qualify a real model's writing or judgement.
-With a fresh claimed slot 1 running, `DEV_STACK_ID=1 node --experimental-strip-types
-infra/dev-stack/file-sharing-journey.ts` checks both widths through Playwright.
-It approves Aster through the survey page, previews and downloads the deck and notes,
+With a fresh claimed slot 1 running, `DEV_STACK_ID=1 nice -n 10 xvfb-run --auto-servernum node
+--experimental-strip-types infra/dev-stack/file-sharing-journey.ts` checks both widths through Playwright.
+It uses headed Chromium on an isolated virtual display and waits for its PDF viewer
+to finish loading. It approves Aster through the survey page, or checks that the
+approved Aster persona remains in use after an interrupted run. It previews and
+downloads the deck and notes,
 and checks that sharing the antivirus test file produces a refusal. The script writes
 screenshots and a small result summary to `docs/process/work-share-1220-s1/`.
 Downloaded files stay in the task's private receipt folder.
