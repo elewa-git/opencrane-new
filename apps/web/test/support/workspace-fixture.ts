@@ -16,10 +16,13 @@ function createSocket(): SocketLike {
 }
 
 export async function mountWorkspaceFixture(fetchWorkspace: typeof fetch) {
-  vi.spyOn(globalThis, 'fetch').mockImplementation(fetchWorkspace);
-  history.replaceState({}, '', '/workspace?conversation=chat');
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockImplementation(fetchWorkspace);
+  const state = {};
+  history.replaceState(state, '', '/workspace?conversation=chat');
   const provider = { provide: SOCKET_FACTORY, useValue: createSocket };
-  TestBed.configureTestingModule({ providers: [provider] });
+  const configuration = { providers: [provider] };
+  TestBed.configureTestingModule(configuration);
   const fixture = TestBed.createComponent(Workspace);
   await fixture.whenStable();
   fixture.detectChanges();

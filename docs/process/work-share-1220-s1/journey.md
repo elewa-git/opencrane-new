@@ -146,3 +146,53 @@ Raw files remain only in the private task receipt folder. They include
 `browser-3.log`, `final-down.log`, `load-wait.jsonl`, `load-wait-2.jsonl` and the source
 check logs. Downloaded files and diagnostic pictures also remain there. No raw log,
 large capture, password, token or private host path is committed.
+
+## Review fixes checked on 28 November 2026
+
+Application source: `195144d00790b318a82a2fafa3ecf0ded82da66d`.
+The fixes change the free model, packaging and tests. The only application-source
+edit adds a comment. Application behaviour is unchanged. The earlier fresh-stack
+journey remains **PASS**; a journey rerun is **NOT RUN**, as requested for these fixes.
+No stack was claimed or changed during this round. Real-provider judgement remains
+**NOT RUN**.
+
+The first test commit reproduced three failures: CI omitted the new test, Docker
+could not copy the file-sharing helper, and untrusted tool text enabled the Aster
+example. The fix registers the test and packages both file helpers. It reads the
+identity only from the model request's trusted `instructions` field.
+
+Direct send assertions now check denied access, recovery and saved closure without
+relying on a disabled workspace button. Removing each guard separately made its
+matching assertion fail. Removing the trusted-persona guard also made its refusal
+test fail. All guards were restored before the final checks and image build.
+The exec-call builder, prompt selection and workspace test setup each have one home.
+
+Own checks:
+
+- **PASS:** 14 focused browser tests twice; 13 Node checks twice, including the
+  stand-in, real file examples, CI grouping and Docker context.
+- **PASS:** three focused exported-image checks twice. They check recursive imports,
+  refusal when each model helper is missing, and the development-file allow-list.
+  The recursive checker follows 84 runtime modules. Removing either new helper from
+  the copied Docker context also makes it refuse that context.
+- **PASS:** the built image contains the exact file helpers and restored access-guard
+  source. Image index: `sha256:faa79bb633dd6d63893a5b8b59d02178a9b86b36c3f08b8de33f5451594a9877`.
+- **PASS:** full typecheck, the 175-event catalogue, Knip, changed product ESLint,
+  additional ESLint on the changed stand-in helpers and packaging test, changelog,
+  Markdown, public privacy and secret scans.
+
+Moving the browser setup into `test/support` exposed a missing `DOM.Iterable` entry
+in the browser test compiler settings. The settings now include it, and full
+typecheck passes. No product guard, assertion, timeout or limit was weakened.
+Formatting checks also cover the expanded branches and named call options. Comments
+explain draft protection, the two paint frames and Chromium's PDF load check.
+
+The first local image build was cancelled because it overlapped the deliberate
+guard-removal tests. The accepted image was built after all guards were restored;
+its source bytes were compared with the worktree. No cancelled build counts as proof.
+
+Raw check logs and the exported image stay in the private task receipt folder.
+The new logs include `web-1.log`, `web-2.log`, `node-2.log`, `node-3.log`,
+`image-1.log`, `image-2.log`, `context-final-1.log`, `context-final-2.log`,
+`typecheck-final.log`, `denied.log`, `recovering.log`, `closed.log` and
+`persona-guard.log`. No raw logs or image archive are committed.

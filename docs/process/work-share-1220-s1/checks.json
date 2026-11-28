@@ -62,5 +62,47 @@
     "containers": 8,
     "computers": 3,
     "withheld": 1
+  },
+  "reviewFixes": {
+    "date": "2026-11-28",
+    "applicationSourceCommit": "195144d00790b318a82a2fafa3ecf0ded82da66d",
+    "shippedCodeLines": 611,
+    "changedWeb": {
+      "result": "PASS",
+      "tests": 14,
+      "runs": 2
+    },
+    "nodeChecks": {
+      "result": "PASS",
+      "tests": 13,
+      "runs": 2
+    },
+    "exportedImageChecks": {
+      "result": "PASS",
+      "tests": 3,
+      "runs": 2
+    },
+    "finalDockerContext": {
+      "result": "PASS",
+      "tests": 1,
+      "runs": 2
+    },
+    "guardRemoval": {
+      "denied": "PASS",
+      "recovering": "PASS",
+      "savedClose": "PASS",
+      "trustedPersona": "PASS"
+    },
+    "typecheck": "PASS",
+    "events": "PASS",
+    "knip": "PASS",
+    "changedEslint": "PASS",
+    "changelog": "PASS",
+    "markdown": "PASS",
+    "privacy": "PASS",
+    "secrets": "PASS",
+    "journeyRerun": "NOT RUN",
+    "journeyReason": "Application behaviour unchanged; previous fresh-stack PASS retained",
+    "realProviderJudgement": "NOT RUN"
   }
 }
