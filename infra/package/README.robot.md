@@ -1130,10 +1130,12 @@ retaining its evidence.
 
 The previous fresh-installation journey passed update, manual rollback and
 automatic rollback, including saved chats, file bytes and new replies at both
-screen widths. The current recovery fixes need that journey repeated, with an
-operator-triggered unsafe-update refusal before Helm changes. The
-[journey receipt](../../docs/process/work-pilot-1167-s3/journey.md) is the current
-account of qualification and remaining checks. The live pilot has not been changed.
+screen widths. The current fresh-stack check failed while waiting for the chat's
+streaming cursor, before the package rehearsal could start. This revision still
+needs the complete update and rollback journey, including an operator-triggered
+unsafe-update refusal before Helm changes. The
+[journey receipt](../../docs/process/work-pilot-1167-s3/journey.md) records the
+current failure and remaining checks. The live pilot has not been changed.
 
 `package-upgrade` updates a populated pilot on the same chart version. It keeps
 its volumes, sign-in settings, provider credentials and saved route. The operator

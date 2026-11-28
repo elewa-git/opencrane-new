@@ -1,5 +1,5 @@
 {
-  "verdict": "PARTIAL",
+  "verdict": "FAIL",
   "nodeTests": 42,
   "nodeTestPasses": 2,
   "backupTests": 18,
@@ -61,5 +61,40 @@
       "testFailsWithoutGuard": true
     }
   ],
-  "liveRerun": "NOT RUN"
+  "liveRerun": "FAIL before packaged rehearsal",
+  "productCommit": "ffb799e1b66e1dbfeb3fc65c13141f3abc9df009",
+  "freshCore": {
+    "verdict": "FAIL",
+    "slot": 1,
+    "fresh": true,
+    "admissionQuietSeconds": 328,
+    "failedCheck": "Waiting for the chat streaming cursor",
+    "timeoutMs": 30000,
+    "browserTransportFailures": 0,
+    "retainedLogFiles": 25,
+    "failureScreenshot": "NOT RETAINED",
+    "initialCleanup": "FAIL: ESRCH while reading a process",
+    "finalCleanup": "PASS",
+    "finalSlotStatus": "free"
+  },
+  "packagedUpdateRollback": "NOT RUN",
+  "operatorUnsafeUpdateRefusal": "NOT RUN",
+  "operatorProcessAuthorisation": "PENDING",
+  "ciRuns": [
+    {
+      "id": 46162041318,
+      "name": "CI",
+      "verdict": "PASS"
+    },
+    {
+      "id": 46162086140,
+      "name": "Approved application package",
+      "verdict": "PASS"
+    },
+    {
+      "id": 46162088950,
+      "name": "Approved scanner package",
+      "verdict": "PASS"
+    }
+  ]
 }
