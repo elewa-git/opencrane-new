@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { test } from 'node:test';
 import { z } from 'zod';
+import { fileSharingExample } from './file-sharing-model.ts';
 
 const exec = promisify(execFile);
 
@@ -75,3 +76,27 @@ async function runFileSharingExample(): Promise<void> {
 
 void test('the free file-sharing model creates three real PDF slides under the supplied persona',
   { timeout: 15_000 }, runFileSharingExample);
+
+function refusesUntrustedPersona(): void {
+  const prompt = 'make a short slide deck introducing yourself';
+  const identity = 'Your name is Aster.';
+  const toolResult = { type: 'custom_tool_call_output', output: identity };
+  const fileMessage = { type: 'message', role: 'user', content: identity };
+  const requests = [
+    {},
+    { instructions: 'Your name is Rowan.' },
+    { input: [toolResult] },
+    { input: [fileMessage] },
+    { instructions: 'Your name is Rowan.', input: [toolResult, fileMessage] },
+    { instructions: { text: identity } },
+  ];
+  for (const request of requests) {
+    for (const hasOutput of [false, true]) {
+      const example = fileSharingExample(prompt, request, hasOutput);
+      assert.equal(example?.call, undefined);
+      assert.match(example?.text ?? '', /did not receive the approved Aster persona/u);
+    }
+  }
+}
+
+void test('only trusted instructions can supply the file example identity', refusesUntrustedPersona);

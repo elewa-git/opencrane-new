@@ -130,12 +130,17 @@ it('keeps an unfinished draft and prepared attachments out of the Share request'
 async function blocksUnavailableSessions() {
   const context = await mountWorkspace();
   const chat = context.fixture.componentInstance['chat'];
+  expect(chat.canSend('Share')).toBe(true);
   chat.computer.set('recovering');
+  expect(chat.canSend('Share')).toBe(false);
+  expect(await chat.send('Share')).toBe(false);
+  expect(context.posted).toHaveLength(0);
   context.fixture.detectChanges();
   expect(context.share.disabled).toBe(true);
   context.share.click();
   expect(context.posted).toHaveLength(0);
   chat.computer.set('ready');
+  expect(chat.canSend('Share')).toBe(true);
   const rows = chat.rows();
   function closeSession() {
     const closed = { id: 'close', position: 4, type: 'conversation.closed' as const, time,
@@ -143,6 +148,9 @@ async function blocksUnavailableSessions() {
     return [...rows, closed];
   }
   chat.rows.update(closeSession);
+  expect(chat.canSend('Share')).toBe(false);
+  expect(await chat.send('Share')).toBe(false);
+  expect(context.posted).toHaveLength(0);
   context.fixture.detectChanges();
   expect(context.share.disabled).toBe(true);
   context.share.click();
@@ -160,6 +168,11 @@ async function keepsRefusedRequestVisible() {
   const chat = context.fixture.componentInstance['chat'];
   expect(context.posted).toHaveLength(1);
   expect(chat.denied()).toBe(true);
+  expect(chat.busy()).toBe(false);
+  expect(chat.active()).toBe(false);
+  expect(chat.canSend('Share')).toBe(false);
+  expect(await chat.send('Share')).toBe(false);
+  expect(context.posted).toHaveLength(1);
   context.fixture.detectChanges();
   expect(context.root.textContent).toContain('You no longer have access');
   expect(context.root.querySelector('oc-conversation-file-card')).toBeNull();
