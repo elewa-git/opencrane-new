@@ -15,7 +15,9 @@ export class BearerIdentityRefused extends Error {}
 
 const registrationFields = { kind: z.literal('remote'), locator: z.url() };
 const registrationSchema = z.object(registrationFields);
-const identityFields = { subject: z.string().regex(/^[\x21-\x7e]{1,255}$/u) };
+const subjectTextSchema = z.string();
+const subjectSchema = subjectTextSchema.regex(/^[\x21-\x7e]{1,255}$/u);
+const identityFields = { subject: subjectSchema };
 const identityResultFields = {
   isError: z.literal(false),
   structuredContent: z.object(identityFields),

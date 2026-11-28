@@ -13,6 +13,8 @@ import { ModelRequestRefused as RequestRefused, data, priceTableId,
   type ModelCall } from './state.ts';
 
 const id = legacyTurnSchema.shape.assistant;
+const generationNumberSchema = z.int();
+const generationSchema = generationNumberSchema.nonnegative();
 const computerFields = {
   silo: id,
   assistant: id,
@@ -20,7 +22,7 @@ const computerFields = {
   iat: z.int(),
   typ: z.literal('computer'),
   computer: id,
-  generation: z.int().nonnegative(),
+  generation: generationSchema,
 };
 const computerSchema = z.object(computerFields);
 

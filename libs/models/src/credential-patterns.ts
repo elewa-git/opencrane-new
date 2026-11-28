@@ -6,8 +6,10 @@ export function credentialPatterns(material: string | undefined): string[] {
   for (const value of [material, `Bearer ${material}`]) {
     patterns.add(value);
     const bytes = Buffer.from(value);
-    patterns.add(bytes.toString('base64'));
-    patterns.add(bytes.toString('base64url'));
+    const base64 = bytes.toString('base64');
+    patterns.add(base64);
+    const base64Url = bytes.toString('base64url');
+    patterns.add(base64Url);
   }
   // Check eight-character pieces because every longer copied part contains one.
   for (let index = 0; index <= material.length - 8; index += 1) {
