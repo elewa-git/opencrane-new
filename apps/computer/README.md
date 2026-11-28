@@ -24,13 +24,14 @@ flowchart LR
   computer -->|reports results| server
   computer -->|runs assistant work| desktop["Codex, shell and desktop<br/>working tools"]
   computer -->|sends checked calls| gateway["agentgateway<br/>AI gateway"]
-  computer -.-> events["libs/events<br/>session settings, IDs and digests"]
+  computer -.->|reads shared checks| events["libs/events<br/>session settings, IDs and digests"]
   computer -.-> models["libs/models<br/>private caller checks"]
 ```
 
 ## What it is responsible for
 
 - Build the computer image with Codex, a desktop and document tools.
+  Keep its source readable by the separate users that run those tools.
 - Give Memory-free assistants their approved identity and instructions for their available tools.
 - Run the bridge that receives work and reports its progress.
 - Keep the assistant's files while its computer sleeps.

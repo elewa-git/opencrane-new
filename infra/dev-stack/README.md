@@ -29,7 +29,7 @@ flowchart LR
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|checks reviewed tool calls through TLS| demo["Demo tool server<br/>synthetic effects"]
   stack -.->|reuses website proxy handling| package
-  stack -->|installs and updates owned releases| package["infra/package<br/>Helm install"]
+  stack -->|installs, updates and restores owned releases| package["infra/package<br/>Helm install"]
 ```
 
 ## What it is responsible for
@@ -45,7 +45,7 @@ flowchart LR
   The free file-sharing example creates a slide deck and checks sharing a file on request.
 - Check the claimed stack and protected target before private memory collection.
 - Check package hosts and require the free stand-in for fleet tasks. Record any explicit
-  local host-risk exception. Update and remove only owned releases.
+  local host-risk exception. Back up before updates and return failed updates to the saved images.
 - Provide guarded demo checks and a daily fresh-stack check.
 
 Not built yet:

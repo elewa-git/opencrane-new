@@ -203,26 +203,49 @@ export function reviewedValidationPaths(source) {
   };
 }
 
-async function scanAndCheckLicences(source, plan, computerIdentity, packageIdentity,
-  attemptDirectory, tools) {
-  const computerScan = join(attemptDirectory, 'computer-sbom.json');
+async function scanPackage(source, plan, identity, attemptDirectory, tools) {
   const packageScan = join(attemptDirectory, 'package-sbom.json');
-  await run(tools.syft, ['scan', `docker:${plan.computer.tag}`, '-o', `syft-json=${computerScan}`]);
-  await run(tools.syft, ['scan', `docker:${plan.package.tag}`, '-o', `syft-json=${packageScan}`]);
-  await checkedScanIdentity(computerScan, plan.computer.tag, computerIdentity);
-  await checkedScanIdentity(packageScan, plan.package.tag, packageIdentity);
+  await run(tools.syft, ['scan', `docker:${plan.tag}`, '-o', `syft-json=${packageScan}`]);
+  await checkedScanIdentity(packageScan, plan.tag, identity);
+  const validationPaths = reviewedValidationPaths(source);
+  await run('python3', [validationPaths.packageChecker, '--candidate-server', packageScan],
+    { cwd: source });
+}
+
+async function scanComputer(source, plan, identity, attemptDirectory, tools) {
+  const computerScan = join(attemptDirectory, 'computer-sbom.json');
+  await run(tools.syft, ['scan', `docker:${plan.tag}`, '-o', `syft-json=${computerScan}`]);
+  await checkedScanIdentity(computerScan, plan.tag, identity);
   const validationPaths = reviewedValidationPaths(source);
   const noticeCollector = await readFile(validationPaths.noticeCollector);
   const notices = await run('docker', ['run', '--rm', '--network', 'none', '-i',
-    '--entrypoint', '/usr/bin/python3', plan.computer.tag, '-', 'notices'],
+    '--entrypoint', '/usr/bin/python3', plan.tag, '-', 'notices'],
   { input: noticeCollector });
   const noticePath = join(attemptDirectory, 'computer-notices.json');
   const inventoryPath = join(attemptDirectory, 'computer-licences.json');
   await writeFile(noticePath, notices, { mode: 0o600 });
   await run('python3', [validationPaths.computerChecker, computerScan,
     tools.osiPath, inventoryPath, noticePath], { cwd: source });
-  await run('python3', [validationPaths.packageChecker, '--candidate-server', packageScan],
-    { cwd: source });
+}
+
+async function checkComputerReadability(tag) {
+  const script = `import { accessSync, constants, readdirSync, statSync } from 'node:fs';
+    import { join } from 'node:path';
+    function check(directory) {
+      accessSync(directory, constants.R_OK | constants.X_OK);
+      for (const name of readdirSync(directory)) {
+        const path = join(directory, name);
+        if (statSync(path).isDirectory()) check(path);
+        else accessSync(path, constants.R_OK);
+      }
+    }
+    for (const directory of ['/app/src', '/app/libs', '/scripts/private-memory-qualification']) {
+      check(directory);
+    }
+    await import('/app/libs/events/src/tool-call.ts');
+    await import('/app/libs/models/src/routing.ts');`;
+  await run('docker', ['run', '--rm', '--network', 'none', '--read-only', '--user', '1000:1000',
+    '--entrypoint', 'node', tag, '--experimental-strip-types', '--input-type=module', '-e', script]);
 }
 
 async function checkedScanIdentity(path, tag, identity) {
@@ -299,8 +322,9 @@ export async function writeCompletedRecord(recordPath, record, signal, write = w
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length !== 4 || args[0] !== '--id' || args[2] !== '--revision') {
-    throw new Error('Usage: build-images.mjs --id 1|2 --revision <full-commit>');
+  const computerOnly = args[4] === '--computer-only';
+  if (args.length !== (computerOnly ? 5 : 4) || args[0] !== '--id' || args[2] !== '--revision') {
+    throw new Error('Usage: build-images.mjs --id 1|2 --revision <full-commit> [--computer-only]');
   }
   const attempt = randomUUID();
   const plan = buildPlan(args[1], args[3], attempt);
@@ -315,10 +339,16 @@ async function main() {
   await chmod(attemptDirectory, 0o700);
   const source = await extractSource(plan.revision, attemptDirectory);
   const computer = await buildImage(source, { ...plan.computer, revision: plan.revision }, attemptDirectory);
-  const packageImage = await buildImage(source, { ...plan.package, revision: plan.revision }, attemptDirectory);
   const licenceTools = await prepareLicenceTools(attemptDirectory);
-  await scanAndCheckLicences(source, plan, computer, packageImage, attemptDirectory, licenceTools);
-  await checkImports(source, plan, packageImage.archive);
+  await checkComputerReadability(plan.computer.tag);
+  await scanComputer(source, plan.computer, computer, attemptDirectory, licenceTools);
+  let packageImage;
+  if (!computerOnly) {
+    const packagePlan = { ...plan.package, revision: plan.revision };
+    packageImage = await buildImage(source, packagePlan, attemptDirectory);
+    await scanPackage(source, plan.package, packageImage, attemptDirectory, licenceTools);
+    await checkImports(source, plan, packageImage.archive);
+  }
   const record = { slot: plan.slot, sourceRevision: plan.revision, computer, package: packageImage,
     computerTag: plan.computer.tag, packageTag: plan.package.tag };
   const recordPath = join(attemptDirectory, 'images.json');

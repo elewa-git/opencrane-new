@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { isIP } from 'node:net';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fetchApplicationApproval } from './application-approval.mjs';
 import { fetchScannerApproval } from '../clamav/approval.mjs';
 
@@ -44,4 +44,13 @@ export function publishApprovedApplication(directory) {
 
 export function publishApprovedScanner(directory) {
   return publishApproval(directory, 'scanner', fetchScannerApproval);
+}
+
+export function publishComputerImage(record) {
+  if (!/^sha256:[a-f0-9]{64}$/u.test(record.manifestDigest)) {
+    throw new Error('The checked computer build has no image digest');
+  }
+  const image = `k3d-ocn-registry:5000/opencrane/computer@${record.manifestDigest}`;
+  publishImage(dirname(record.archive), basename(record.archive), image);
+  return image;
 }

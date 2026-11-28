@@ -1,5 +1,5 @@
 import childProcess from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { registerHooks, syncBuiltinESMExports } from 'node:module';
 import { promisify } from 'node:util';
 
@@ -8,6 +8,23 @@ let gateway = 'http://10.0.0.8:43000';
 let revision = '2';
 let failed = false;
 const directory = process.env.UPDATE_FIXTURE_DIRECTORY;
+const oldImage = `registry.invalid/package@sha256:${'a'.repeat(64)}`;
+const newImage = `registry.invalid/package@sha256:${'b'.repeat(64)}`;
+const previousValues = { exposure: { public: { enabled: true } }, images: {
+  server: oldImage, web: oldImage, scanner: oldImage, computer: oldImage,
+}, scanner: { approvedSha: 'a'.repeat(64) }, secrets: { scanner: 'scanner-original' },
+models: { mode: 'stub' } };
+let values = structuredClone(previousValues);
+if (process.env.UPDATE_FIXTURE_CONDITION === 'recovery') values.pilotRestore = { enabled: true };
+const computer = { metadata: { name: 'computer-one', uid: 'computer-id', resourceVersion: '1',
+  generation: 1 }, spec: { operatingMode: 'Running', podTemplate: {
+    metadata: { labels: { 'sandbox.users.io/computer': 'computer-one',
+      'sandbox.users.io/assistant': 'assistant-one' } },
+    spec: { containers: [{ name: 'computer', image: oldImage }] },
+  } }, status: { conditions: [] } };
+const pvc = { metadata: { name: 'home-computer-one', uid: 'home-id',
+  labels: { 'sandbox.users.io/computer': 'computer-one' },
+  ownerReferences: [{ kind: 'Sandbox', name: 'computer-one', uid: 'computer-id', controller: true }] } };
 const owner = {
   worktree: process.cwd(), slot: '1', context: 'fixture', namespace: 'opencrane-package-1',
   namespaceUid: 'namespace-id', release: 'opencrane-package-1', installId: 'install-id',
@@ -15,7 +32,8 @@ const owner = {
 };
 
 function snapshot() {
-  writeFileSync(`${directory}/result.json`, JSON.stringify({ calls, gateway, revision }));
+  writeFileSync(`${directory}/result.json`, JSON.stringify({ calls, gateway, revision,
+    computerImage: computer.spec.podTemplate.spec.containers[0].image }));
 }
 
 async function execute(program, args) {
@@ -25,8 +43,10 @@ async function execute(program, args) {
     if (args[0] === 'upgrade' || args[0] === 'rollback') {
       gateway = 'http://127.0.0.1:1';
       revision = args[0] === 'rollback' ? args[2] : '3';
+      if (args[0] === 'rollback') values = structuredClone(previousValues);
+      else values.images.computer = newImage;
     } else if (args[0] === 'get') {
-      stdout = JSON.stringify({ models: { mode: 'stub' } });
+      stdout = JSON.stringify(args.includes('--revision') ? previousValues : values);
     }
   } else if (program === 'kubectl') {
     if (args.includes('namespace')) {
@@ -40,6 +60,35 @@ async function execute(program, args) {
       stdout = JSON.stringify({ spec: { type: 'ClusterIP', clusterIP: '10.0.0.8' } });
     } else if (args.includes('services,ingresses')) {
       stdout = '{"items":[]}';
+    } else if (args.includes('secret')) {
+      const data = { 'signatures.json': Buffer.from('{}').toString('base64'),
+        'release.json': Buffer.from('{}').toString('base64') };
+      const metadata = { uid: owner.releaseSecretUid,
+        labels: { 'opencrane.dev/install-id': owner.installId } };
+      stdout = JSON.stringify({ data, metadata });
+    } else if (args.includes('sandboxes')) {
+      stdout = JSON.stringify({ items: [computer] });
+    } else if (args.includes('sandbox')) {
+      if (args.includes('patch')) {
+        const patch = JSON.parse(args[args.indexOf('-p') + 1]);
+        Object.assign(computer.spec, patch.spec);
+        computer.status.conditions = [{ type: 'Suspended', status: 'True',
+          reason: 'PodTerminated', observedGeneration: computer.metadata.generation }];
+      }
+      stdout = JSON.stringify(computer);
+    } else if (args.includes('pvc')) {
+      stdout = JSON.stringify(args.includes('home-computer-one') ? pvc : { items: [pvc] });
+    } else if (args.includes('pod') && args.includes('computer-one')) {
+      if (args.includes('jsonpath={.status.containerStatuses[0].imageID}')) {
+        stdout = computer.spec.podTemplate.spec.containers[0].image;
+      } else if (computer.spec.operatingMode !== 'Suspended') stdout = 'pod/computer-one';
+    } else if (args.includes('pods')) {
+      stdout = 'catalogue-pod';
+    } else if (args.includes('logs')) {
+      stdout = JSON.stringify({ backupId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' });
+    } else if (args.includes('exec') && args.includes('deployment/backup-catalogue') &&
+        args.includes('-e')) {
+      stdout = 'idle';
     } else if (args.includes('jobs')) {
       const items = [];
       if (process.env.UPDATE_FIXTURE_CONDITION === 'manual-backup') {
@@ -53,6 +102,20 @@ async function execute(program, args) {
       snapshot();
       throw new Error('Fixture rollout failed');
     }
+  } else if (program === 'git') {
+    if (args[0] === 'rev-parse') stdout = 'a'.repeat(40);
+    if (args[0] === 'rev-parse' && process.env.UPDATE_FIXTURE_CONDITION === 'changed-source') {
+      stdout = 'b'.repeat(40);
+    }
+    if (args[0] === 'ls-files' && process.env.UPDATE_FIXTURE_CONDITION === 'untracked-chart') {
+      stdout = 'infra/package/chart/templates/untracked.yaml';
+    }
+  } else if (program === 'bash') {
+    const recordFile = `${directory}/computer-build.json`;
+    const record = { sourceRevision: 'a'.repeat(40), computer: { archive: 'image.tar',
+      manifestDigest: `sha256:${'b'.repeat(64)}` } };
+    writeFileSync(recordFile, JSON.stringify(record));
+    writeFileSync(args.at(-1), `${recordFile}\n`);
   } else {
     throw new Error(`Unexpected fixture command: ${program}`);
   }
@@ -68,6 +131,26 @@ childProcess.execFile = execFixture;
 syncBuiltinESMExports();
 
 function load(url, context, nextLoad) {
+  if (url.endsWith('/infra/clamav/release.mjs')) {
+    const source = `export async function readApprovedRelease() {
+      if (process.env.UPDATE_FIXTURE_CONDITION === 'expired-scanner') {
+        throw new Error('Scanner release refused');
+      }
+      if (process.env.UPDATE_FIXTURE_CONDITION === 'expired-after-upgrade' &&
+          globalThis.packageUpdateRevision() === '3') throw new Error('Scanner release refused');
+    }`;
+    return { format: 'module', source, shortCircuit: true };
+  }
+  if (url.endsWith('/infra/package/publish-approved-images.mjs')) {
+    const source = `export function publishComputerImage() { return ${JSON.stringify(newImage)}; }`;
+    return { format: 'module', source, shortCircuit: true };
+  }
+  if (url.endsWith('/infra/package/scheduled-backup.ts')) {
+    const source = `export async function showBackup() {
+      return { images: ${JSON.stringify(previousValues.images)} };
+    }`;
+    return { format: 'module', source, shortCircuit: true };
+  }
   if (url.endsWith('/infra/dev-stack/config.ts')) {
     const source = `export const root = ${JSON.stringify(process.cwd())};
       export const directory = ${JSON.stringify(directory)};`;
@@ -88,4 +171,17 @@ function load(url, context, nextLoad) {
 writeFileSync(`${directory}/stack-owner`, `worktree=${owner.worktree}\n`);
 writeFileSync(`${directory}/package-owner.json`, JSON.stringify(owner));
 globalThis.packageUpdateOwner = owner;
+function replaceUpdateIdentity(condition) {
+  const filename = `${directory}/pilot-update.json`;
+  const record = JSON.parse(readFileSync(filename, 'utf8'));
+  if (condition === 'wrong-record') record.namespaceUid = 'different-installation';
+  if (condition === 'wrong-release') record.releaseSecretUid = 'different-release';
+  if (condition === 'wrong-volume') record.volumes['home-computer-one'] = 'different-volume';
+  writeFileSync(filename, JSON.stringify(record));
+}
+function currentRevision() {
+  return revision;
+}
+globalThis.replaceUpdateIdentity = replaceUpdateIdentity;
+globalThis.packageUpdateRevision = currentRevision;
 registerHooks({ load });

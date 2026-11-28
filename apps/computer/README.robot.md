@@ -618,6 +618,12 @@ names the earlier image. The lifecycle k3d test checks delivery on the current d
 
 ## Build and check
 
+The final image sets read permission on all shipped application and shared source,
+including package settings and the native process helpers. It sets search permission
+on their directories. Extracting Git with umask 077 therefore cannot leave source
+unreadable by the computer's non-root users. The local builder checks these reads
+as UID 1000 before it publishes a completed image record.
+
 On the [developer box](../../infra/devbox/README.md), with the pinned S0.5 image
 in its local registry, Docker, Node 22, Python 3, curl, tar, sha256sum, kubectl,
 gcc with static libc support, read-only passwordless sudo for dump inventories,

@@ -4,6 +4,12 @@ For people, read [README.md](README.md) first.
 
 ## Local qualification image build
 
+`build-images.mjs --id <slot> --revision <commit> --computer-only` builds only the
+computer for a pilot update. It keeps the same clean-source, licence and image
+identity checks. It also checks source reads and shared imports as UID 1000.
+It writes the normal private build record without a package image. The pilot
+update command separately requires both exact-source CI image approvals.
+
 Run `nice -n 10 node scripts/private-memory-qualification/build-images.mjs --id 1
 --revision <full-commit>` from a clean checkout with an owned slot claim.
 The builder archives that commit and uses the production computer and package

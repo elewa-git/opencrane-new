@@ -1015,8 +1015,8 @@ without Funnel. The first-owner token goes in the claim form.
 ### Roll back the pilot route
 
 If a switch reports that it could not confirm the write or the new mapping,
-stop inviting people and keep the saved route file. Run the first recovery
-block below if the demo is running. If the guarded command reports a changed
+stop inviting people and keep the saved route file. Use the guarded
+`pilot-route.ts restore` block below if the demo is running. If the guarded command reports a changed
 or unexpected Serve configuration, keep the forwarder running and inspect
 `tailscale serve status --json` with the operator who owns the current routes.
 If the only entry is the expected pilot root and its HTTPS listener is
@@ -1030,7 +1030,7 @@ saved_demo=$(cat "$PRIVATE_DIR/demo-serve-target") &&
 ```
 
 An unrelated route or Funnel needs the operator who owns it to resolve the
-conflict. Start the first recovery block again after checking the demo.
+conflict. Use the guarded restore block after checking the demo.
 A refused recovery leaves the current configuration in place.
 
 When the demo is still running, restore the saved root HTTPS handler and
@@ -1109,9 +1109,12 @@ ID still needs a separate slot or cluster.
 
 ```sh
 archive="$PRIVATE_DIR/pilot-backup-$BACKUP_ID.tar"
-read -r source_cluster source_namespace source_namespace_uid < "$archive.source" &&
-  node --experimental-strip-types infra/package/pilot-archive-import.ts \
-    "$archive" "$source_cluster" "$source_namespace" "$source_namespace_uid"
+read -r source_cluster source_namespace source_namespace_uid < "$archive.source"
+set -- "$archive" "$source_cluster" "$source_namespace"
+if [ -n "$source_namespace_uid" ]; then
+  set -- "$@" "$source_namespace_uid"
+fi
+node --experimental-strip-types infra/package/pilot-archive-import.ts "$@"
 ```
 
 Follow [Restore one pilot backup](#restore-one-pilot-backup) to stop the
@@ -1122,62 +1125,73 @@ retaining its evidence.
 
 ## Update the running pilot
 
-Not yet safe for a live installation. Reinstall instead; the open checks are
-tracked as slice 3 of the pilot ticket. Use these steps for rehearsal only.
+`package-upgrade` updates a populated pilot on the same chart version. It keeps
+its volumes, sign-in settings, provider credentials and saved route. The operator
+uses the worktree and slot that installed it. A maintenance window keeps people
+out of chat until the command finishes. Computer homes are retained but are not
+part of the backup.
 
-`package-upgrade` is for a running packaged pilot on the same chart version.
-It keeps the existing Helm values for storage, sign-in and site address. It
-changes the application images, including the image for the next scheduled
-backup, and the scanner image and its signed database records. The completed
-bootstrap Job keeps its original image because Kubernetes fixes the Job's
-template once it has run. Each scanner record has its own Secret. Older
-releases still refer to their original Secret for rollback. Each download
-keeps its approval records in a new directory, so applying the same update
-again after rollback also works.
+Before changing the release, the command runs a new backup with the installed
+version. It checks the catalogue, copies the complete set into the slot's private
+update directory and checks the copied bytes again. An old installation whose
+backup cannot verify is refused. It needs a separate recovery plan or a fresh
+install; this command does not bypass the backup check.
 
-Use the worktree recorded when the pilot was installed. Keep an exported
-backup that has passed the catalogue check. Record the current deployed
-revision from `helm history` for the recorded context, namespace and release.
-Also record the namespace and volume claim IDs and the server, web and scanner
-image digests. Keep the saved route file in its private directory. Schedule
-the update away from the backup window and keep other operators out of
-Helm until the update and checks finish.
+Both CI image approvals must cover the exact checkout and still have their
+artifacts. Tracked changes and any untracked chart file refuse the update. The
+computer builder uses that clean commit, checks its image identity and runtime
+licences, and checks that its non-root user can read the source. Its checked
+archive is published by digest. The original scanner approval must remain valid
+for another hour so there is time to return to it.
 
-Check out the approved branch and exact revision in that worktree. Both image
-approvals for that revision must still have their artifacts. Use the existing
-slot number. This path leaves the namespace, volumes and Serve configuration
-in place.
+Save the live slot separately from `DEV_STACK_ID` before any recovery drill:
 
 ```sh
-infra/dev-stack/run.sh package-check --id "$DEV_STACK_ID" &&
-  infra/dev-stack/run.sh package-upgrade --id "$DEV_STACK_ID"
+PILOT_SLOT="${DEV_STACK_ID:?Set the installed pilot slot}"
+infra/dev-stack/run.sh package-check --id "$PILOT_SLOT" &&
+  OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366 \
+  infra/dev-stack/run.sh package-upgrade --id "$PILOT_SLOT"
 ```
 
-Compare the namespace and volume claim IDs with the values recorded before
-the update. Check that the deployment and backup Job template use the new
-approved digests. After the website pods restart, check the forwarder and
-the saved route. Sign in with an existing member and open their chat and
-upload. Check the next scheduled backup in the catalogue and restore it
-on an empty recovery installation using its exact image pins. Keep the
-earlier verified backup until recovery has passed.
+The host-risk switch above is the documented exception for this local box only.
+Production hosts must pass without it. No command here changes Tailscale Serve.
 
-The update command checks the workloads that serve the pilot. The recovery
-volume claim stays unbound until a recovery Job uses it. If the update or
-its readiness checks fail, the command attempts to restore the previous Helm
-revision. Check `helm history` before taking further action. If
-the new application still runs but a sign-in, upload or backup check fails,
-return to the recorded working revision with the guarded rollback command.
-The old scanner record must still be within its approved lifetime.
+The private `pilot-update.json` records the live namespace and release Secret
+IDs, the previous Helm revision and images, volume IDs, computer IDs and modes,
+source commit and backup ID. Its `pilot-update-<id>/backup` directory holds the
+verified copy outside the running namespace. Keep that directory off the box as
+well to protect against losing the machine. Raw build logs and image checks stay
+in the slot's private `qualification-images` directory.
+
+The command checks scheduled and manual backup Jobs. It then holds the backup
+volume's exclusive lock so a new manual or scheduled backup cannot overlap Helm.
+The first Helm update keeps the server and workers stopped. Computers stop,
+receive the new image and retain their home volume. The second Helm update starts
+services. Both updates reapply the private computer gateway address, because Helm
+otherwise resets it to the chart placeholder. The command checks deployment
+readiness, server and model health, actual running computer digests and volume IDs.
+
+If applying an image or checking readiness fails, the command automatically
+returns to the recorded revision and each computer's earlier image and mode.
+It reapplies the gateway and checks health and the recorded identities again.
+An unconfirmed return keeps the backup lock and reports failure. Preserve the
+volumes and private logs before investigating. Never clear a retained lock until
+an operator has checked the workloads and unfinished backup Jobs.
+
+A later sign-in, chat or file check can request the same recorded rollback:
 
 ```sh
-infra/dev-stack/run.sh package-rollback --id "$DEV_STACK_ID" --revision "$PREVIOUS_REVISION"
+infra/dev-stack/run.sh package-rollback --id "$PILOT_SLOT" --revision "$PREVIOUS_REVISION"
 ```
 
-Check the deployed revision's image digests, the saved route and the member's
-chat and upload again. If the release cannot return to service, preserve the
-volumes and use the separate recovery installation. The
-[demo route rollback](#roll-back-the-pilot-route) can take the pilot out of
-the way without deleting its data.
+`PREVIOUS_REVISION` is the `revision` in that pilot's private `pilot-update.json`.
+Rollback refuses another namespace, another release Secret, different volumes,
+a recovery installation, an unrecorded revision, an active backup or an expired
+scanner approval. Reusing a revision number from a recovery slot is insufficient.
+After either command, sign in as an existing member, open the saved chat and file,
+and send a new message. Check the next scheduled backup before ending maintenance.
+The separate [demo route rollback](#roll-back-the-pilot-route) can take the pilot
+out of service while its data is kept for recovery.
 
 ## Private owner email
 

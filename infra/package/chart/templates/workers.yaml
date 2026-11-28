@@ -14,7 +14,7 @@ kind: Deployment
 metadata:
   name: worker-{{ $mode }}
 spec:
-  replicas: {{ ternary 0 1 $root.Values.pilotRestore.enabled }}
+  replicas: {{ ternary 0 1 (or $root.Values.pilotRestore.enabled $root.Values.pilotUpdatePaused) }}
   selector:
     matchLabels: { app: worker-{{ $mode }} }
   template:

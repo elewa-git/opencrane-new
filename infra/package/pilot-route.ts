@@ -194,6 +194,9 @@ export async function switchPilot(settings: PilotRouteSettings, controls: PilotR
   }
   const current = await checkedRoute(host, controls);
   if (sameLoopbackAddress(current.target, settings.pilotTarget) && saved !== undefined) {
+    if (!await controls.ownsForwarder(settings.pilotTarget)) {
+      throw new RouteRefused('The claimed slot’s pilot forwarder changed before confirmation');
+    }
     return;
   }
   if (!current.target || !sameLoopbackAddress(current.target, settings.demoTarget)) {

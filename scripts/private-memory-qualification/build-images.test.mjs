@@ -165,7 +165,7 @@ async function fixtureBuildImage() {
     'await buildImage(source, { ...plan.computer, revision: plan.revision }, attemptDirectory)',
     'await fixtureBuildImage()');
   source = replaceFixtureCall(source,
-    'await buildImage(source, { ...plan.package, revision: plan.revision }, attemptDirectory)',
+    'await buildImage(source, packagePlan, attemptDirectory)',
     'await fixtureBuildImage()');
   source = replaceFixtureCall(source, 'await prepareLicenceTools(attemptDirectory)',
     '{ syft: process.env.FIXTURE_SYFT, osiPath: process.env.FIXTURE_OSI }');
