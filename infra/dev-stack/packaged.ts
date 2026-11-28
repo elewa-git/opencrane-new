@@ -646,6 +646,7 @@ async function applyPilotUpdate(owner: PackageOwner, previous: string, settings:
   for (const setting of settings) args.push('--set-string', setting);
   try {
     await releaseCommand(owner, args, 180_000);
+    await configureComputerGateway(owner);
     await waitForPilot(owner);
   } catch (cause) {
     try {
@@ -667,6 +668,7 @@ async function restorePilotRelease(owner: PackageOwner, revision: string) {
   await checkBackupIsIdle(owner);
   await releaseCommand(owner, ['rollback', owner.release, revision, '--history-max', '0',
     '--wait=false'], 180_000);
+  await configureComputerGateway(owner);
   await waitForPilot(owner);
 }
 
