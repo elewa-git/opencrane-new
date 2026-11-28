@@ -52,6 +52,7 @@ Not built yet:
 
 1. **A person joins.** The sign-in service checks their identity.
    The server records their first-owner claim or accepted invitation.
+   The first owner's People page and invitation wait briefly for their new permissions.
 2. **A person sends a message.** The server saves readable prose in the event log and sends assistant work to the
    right computer. Replies arrive as live updates, and the person can stop the work.
    People can also chat with each other without starting assistant work.

@@ -23,6 +23,10 @@
         </div>
       }
     }
+    @if (state() === 'applying') {
+      <oc-shared-state kind="waiting" message="Your access is still being set up"
+        actionLabel="Check access" (action)="refresh()" [announce]="true" />
+    }
     @if (state() === 'failed') {
       @if (loadedAt()) {
         <div class="refresh-notice"><strong>Showing what we loaded at {{ loadedTime() }}</strong>

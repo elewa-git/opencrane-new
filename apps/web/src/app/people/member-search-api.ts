@@ -7,16 +7,18 @@ export type MemberDirectory = ReturnType<typeof memberDirectorySchema.parse>;
 const accessApplying = z.strictObject({ status: z.literal('access_applying') });
 
 type DirectoryResult = { kind: 'ok'; value: MemberDirectory }
-  | { kind: FailureKind; status: number } | { kind: 'unavailable' };
+  | { kind: FailureKind; status: number } | { kind: 'unavailable' | 'access_applying' };
 
 export async function searchMembers(
   query: string, after: string, signal: AbortSignal, onApplying?: () => void,
 ): Promise<DirectoryResult> {
   const parameters = new URLSearchParams({ q: query.slice(0, 100), after, limit: '20' });
+  let applyingReply: Response | undefined;
   function url() {
     return `/api/members?${parameters.toString()}`;
   }
-  function discardCursor() {
+  function noteApplying(response: Response) {
+    applyingReply = response;
     // Start over because the cursor may be from the previous account.
     if (onApplying) {
       parameters.set('after', '');
@@ -24,7 +26,10 @@ export async function searchMembers(
     }
   }
   try {
-    const response = await fetchMemberRead(url, signal, discardCursor);
+    const response = await fetchMemberRead(url, signal, noteApplying);
+    if (response === applyingReply) {
+      return { kind: 'access_applying' };
+    }
     if (!response.ok) {
       return { kind: classifyStatus(response.status, 'GET'), status: response.status };
     }
@@ -32,13 +37,17 @@ export async function searchMembers(
     const parsed = memberDirectorySchema.safeParse(raw);
     if (!parsed.success) return { kind: 'unavailable' };
     return { kind: 'ok', value: parsed.data };
-  } catch {
+  } catch (error) {
+    if (applyingReply && !signal.aborted && error instanceof DOMException
+      && error.name === 'TimeoutError') {
+      return { kind: 'access_applying' };
+    }
     return { kind: 'unavailable' };
   }
 }
 
 export function fetchMemberRead(url: () => string, signal: AbortSignal,
-  onApplying?: () => void) {
+  onApplying?: (response: Response) => void) {
   function readAttempt(readSignal: AbortSignal) {
     const request = { headers: { accept: 'application/json' }, signal: readSignal };
     return fetch(url(), request);
@@ -65,7 +74,7 @@ export function fetchMemberRead(url: () => string, signal: AbortSignal,
     if (!accessApplying.safeParse(body).success) {
       return false;
     }
-    onApplying?.();
+    onApplying?.(response);
     return true;
   }
 

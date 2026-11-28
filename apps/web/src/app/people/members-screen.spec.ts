@@ -1,5 +1,7 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { controlledTimeout } from '../../../test/support/controlled-timeout';
+import { deferredReply } from '../../../test/support/deferred-reply';
 import { PeopleScreen } from './people-screen';
 
 const alice = { memberId: 'alice', displayName: 'Alice', email: 'alice@example.test',
@@ -45,6 +47,7 @@ async function mount(handler: (url: string) => Promise<Response> | Response) {
 beforeEach(() => history.replaceState(null, '', '/org/people'));
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   history.replaceState(null, '', '/org/people');
 });
@@ -94,6 +97,65 @@ async function showsPeopleAfterJoinApplies() {
 it('loads the directory and invite button when the new admin’s access is ready',
   showsPeopleAfterJoinApplies);
 
+interface ApplyingWait {
+  replyDelay: number;
+  wait: number;
+  expectedReads: number;
+}
+
+async function keepsFirstOwnerAccessPending({ replyDelay, wait, expectedReads }: ApplyingWait) {
+  vi.useFakeTimers();
+  const timeout = vi.spyOn(AbortSignal, 'timeout');
+  timeout.mockImplementation(controlledTimeout);
+  let reads = 0;
+  let ownershipApplied = false;
+  const owner = { ...alice, memberId: 'bootstrap-owner', displayName: 'First owner', role: 'owner' };
+  const ownerPage = page([owner], null);
+  const ownerReply = response(ownerPage);
+  const applyingBody = { status: 'access_applying' };
+
+  function read() {
+    reads += 1;
+    if (ownershipApplied) return ownerReply;
+    const applyingReply = response(applyingBody, 425);
+    if (replyDelay === 0) return applyingReply;
+    const delayed = deferredReply();
+    function sendReply() {
+      delayed.release(applyingReply);
+    }
+    globalThis.setTimeout(sendReply, replyDelay);
+    return delayed.promise;
+  }
+
+  const fixture = await mount(read);
+  await vi.advanceTimersByTimeAsync(wait - 1);
+  fixture.detectChanges();
+  expect(root(fixture).textContent).toContain('Loading members…');
+  await vi.advanceTimersByTimeAsync(1);
+  fixture.detectChanges();
+  expect(reads).toBe(expectedReads);
+  expectEmptyDirectory(fixture);
+  expect(root(fixture).textContent).toContain('Your access is still being set up');
+  expect(root(fixture).textContent).not.toContain('Members are unavailable right now');
+
+  const check = root(fixture).querySelector<HTMLButtonElement>('.members-register .state-action');
+  if (!check) throw new Error('Expected a button to check access again');
+  expect(check.textContent?.trim()).toBe('Check access');
+  ownershipApplied = true;
+  check.click();
+  await vi.advanceTimersByTimeAsync(0);
+  fixture.detectChanges();
+  expect(reads).toBe(expectedReads + 1);
+  expect(root(fixture).textContent).toContain('First owner');
+  expect(inviteButton(fixture)?.textContent).toBe('Invite people');
+}
+const applyingWaits = [
+  { limit: 'eleven replies', replyDelay: 0, wait: 5_000, expectedReads: 11 },
+  { limit: 'ten seconds', replyDelay: 4_700, wait: 10_000, expectedReads: 2 },
+];
+it.each(applyingWaits)('keeps People pending for the first owner after $limit',
+  keepsFirstOwnerAccessPending);
+
 function inviteButton(fixture: ComponentFixture<PeopleScreen>) {
   return root(fixture).querySelector<HTMLButtonElement>('.page-actions button.primary:not([hidden])');
 }
@@ -136,7 +198,7 @@ async function clearsDirectoryWhenNewSessionIsApplying(succeeds: boolean) {
   } else {
     expect(reads).toBe(12);
     expectEmptyDirectory(fixture);
-    expect(root(fixture).textContent).toContain('Members are unavailable right now');
+    expect(root(fixture).textContent).toContain('Your access is still being set up');
   }
 }
 

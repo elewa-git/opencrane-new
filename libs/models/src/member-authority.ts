@@ -6,6 +6,8 @@ import { currentMembership } from './ownership.ts';
 
 export class MemberAccessRefused extends Error {}
 
+type AppliedMembershipFact = (eventId: string, eventType: string) => Promise<boolean>;
+
 /** Deny access until the access system has applied ownership, role changes and removals. */
 export async function activeMember(
   store: EventStore, binding: Binding, memberId: string,
@@ -35,7 +37,7 @@ export async function activeMember(
 
 export async function readActiveMember(store: EventStore, binding: Binding, memberId: string,
   requiredRole: 'member' | 'admin' = 'member',
-  applied?: (eventId: string) => Promise<boolean>,
+  applied?: AppliedMembershipFact,
 ) {
   const membership = await currentMembership(store, binding.silo, memberId,
     undefined, performance.now() + 10_000);
@@ -56,10 +58,10 @@ function requireSavedRole(role: string, admin: boolean) {
 async function requireMember(
   binding: Binding, memberId: string, admin: boolean,
   membership: Awaited<ReturnType<typeof currentMembership>>,
-  applied?: (eventId: string) => Promise<boolean>,
+  applied?: AppliedMembershipFact,
 ) {
   const auth = memberAuthorisation(binding);
-  const checkApplied = applied ?? auth.applied.bind(auth);
+  const checkApplied: AppliedMembershipFact = applied ?? auth.applied.bind(auth);
   const relation = admin ? 'admin' : 'member';
   const permission = await auth.check(memberId, relation);
   if (permission.status === 'unavailable') {
@@ -69,7 +71,7 @@ async function requireMember(
     throw new MemberAccessRefused('Membership unavailable');
   }
   for (const row of membership.facts) {
-    if (!await checkApplied(row.event.id)) {
+    if (!await checkApplied(row.event.id, row.event.type)) {
       throw new AuthorityApplying('Membership is still being applied');
     }
   }

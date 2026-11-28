@@ -5,6 +5,7 @@ import { invitationEmailInputSchema, invitationEmailSchema } from '@opencrane/pr
 import type { GroupOptions } from './group-routes.ts';
 import type { Query } from '@opencrane/projections';
 import { sessionFor } from './routes.ts';
+import { invitationActor, InvitationAccessUnavailable } from './invitation-access.ts';
 
 export type InvitationEmailOptions = Omit<GroupOptions, 'db'> & {
   db?: Query;
@@ -32,7 +33,9 @@ export function registerInvitationEmail(app: FastifyInstance, config: AuthConfig
     const timer = setTimeout(expire, 10_000);
     try {
       if (options.silo !== options.binding.silo) throw new MemberAccessRefused('Wrong silo');
-      const caller = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
+      const account = { issuer: config.issuerUrl, sub: session.sub };
+      const caller = await invitationActor(options, account, now, request.log);
+      if (reply.sent) return reply;
       if (!caller) throw new MemberAccessRefused('Active membership required');
       await readActiveMember(options.store, options.binding, caller, 'admin');
       if (reply.sent) return reply;
@@ -47,7 +50,8 @@ export function registerInvitationEmail(app: FastifyInstance, config: AuthConfig
       if (error instanceof MemberAccessRefused) {
         return reply.code(403).send({ status: 'refused' });
       }
-      const diagnostic = { operation: 'invitation.email' };
+      const dependency = error instanceof InvitationAccessUnavailable ? error.dependency : undefined;
+      const diagnostic = { operation: 'invitation.email', dependency };
       request.log.error(diagnostic, 'Invitation email check unavailable');
       return reply.code(503).send({ status: 'unavailable' });
     } finally {

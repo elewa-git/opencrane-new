@@ -5,9 +5,13 @@ import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as crypto from 'node:crypto';
 import { encodeSession, type SessionData } from '@opencrane/auth';
+import { createStore, memberAuthorisation } from '@opencrane/authz';
+import { databases, openfga } from '@opencrane/authz/testing';
 import { createEventStore, type EventStore } from '@opencrane/event-store';
 import { appendEvent, manualClock, natsFixture } from '@opencrane/event-store/testing';
 import { history, ownershipSeedHandler } from '@opencrane/models';
+import { createLogger } from '@opencrane/observability';
+import { connectMemberFeed, members, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -55,6 +59,85 @@ it('claims the first owner with one durable event and no token in history', asyn
     principal: { kind: 'human', id: 'alice' }, data: { memberId: 'bootstrap-owner', role: 'owner', identity: { issuer: config.issuerUrl, sub: 'alice' } } });
   expect(JSON.stringify(rows)).not.toContain(token);
 });
+
+const invitation = {
+  memberId: '67136e46-5d58-4b94-9519-0348e28c1eee',
+  commandId: 'first-invitation',
+  email: 'guest@example.test',
+  role: 'member',
+  expectedSequence: 0,
+  personalAssistant: 'none',
+};
+
+function invite(identity: SessionData) {
+  const headers = {
+    origin: 'https://app.example.test',
+    cookie: `${config.cookieName}=${encodeSession(config, identity)}`,
+  };
+  return app.inject({ method: 'POST', url: '/api/invitations', headers, payload: invitation });
+}
+
+type ApplyingDependency = 'members_projection' | 'openfga' | 'ownership_worker';
+
+async function waitsForClaim(dependency: ApplyingDependency) {
+  const dbs = await databases();
+  const fga = await openfga();
+  const db = pgDb(dbs.queue);
+  const feed = await connectMemberFeed(String(dbs.queue.options.connectionString));
+  const binding = await createStore(fga.apiUrl, 'test');
+  const auth = memberAuthorisation(binding);
+  const runner = new ProjectionRunner(db, nats.store, createLogger('claim-invite-test'));
+  const waiting = Promise.withResolvers<string>();
+  function writeLog(line: string) {
+    if (line.includes(`"dependency":"${dependency}"`)) waiting.resolve(dependency);
+  }
+  try {
+    await runner.initialise(members);
+    await app.close();
+    vi.stubEnv('LOG_LEVEL', 'warn');
+    const membership = { silo: 'test', store: nats.store, now: () => clock, db };
+    const invitationEmail = { ...membership, binding, feed };
+    app = buildServer(config, { membership, invitationEmail, logDestination: { write: writeLog } });
+    expect((await claim()).statusCode).toBe(201);
+    const owner = await history(nats.store, 'member-bootstrap-owner', 'test');
+    await auth.handler.handle(owner[0]!.event, db);
+    const seed = ownershipSeedHandler(nats.store);
+    if (dependency !== 'members_projection') await runner.run(members);
+    if (dependency !== 'ownership_worker') await seed.handle(owner[0]!.event, db);
+    if (dependency === 'members_projection') {
+      const ownership = await history(nats.store, 'ownership-test', 'test');
+      await auth.handler.handle(ownership[0]!.event, db);
+    }
+
+    const pending = invite(session).then(invitationStatus);
+    expect(await Promise.race([pending, waiting.promise])).toBe(dependency);
+    const refused = await invite({ ...session, sub: 'another-account' });
+    expect(refused.statusCode).toBe(403);
+    expect(await history(nats.store, `member-${invitation.memberId}`, 'test')).toEqual([]);
+    if (dependency === 'members_projection') await runner.run(members);
+    if (dependency === 'ownership_worker') await seed.handle(owner[0]!.event, db);
+    const ownership = await history(nats.store, 'ownership-test', 'test');
+    await auth.handler.handle(ownership[0]!.event, db);
+    expect(await pending).toBe(200);
+    const saved = await history(nats.store, `member-${invitation.memberId}`, 'test');
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.event).toMatchObject({
+      type: 'member.invited', principal: { kind: 'human', id: 'bootstrap-owner' },
+    });
+  } finally {
+    vi.unstubAllEnvs();
+    await feed.close();
+    await dbs.close();
+    await fga.close();
+  }
+}
+
+function invitationStatus(response: { statusCode: number }) {
+  return response.statusCode;
+}
+
+const applyingDependencies: ApplyingDependency[] = ['members_projection', 'ownership_worker', 'openfga'];
+it.each(applyingDependencies)('waits for %s before saving the first invitation', waitsForClaim, 60_000);
 
 it.each([
   ['wrong_token', 'wrong', 0],

@@ -639,7 +639,8 @@ memberships, no active membership or more than 10,000 outstanding events return 
 A recent invitation join or first-owner claim can return HTTP 425 with
 `{ status: 'access_applying' }` for up to 30 seconds. That reply requires a saved
 admission beyond the member table's checkpoint or an unapplied receipt for that
-admission. A first owner's pending ownership seed receipt can also return 425.
+admission. The check also returns 425 if the worker has saved the first owner's
+ownership event during the read and OpenFGA has yet to apply it.
 OpenFGA errors return 503. A successful read needs the saved role, current permission
 and each required receipt. An ordinary member's directory read returns 403 even
 during their join.

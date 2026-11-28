@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+import { controlledTimeout } from '../../../test/support/controlled-timeout';
 import { searchMembers } from './member-search-api';
 import { fetchMember } from './members-api';
 
@@ -44,20 +45,27 @@ async function retriesAtIntervalsAndStops() {
   expect(fetcher).toHaveBeenCalledTimes(2);
   await vi.advanceTimersByTimeAsync(4_500);
   expect(fetcher).toHaveBeenCalledTimes(11);
-  expect(await loading).toEqual({ kind: 'unavailable', status: 425 });
+  expect(await loading).toEqual({ kind: 'access_applying' });
   await vi.advanceTimersByTimeAsync(5_000);
   expect(fetcher).toHaveBeenCalledTimes(11);
 }
 it('waits between reads and stops after eleven applying replies', retriesAtIntervalsAndStops);
 
-function controlledTimeout(ms: number): AbortSignal {
-  const deadline = new AbortController();
-  function expire() {
-    deadline.abort(new DOMException('Read timed out', 'TimeoutError'));
-  }
-  globalThis.setTimeout(expire, ms);
-  return deadline.signal;
+async function doesNotCarryApplyingStatusToLaterFailure() {
+  vi.useFakeTimers();
+  const retry = new Response('Too Early', { status: 425 });
+  const fetcher = vi.fn();
+  fetcher.mockImplementationOnce(applying);
+  fetcher.mockResolvedValueOnce(retry);
+  vi.stubGlobal('fetch', fetcher);
+  const request = new AbortController();
+  const loading = searchMembers('', '', request.signal);
+  await vi.advanceTimersByTimeAsync(500);
+  expect(await loading).toEqual({ kind: 'unavailable', status: 425 });
+  expect(fetcher).toHaveBeenCalledTimes(2);
 }
+it('reports an unrelated 425 after an applying reply as unavailable',
+  doesNotCarryApplyingStatusToLaterFailure);
 
 function stalledFetch(_url: string, request: RequestInit): Promise<Response> {
   const signal = request.signal;
