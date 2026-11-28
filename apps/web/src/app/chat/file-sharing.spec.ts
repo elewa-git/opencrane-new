@@ -75,10 +75,12 @@ async function mountWorkspace() {
   return { fixture, root, share, posted, setResponseStatus };
 }
 
-afterEach(function restoreBrowser() {
+function restoreBrowser() {
   vi.restoreAllMocks();
   history.replaceState({}, '', '/');
-});
+}
+
+afterEach(restoreBrowser);
 
 async function requestsFileInOneStep() {
   const context = await mountWorkspace();
