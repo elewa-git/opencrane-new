@@ -2,9 +2,47 @@
 
 Journey on a fresh dev stack: PASS
 
-The tested product commit is `df2043c7548a60d196db61861c7f148714eeed46`.
-CORE completed on a new slot-1 install using the stand-in model. The live pilot
-stayed in slot 2. The fleet marker stayed set throughout the run.
+Latest fresh CORE journey: PASS on `67bb3d397f49531fd89abccfaeb7d8277c627205`.
+`infra/dev-stack/up.sh --fresh --id 1` exited 0 on 28 November 2026 and reported
+37 passing checks. The live pilot stayed in slot 2. The five-minute availability
+wait passed with ten load samples from 2.98 to 4.95. Teardown exited 0 and slot 1
+was free. Screenshots show the 390 px and 1280 px chat, upload, and budget flows.
+Raw startup and service logs are retained outside the repository as
+`startup.log`, `server.log`, `members.log`, `conversations.log`, `files.log`,
+`budgets.log`, `computers.log`, `audit.log`, `dispatcher.log`, `memory.log`,
+`mcp-catalogue.log`, `routines.log`, `web.log`, `connection-custody.log`,
+`minio-tokens.log`, `replay-members.log`, `replay-mcp-catalogue.log`,
+`teardown.log` and `final-status.log`.
+
+The earlier journey below tested product commit
+`df2043c7548a60d196db61861c7f148714eeed46`. Its startup interruption and CORE
+continuation are retained as history; they are not part of this rerun.
+
+## Rebased-head CORE rerun
+
+| Evidence | Result |
+| --- | --- |
+| Tested head | `67bb3d397f49531fd89abccfaeb7d8277c627205` |
+| Environment | Fresh slot 1, stand-in model; pilot slot 2 untouched |
+| Command | `DEV_STACK_ID=1 ZITADEL_KEY_FILE=<existing credential path> infra/dev-stack/up.sh --fresh --id 1` |
+| Fresh startup and CORE | PASS, exit 0; 37 passing checks |
+| Browser journey | PASS at 390 px and 1280 px; upload retries: one each, preview retries: zero |
+| Log checks | PASS; no ID token in the five checked stack process logs |
+| Optional long-chat approvals | NOT RUN; CORE skips this separate journey |
+| Teardown | PASS, exit 0; final slot status `free` |
+
+The complete CORE output and raw service logs stay on the box only. The repository
+keeps the short result summary and screenshots. No product files changed during
+this run.
+
+| Receipt validation on the tested head | Result |
+| --- | --- |
+| TypeScript workspaces, package and dev stack | PASS |
+| Event catalogue | PASS: 175 event types agree |
+| Knip | PASS; two existing configuration hints |
+| Changelog check | PASS |
+| Markdownlint | PASS: 612 files, no issues |
+| Public privacy and secret scans | PASS: clean before push |
 
 ## Fresh install and interruption
 

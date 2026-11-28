@@ -1,6 +1,42 @@
 {
-  "productCommit": "df2043c7548a60d196db61861c7f148714eeed46",
-  "journey": {
+  "productCommit": "67bb3d397f49531fd89abccfaeb7d8277c627205",
+  "previousProductCommit": "df2043c7548a60d196db61861c7f148714eeed46",
+  "latestJourney": {
+    "status": "PASS",
+    "head": "67bb3d397f49531fd89abccfaeb7d8277c627205",
+    "slot": 1,
+    "freshInstall": true,
+    "command": "infra/dev-stack/up.sh --fresh --id 1",
+    "exitCode": 0,
+    "passingChecks": 37,
+    "browserWidths": [390, 1280],
+    "uploadRetries": {
+      "390": 1,
+      "1280": 1,
+      "previewRetries": 0
+    },
+    "optionalLongChatApprovals": "NOT RUN",
+    "teardown": {
+      "status": "PASS",
+      "exitCode": 0,
+      "slotStatus": "free"
+    },
+    "quietWindow": {
+      "seconds": 300,
+      "sampleIntervalSeconds": 30,
+      "samples": 10,
+      "minimumLoad": 2.98,
+      "maximumLoad": 4.95
+    },
+    "checks": {
+      "typecheck": "PASS",
+      "eventCatalogue": "PASS: 175 event types agree",
+      "knip": "PASS; two configuration hints",
+      "changelog": "PASS",
+      "markdownlint": "PASS: 612 files, no issues"
+    }
+  },
+  "previousJourney": {
     "status": "PASS",
     "slot": 1,
     "freshInstall": true,
@@ -40,6 +76,7 @@
     },
     "optionalLongChatApprovals": "NOT RUN"
   },
+  "checksProductCommit": "df2043c7548a60d196db61861c7f148714eeed46",
   "checks": {
     "focusedNode": {
       "status": "PASS",
