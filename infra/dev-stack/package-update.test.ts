@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
 
-async function updateFixture(fail: boolean) {
+async function updateFixture(fail: boolean, condition = '') {
   const directory = await mkdtemp(join(tmpdir(), 'pilot-update-'));
   try {
     const source = `import { applyPilotUpdate } from './infra/dev-stack/packaged.ts';
@@ -20,7 +20,7 @@ async function updateFixture(fail: boolean) {
     const args = ['--experimental-strip-types', '--import',
       './infra/dev-stack/test/package-update-preload.mjs', '--input-type=module', '-e', source];
     const env = { ...process.env, DEV_STACK_ID: '1', UPDATE_FIXTURE_DIRECTORY: directory,
-      UPDATE_FIXTURE_FAILURE: fail ? '1' : '0' };
+      UPDATE_FIXTURE_FAILURE: fail ? '1' : '0', UPDATE_FIXTURE_CONDITION: condition };
     const output = await execute(process.execPath, args, { env, timeout: 30_000 });
     const text = await readFile(join(directory, 'result.json'), 'utf8');
     const result = JSON.parse(text) as { gateway: string; revision: string; calls: string[][] };
@@ -56,5 +56,35 @@ async function restoresGatewayAfterRollback() {
   assert.equal(patches.length, 2, 'Both Helm operations reset the gateway');
 }
 
+async function backsUpBeforeChangingRelease() {
+  const result = await updateFixture(false);
+  const backup = result.calls.findIndex(isBackupVerification);
+  const upgrade = result.calls.findIndex(isUpgrade);
+  assert.ok(backup >= 0 && backup < upgrade, 'Verify an exported backup before Helm changes');
+}
+
+function isBackupVerification(args: string[]) {
+  return args.includes('show') && args.includes('infra/package/scheduled-backup-run.ts');
+}
+
+function isUpgrade(args: string[]) {
+  return args[0] === 'helm' && args[1] === 'upgrade';
+}
+
+async function refusesManualBackup() {
+  const result = await updateFixture(false, 'manual-backup');
+  assert.match(result.output, /backup/u);
+  assert.equal(result.calls.some(isUpgrade), false);
+}
+
+async function refusesExpiredRollbackScanner() {
+  const result = await updateFixture(false, 'expired-scanner');
+  assert.match(result.output, /[Ss]canner/u);
+  assert.equal(result.calls.some(isUpgrade), false);
+}
+
 test('an in-place update repairs the gateway that Helm resets', restoresGatewayAfterUpgrade);
 test('a failed update restores the recorded revision and its gateway', restoresGatewayAfterRollback);
+test('the update verifies its backup before changing the release', backsUpBeforeChangingRelease);
+test('a manual backup blocks the update before Helm changes', refusesManualBackup);
+test('an expired rollback scanner blocks the update before Helm changes', refusesExpiredRollbackScanner);

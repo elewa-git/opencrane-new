@@ -40,6 +40,14 @@ async function execute(program, args) {
       stdout = JSON.stringify({ spec: { type: 'ClusterIP', clusterIP: '10.0.0.8' } });
     } else if (args.includes('services,ingresses')) {
       stdout = '{"items":[]}';
+    } else if (args.includes('jobs')) {
+      const items = [];
+      if (process.env.UPDATE_FIXTURE_CONDITION === 'manual-backup') {
+        items.push({ metadata: { name: 'manual-backup' }, spec: { template: { spec: {
+          containers: [{ command: ['node', 'infra/package/scheduled-backup-run.ts', 'run'] }],
+        } } }, status: { active: 1 } });
+      }
+      stdout = JSON.stringify({ items });
     } else if (args.includes('rollout') && process.env.UPDATE_FIXTURE_FAILURE === '1' && !failed) {
       failed = true;
       snapshot();
