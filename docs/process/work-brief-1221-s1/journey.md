@@ -1,5 +1,42 @@
 # #1221 packaged journey receipt
 
+## Run 3 — PARTIAL
+
+**Date:** 28 November 2026
+**Install:** Fresh packaged install on slot 1, product commit `b0f109a5d1b39746508f01a0aace3fccbd047994`.
+**Package checks:** PASS. Application and scanner approvals were present and current for this product commit. `package-check` passed. `package-up` used the documented `OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` switch because this host has swap. Slot 1 was released after the run.
+
+### Run 3 steps and results
+
+1. **PASS — member onboarding.** The member joined, completed all four survey steps, approved
+   persona Aster and completed the welcome. Screenshots: `run3-persona-approved-1280.png`
+   and `run3-welcome-complete-1280.png`.
+2. **PASS — personal chat and Memory off.** The member opened a personal session at 1280 and
+   390 px. The composer identified it as private to the member. Personal session defaults
+   keep Memory off. The screen captures are `run3-chat-1280.png` and `run3-chat-390.png`.
+3. **PASS — assistant identity.** The real model introduced itself as Aster: “Hi Sam, I’m
+   Aster, your personal assistant.” See `run3-intro-1280.png`.
+4. **FAIL — complete capabilities answer.** It described file sharing, software installation
+   and no browser control. It said it could try URLs and that shell networking was restricted,
+   rather than plainly saying that internet access is not available yet. See
+   `run3-capabilities-390.png`.
+5. **PASS — deck shared.** The conversation stream records `Aster_introduction.pptx` as
+   uploaded to the chat. The browser could not reload newer messages, so the screenshot
+   `run3-deck-1280.png` records that UI error rather than the file card. No “Run interrupted”,
+   502 or `127.0.0.1:1` error was observed.
+6. **PARTIAL — fetch refusal.** The fetch turn completed in the event stream, but the browser
+   timed out waiting for its completion marker and did not display the reply. A plain refusal
+   could not be verified; no fetch screenshot is available.
+
+**Runtime checks:** Both computer pods used digest
+`sha256:23de7279a36001b3aba97de28b64c01bdff3c7cad8770d7aebb2c3542c58b271`.
+`/app/src/assistant-brief.ts` was present. The `computer-runtime` ConfigMap gateway was
+`http://10.43.62.135:43000`, not `http://127.0.0.1:1`. The service logs were saved outside the
+repository before teardown.
+
+**Spend:** 13 euro cents settled across 11 settlements in the slot 1 budget stream, including
+provider setup and the chat turns. This was an operator run with no `OPENCRANE_FLEET_TASK`.
+
 ## Round 7 — model request investigation
 
 **Root cause: the package installed an older computer image.** The package pin
