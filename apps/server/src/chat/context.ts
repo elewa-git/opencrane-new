@@ -11,8 +11,11 @@ export async function personalContext(options: ChatOptions, memberId: string) {
     'SELECT display_name, role FROM members WHERE silo = $1 AND member_id = $2', [options.silo, memberId]);
   let assistantId: string | null = result.rows[0]?.assistant_id ?? null;
   if (assistantId) {
-    const permission = await memberAuthorisation(options.binding).actsFor(memberId, assistantId);
-    if (!permission.allowed) assistantId = null;
+    const authorisation = memberAuthorisation(options.binding);
+    const permission = await authorisation.actsFor(memberId, assistantId);
+    if (!permission.allowed) {
+      assistantId = null;
+    }
   }
   return { memberId, displayName: member.rows[0]?.display_name ?? null, assistantId,
     role: member.rows[0]?.role, memoryAdmission, personalConnections: true };

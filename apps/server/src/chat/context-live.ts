@@ -23,7 +23,9 @@ export function contextSubscription(
     socket.close(1013, 'chat context unavailable');
   }
   async function update(): Promise<void> {
-    if (running || socket.readyState !== socket.OPEN) return;
+    if (running || socket.readyState !== socket.OPEN) {
+      return;
+    }
     running = true;
     const watchdog = setTimeout(expire, 1500);
     try {
@@ -40,17 +42,24 @@ export function contextSubscription(
       const context = await personalContext(options, memberId);
       // Check removal again after reading content. A slow read must not deliver after closure.
       await activeChatMember(options, memberId);
-      if (socket.readyState !== socket.OPEN) return;
-      if (previousAssistant === context.assistantId) return;
+      if (socket.readyState !== socket.OPEN) {
+        return;
+      }
+      if (previousAssistant === context.assistantId) {
+        return;
+      }
       if (socket.bufferedAmount > 64 * 1024) {
         expire();
         return;
       }
-      socket.send(JSON.stringify({ type: 'context', topic: 'chat-context', data: context }));
+      const frame = { type: 'context', topic: 'chat-context', data: context };
+      const encodedFrame = JSON.stringify(frame);
+      socket.send(encodedFrame);
       previousAssistant = context.assistantId;
     } catch (error) {
-      if (isChatRefused(error)) socket.close(1008, 'subscription refused');
-      else {
+      if (isChatRefused(error)) {
+        socket.close(1008, 'subscription refused');
+      } else {
         logger.error({ err: error, operation: 'chat.context' }, 'chat context unavailable');
         expire();
       }

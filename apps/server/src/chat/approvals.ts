@@ -17,24 +17,32 @@ import { requireMember, MemberRefusal, sameOrigin } from '../members/guard.ts';
 import { sessionFor } from '../members/routes.ts';
 import type { ChatOptions } from './routes.ts';
 
-const conversationParameters = z.object({ conversationId: recordIdSchema });
-const statusParameters = conversationParameters.extend({
-  logicalRequestId: z.string().regex(/^[a-f0-9]{64}$/u),
-});
+const conversationFields = { conversationId: recordIdSchema };
+const conversationParameters = z.object(conversationFields);
+const digestSchema = toolApprovalRequestedDataSchema.shape.reviewDigest;
+const statusFields = { logicalRequestId: digestSchema };
+const statusParameters = conversationParameters.extend(statusFields);
 const unavailableStatus = { status: 'unavailable' };
 const refusedStatus = { status: 'refused' };
+const conflictStatus = { status: 'conflict' };
 const accessApplyingStatus = { status: 'access_applying' };
 
 function originalCallFailure(reply: FastifyReply, error: unknown) {
   if (error instanceof MemberRefusal) {
     const status = { status: error.status };
-    return reply.code(error.statusCode).send(status);
+    reply.code(error.statusCode);
+    return reply.send(status);
   }
   if (error instanceof ChatAccessApplying) {
-    return reply.code(425).send(accessApplyingStatus);
+    reply.code(425);
+    return reply.send(accessApplyingStatus);
   }
-  if (isChatRefused(error)) return reply.code(403).send(refusedStatus);
-  return reply.code(503).send(unavailableStatus);
+  if (isChatRefused(error)) {
+    reply.code(403);
+    return reply.send(refusedStatus);
+  }
+  reply.code(503);
+  return reply.send(unavailableStatus);
 }
 
 async function updateLiveStatus(result: Awaited<ReturnType<typeof readOriginalCallStatus>>,
@@ -66,13 +74,19 @@ function registerOriginalCallStatusRoute(app: FastifyInstance,
   async function originalCallStatus(req: FastifyRequest, reply: FastifyReply) {
     reply.header('cache-control', 'no-store');
     const parameters = statusParameters.safeParse(req.params);
-    if (!parameters.success) return reply.code(400).send(unavailableStatus);
+    if (!parameters.success) {
+      reply.code(400);
+      return reply.send(unavailableStatus);
+    }
     try {
       const { conversationId, logicalRequestId } = parameters.data;
       if (!sessionFor(req, config, new Date())) {
-        return reply.code(401).send(refusedStatus);
+        reply.code(401);
+        return reply.send(refusedStatus);
       }
-      if (!options) throw new Error('Chat unavailable');
+      if (!options) {
+        throw new Error('Chat unavailable');
+      }
       const conversationHistory = decisionConversationReader(options.store, options.db, options.silo);
       const readOptions = { deadline: performance.now() + 10_000, conversationHistory };
       let result: Awaited<ReturnType<typeof readOriginalCallStatus>> | undefined;
@@ -87,14 +101,18 @@ function registerOriginalCallStatusRoute(app: FastifyInstance,
       const checks = { write: false, conversationId };
       const access = await requireMember(req, reply, config, options, checks);
       if (readFailure instanceof ApprovalNotFound) {
-        return reply.code(403).send(refusedStatus);
+        reply.code(403);
+        return reply.send(refusedStatus);
       }
-      if (!result) throw readFailure;
+      if (!result) {
+        throw readFailure;
+      }
       const outsideParticipation = result.requestPosition < access.access.historyPosition;
       const otherRequester = result.status.requesterId !== access.memberId;
       if (result.conversationId !== conversationId || outsideParticipation ||
           otherRequester) {
-        return reply.code(403).send(refusedStatus);
+        reply.code(403);
+        return reply.send(refusedStatus);
       }
       await updateLiveStatus(result, options, logicalRequestId);
       return reply.send(result.status);
@@ -117,15 +135,13 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
       // Read the approval and turn history before starting the short write access check.
       const checks = { write: false, conversationId };
       const context = await requireMember(req, reply, config, options, checks);
-      const { session, memberId, access } = context;
+      const { memberId, access } = context;
       const configured = context.options;
       if (req.method === 'POST' && !sameOrigin(req, config)) {
-        return reply.code(403).send(refusedStatus);
+        reply.code(403);
+        return reply.send(refusedStatus);
       }
-      // The token covers the whole Cookie header and conversation, blocking reuse across either.
-      const csrf = createHmac('sha256', config.cookieSecret)
-        .update(JSON.stringify(['approval', req.headers.cookie, conversationId]))
-        .digest('hex');
+      const csrf = approvalCsrfToken(config, req.headers.cookie, conversationId);
       if (req.method === 'GET') {
         const deadline = performance.now() + 10_000;
         const approvalRows = await approvalRequestEvents(configured, conversationId,
@@ -136,23 +152,31 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
           requesterOnly: access.contextKind === 'shared_child' };
         const cards = await approvalCards(
           configured.store, configured.silo, conversationId, memberId, readOptions);
-        return reply.send({ cards, csrf });
+        const response = { cards, csrf };
+        return reply.send(response);
       }
       if (!isApprovalCsrfValid(req, csrf)) {
-        return reply.code(403).send({ status: 'refused' });
+        reply.code(403);
+        return reply.send(refusedStatus);
       }
-      return await decide(req, reply, configured, session, memberId, conversationId,
-        access.joinPosition);
+      return await decide(req, reply, context, conversationId);
 
     } catch (error) {
       if (error instanceof MemberRefusal) {
-        return reply.code(error.statusCode).send({ status: error.status });
+        reply.code(error.statusCode);
+        const response = { status: error.status };
+        return reply.send(response);
       }
       if (error instanceof ChatAccessApplying) {
-        return reply.code(425).send({ status: 'access_applying' });
+        reply.code(425);
+        return reply.send(accessApplyingStatus);
       }
-      if (isChatRefused(error)) return reply.code(403).send({ status: 'refused' });
-      return reply.code(error instanceof z.ZodError ? 400 : 503).send({ status: 'unavailable' });
+      if (isChatRefused(error)) {
+        reply.code(403);
+        return reply.send(refusedStatus);
+      }
+      reply.code(error instanceof z.ZodError ? 400 : 503);
+      return reply.send(unavailableStatus);
     }
   }
 }
@@ -197,14 +221,18 @@ async function unprojectedApprovalEvents(options: ChatOptions, conversationId: s
   const signal = AbortSignal.timeout(remaining);
   const events: StoredEvent[] = [];
   for await (const event of readEvents(options.store, tailStart, head, signal)) {
-    if (!isApprovalRequestFor(event, options.silo, conversationId)) continue;
+    if (!isApprovalRequestFor(event, options.silo, conversationId)) {
+      continue;
+    }
     events.push(event);
   }
   return events;
 }
 
 function isApprovalRequestFor(event: StoredEvent, silo: string, conversationId: string) {
-  if (event.event.silo !== silo || event.event.type !== 'tool.approval_requested') return false;
+  if (event.event.silo !== silo || event.event.type !== 'tool.approval_requested') {
+    return false;
+  }
   const request = toolApprovalRequestedDataSchema.parse(event.event.data);
   return request.conversationId === conversationId &&
     event.event.subject === `approval-${request.approvalId}`;
@@ -221,37 +249,45 @@ function requireApprovalRequestEvent(event: StoredEvent, silo: string,
   }
 }
 
-async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOptions,
-  session: SessionData, memberId: string, conversationId: string, joinPosition: number) {
-  const inputSchema = z.object({
-    approvalId: z.string().regex(/^[a-f0-9]{64}$/u),
+type ApprovalMember = Awaited<ReturnType<typeof requireMember<ChatOptions>>>;
+
+async function decide(req: FastifyRequest, reply: FastifyReply, context: ApprovalMember,
+  conversationId: string) {
+  const { options, session, memberId, access: { joinPosition } } = context;
+  const inputFields = {
+    approvalId: digestSchema,
     decision: z.enum(['approved', 'rejected', 'retry']),
-  }).strict();
+  };
+  const inputObject = z.object(inputFields);
+  const inputSchema = inputObject.strict();
   const input = inputSchema.parse(req.body);
   const checked = await readDecisionApproval(options, input.approvalId, memberId, conversationId);
   const { request, requestPosition } = checked;
-  if (requestPosition < joinPosition) return reply.code(403).send({ status: 'refused' });
+  if (requestPosition < joinPosition) {
+    reply.code(403);
+    return reply.send(refusedStatus);
+  }
   const text = request.review;
   readStoredApprovalReview(text);
   const reviewDigest = sha256Hex(text);
-  if (reviewDigest !== request.reviewDigest) throw new Error('Review unavailable');
+  if (reviewDigest !== request.reviewDigest) {
+    throw new Error('Review unavailable');
+  }
   const conversationHistory = decisionConversationReader(options.store, options.db, options.silo);
   const activityOptions = { deadline: performance.now() + 10_000, conversationHistory };
   const activity = await approvalActivity(options.store, options.silo, request.assistantId,
     conversationId, request.turnId, activityOptions);
   if (input.decision !== 'rejected' && activity.computer.control) {
-    return reply.code(409).send({ status: 'conflict' });
+    reply.code(409);
+    return reply.send(conflictStatus);
   }
   if (input.decision === 'retry') {
-    const original = await readOriginalCallStatus(options.store, options.silo,
-      input.approvalId, undefined, activityOptions);
-    if (original.conversationId !== conversationId ||
-        original.status.requesterId !== memberId) {
-      return reply.code(403).send({ status: 'refused' });
-    }
-    await updateLiveStatus(original, options, input.approvalId);
-    if (original.status.retry !== 'eligible') {
-      return reply.code(409).send({ status: 'conflict' });
+    const retryStatus = await approvalRetryStatus(options, input.approvalId, memberId,
+      conversationId, activityOptions);
+    if (retryStatus !== 'eligible') {
+      reply.code(retryStatus === 'refused' ? 403 : 409);
+      const response = { status: retryStatus };
+      return reply.send(response);
     }
   }
   const accessRequest = { memberId, conversationId, relation: 'post' as const };
@@ -259,11 +295,14 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
   const access = await conversationParticipation(options, memberId, conversationId,
     fresh.deadline, 'post');
   if (requestPosition < access.joinPosition) {
-    return reply.code(403).send({ status: 'refused' });
+    reply.code(403);
+    return reply.send(refusedStatus);
   }
   async function confirm() {
     await fresh();
-    if (input.decision !== 'rejected') await activity.confirm(fresh.deadline, true);
+    if (input.decision !== 'rejected') {
+      await activity.confirm(fresh.deadline, true);
+    }
   }
   const deadline = { deadline: fresh.deadline };
   const checkedAuthority = Object.assign(confirm, deadline);
@@ -273,7 +312,25 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
   const result = await decideApproval(options.store, options.silo, input.approvalId,
     memberId, input.decision, recent, checkedAuthority, checked);
   const statusCode = approvalDecisionStatus(result.status);
-  return reply.code(statusCode).send({ status: result.status });
+  reply.code(statusCode);
+  const response = { status: result.status };
+  return reply.send(response);
+}
+
+async function approvalRetryStatus(options: ChatOptions, approvalId: string,
+  memberId: string, conversationId: string,
+  readOptions: NonNullable<Parameters<typeof readOriginalCallStatus>[4]>) {
+  const original = await readOriginalCallStatus(options.store, options.silo,
+    approvalId, undefined, readOptions);
+  if (original.conversationId !== conversationId ||
+      original.status.requesterId !== memberId) {
+    return 'refused';
+  }
+  await updateLiveStatus(original, options, approvalId);
+  if (original.status.retry !== 'eligible') {
+    return 'conflict';
+  }
+  return 'eligible';
 }
 
 async function readDecisionApproval(options: ChatOptions, approvalId: string,
@@ -284,7 +341,9 @@ async function readDecisionApproval(options: ChatOptions, approvalId: string,
   try {
     const subject = `approval-${approvalId}`;
     for await (const { event } of options.store.readStream(subject, 1, readOptions.deadline)) {
-      if (event.silo !== options.silo) throw new MemberRefusal(403, 'refused');
+      if (event.silo !== options.silo) {
+        throw new MemberRefusal(403, 'refused');
+      }
       const request = toolApprovalRequestedDataSchema.parse(event.data);
       // Refuse foreign requests before loading their conversation or preparing cancellation.
       if (request.conversationId !== conversationId || request.requesterId !== memberId) {
@@ -303,13 +362,19 @@ async function readDecisionApproval(options: ChatOptions, approvalId: string,
 }
 
 function approvalDecisionStatus(status: Awaited<ReturnType<typeof decideApproval>>['status']) {
-  if (status === 'appended') return 200;
-  if (status === 'unavailable') return 503;
-  if (status === 'step_up_required') return 428;
+  if (status === 'appended') {
+    return 200;
+  }
+  if (status === 'unavailable') {
+    return 503;
+  }
+  if (status === 'step_up_required') {
+    return 428;
+  }
   return 409;
 }
 
-// D07 requires verified OIDC auth_time within five minutes; #141 tracks the configurable age question.
+// Require the identity provider to have verified the session within five minutes.
 const APPROVAL_STEP_UP_MAX_AGE_SECONDS = 300;
 
 function isRecentStepUp(session: SessionData, approvalId: string): boolean {
@@ -323,6 +388,15 @@ function isRecentStepUp(session: SessionData, approvalId: string): boolean {
     return false;
   }
   return Date.now() / 1000 - session.authTime <= APPROVAL_STEP_UP_MAX_AGE_SECONDS;
+}
+
+function approvalCsrfToken(config: AuthConfig, cookie: string | undefined, conversationId: string) {
+  // Cover the whole Cookie header and conversation to prevent reuse across either.
+  const identity = ['approval', cookie, conversationId];
+  const encodedIdentity = JSON.stringify(identity);
+  const digest = createHmac('sha256', config.cookieSecret);
+  digest.update(encodedIdentity);
+  return digest.digest('hex');
 }
 
 // Bind the token to this session and conversation after the guard checks Origin.

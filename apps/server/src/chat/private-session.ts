@@ -43,7 +43,9 @@ export function privateSessionReader(options: SessionAuthorityOptions, memberId:
     }
     const assistantEvent = await assistantRead;
     const assistant = sessionAssistantSchema.parse(assistantEvent.data);
-    if (assistant.kind !== 'team') return;
+    if (assistant.kind !== 'team') {
+      return;
+    }
     requirePrivateRequester(memberId, created.createdBy);
     let permission = permissions.get(created.assistantId);
     if (!permission) {
@@ -76,7 +78,9 @@ function requirePrivateRequester(memberId: string, requesterId: string) {
 
 export async function requirePrivateReader(options: SessionAuthorityOptions,
   memberId: string, session: PrivateSession, deadline?: number) {
-  if (session.assistant.kind !== 'team') return;
+  if (session.assistant.kind !== 'team') {
+    return;
+  }
   requirePrivateRequester(memberId, session.created.createdBy);
   await sharedAssistantRead(options, memberId, session.created.assistantId, session.assistantEvent,
     deadline);
@@ -86,7 +90,9 @@ export async function requirePrivateReader(options: SessionAuthorityOptions,
 export async function writePrivateSession(options: SessionAuthorityOptions,
   memberId: string, conversationId: string, stopping: boolean) {
   const session = await privateSessionCreation(options, conversationId);
-  if (session.assistant.kind !== 'team') return;
+  if (session.assistant.kind !== 'team') {
+    return;
+  }
   if (session.created.createdBy !== memberId) {
     throw new GroupRefused('Private session belongs to another requester');
   }
@@ -98,9 +104,10 @@ export async function writePrivateSession(options: SessionAuthorityOptions,
     await requirePrivateReader(options, memberId, session);
   } else {
     const payer = session.created.payingGroupId;
-    const configuration = sessionConfiguration({ conversation: session.created,
+    const sessionInput = { conversation: session.created,
       assistantKind: session.assistant.kind,
-      assistantPayingGroupId: session.assistant.payingGroupId, memoryEnabled: false });
+      assistantPayingGroupId: session.assistant.payingGroupId, memoryEnabled: false };
+    const configuration = sessionConfiguration(sessionInput);
     if (!payer || !configuration.payerMatchesAssistant) {
       throw new GroupRefused('Paying group must match the assistant');
     }
@@ -122,9 +129,14 @@ export async function sharedAssistantRead(options: SessionAuthorityOptions, memb
   const membership = groupMembership(store, silo, memberId, assistant.ownerId, binding, deadline);
   const receiptCheck = auth.checkApplied(created.id);
   const permissionCheck = auth.actsFor(memberId, assistantId);
-  const [, receipt, permission] = await Promise.all([membership, receiptCheck, permissionCheck]);
-  if (receipt.status === 'unavailable') throw receipt.error;
-  if (permission.status === 'unavailable') throw permission.error;
+  const checks = [membership, receiptCheck, permissionCheck] as const;
+  const [, receipt, permission] = await Promise.all(checks);
+  if (receipt.status === 'unavailable') {
+    throw receipt.error;
+  }
+  if (permission.status === 'unavailable') {
+    throw permission.error;
+  }
   if (!receipt.allowed) {
     throw new AuthorityApplying('Assistant is still being applied');
   }
@@ -155,7 +167,9 @@ export async function sharedAssistantAuthority(options: SessionAuthorityOptions,
     throw new AuthorityApplying('Assistant is still being applied');
   }
   const permission = await auth.actsFor(memberId, assistantId);
-  if (permission.status === 'unavailable') throw permission.error;
+  if (permission.status === 'unavailable') {
+    throw permission.error;
+  }
   if (!permission.allowed) {
     throw new GroupRefused('Assistant authority unavailable');
   }

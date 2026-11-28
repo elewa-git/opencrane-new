@@ -1,0 +1,257 @@
+{
+  "base": "4ac3e85ea",
+  "windowEnd": "2e24538b0e944935f9a3a613693b1b14bc41eec1",
+  "changed": [
+    "apps/server/src/chat/approvals.ts",
+    "apps/server/src/chat/context-live.ts",
+    "apps/server/src/chat/context.ts",
+    "apps/server/src/chat/participation.ts",
+    "apps/server/src/chat/personal-connection-needs.ts",
+    "apps/server/src/chat/private-context.ts",
+    "apps/server/src/chat/private-session.ts",
+    "apps/server/src/chat/session-creation.ts",
+    "apps/server/src/chat/shared-context.ts",
+    "apps/server/src/chat/turn-credentials.ts",
+    "apps/server/src/chat/turn-threads.ts",
+    "apps/server/src/integrations/personal-key-routes.ts",
+    "apps/server/src/integrations/personal-needs-route.ts",
+    "apps/server/src/integrations/remote-catalogue-watch.ts",
+    "apps/server/src/providers/routes.ts"
+  ],
+  "skippedForOpenPullRequests": {
+    "apps/server/src/assistants/commands.ts": [
+      1161
+    ],
+    "apps/server/src/auth/routes.ts": [
+      1218
+    ],
+    "apps/server/src/chat/README.md": [
+      1222
+    ],
+    "apps/server/src/chat/README.robot.md": [
+      1222
+    ],
+    "apps/server/src/chat/bridge-control.ts": [
+      1161
+    ],
+    "apps/server/src/chat/close.ts": [
+      1222
+    ],
+    "apps/server/src/chat/commands.ts": [
+      1222,
+      1161
+    ],
+    "apps/server/src/chat/reads.ts": [
+      1222
+    ],
+    "apps/server/src/chat/reports.ts": [
+      1161
+    ],
+    "apps/server/src/chat/routes.ts": [
+      1222
+    ],
+    "apps/server/src/chat/turn-tool-readers.ts": [
+      1122
+    ],
+    "apps/server/src/chat/turn-tools.ts": [
+      1122
+    ],
+    "apps/server/src/chat/turns.ts": [
+      1161
+    ],
+    "apps/server/src/computers/screenshots.ts": [
+      1161
+    ],
+    "apps/server/src/computers/view.ts": [
+      1218
+    ],
+    "apps/server/src/egress/changes.ts": [
+      1161
+    ],
+    "apps/server/src/files/README.md": [
+      1202
+    ],
+    "apps/server/src/files/README.robot.md": [
+      1202
+    ],
+    "apps/server/src/files/commands.ts": [
+      1161
+    ],
+    "apps/server/src/files/routes.ts": [
+      1202
+    ],
+    "apps/server/src/files/scanner.ts": [
+      1202
+    ],
+    "apps/server/src/integrations/access-changes.ts": [
+      1161
+    ],
+    "apps/server/src/integrations/hosted-capture.ts": [
+      1161
+    ],
+    "apps/server/src/integrations/personal-connection-failure.ts": [
+      1204
+    ],
+    "apps/server/src/integrations/profile-list.ts": [
+      1204
+    ],
+    "apps/server/src/integrations/profile-routes.ts": [
+      1204
+    ],
+    "apps/server/src/main.ts": [
+      1202
+    ],
+    "apps/server/src/members/read-routes.ts": [
+      1210
+    ],
+    "apps/server/src/memory/commands.ts": [
+      1161
+    ],
+    "apps/server/src/memory/correct.ts": [
+      1161
+    ],
+    "apps/server/src/memory/invalidation.ts": [
+      1161
+    ],
+    "apps/server/src/memory/recall-delivery.ts": [
+      1161
+    ],
+    "apps/server/src/models/access-changes.ts": [
+      1161
+    ],
+    "apps/server/src/onboarding/commands.ts": [
+      1212,
+      1161
+    ],
+    "apps/server/src/onboarding/history.ts": [
+      1212
+    ],
+    "apps/server/src/onboarding/routes.ts": [
+      1212
+    ],
+    "apps/server/src/onboarding/welcome.ts": [
+      1212
+    ],
+    "apps/server/src/routine-admin-pause.ts": [
+      1161
+    ],
+    "apps/server/src/routine-pause.ts": [
+      1161
+    ],
+    "apps/server/src/routine-retire.ts": [
+      1161
+    ],
+    "apps/server/src/server.ts": [
+      1204
+    ],
+    "apps/server/src/websocket.ts": [
+      1218
+    ]
+  },
+  "remainingWindowFiles": [
+    "apps/server/src/assistants/routes.ts",
+    "apps/server/src/audit/accounting-progress.ts",
+    "apps/server/src/audit/routes.ts",
+    "apps/server/src/auth/session-sockets.ts",
+    "apps/server/src/bootstrap-token.ts",
+    "apps/server/src/chat/access.ts",
+    "apps/server/src/chat/bridge-conversation.ts",
+    "apps/server/src/chat/bridge-pausing.ts",
+    "apps/server/src/chat/bridge.ts",
+    "apps/server/src/chat/budget-refusal.ts",
+    "apps/server/src/chat/chat-summary.ts",
+    "apps/server/src/chat/child-activation.ts",
+    "apps/server/src/chat/child-failure.ts",
+    "apps/server/src/chat/child-recovery.ts",
+    "apps/server/src/chat/child-requests.ts",
+    "apps/server/src/chat/child-turn.ts",
+    "apps/server/src/chat/close-cleanup.ts",
+    "apps/server/src/chat/display.ts",
+    "apps/server/src/chat/history.ts",
+    "apps/server/src/chat/keys.ts",
+    "apps/server/src/chat/list-cursor.ts",
+    "apps/server/src/chat/list-summary.ts",
+    "apps/server/src/chat/origin.ts",
+    "apps/server/src/chat/personal-memory-tools.ts",
+    "apps/server/src/chat/private-output.ts",
+    "apps/server/src/chat/publications.ts",
+    "apps/server/src/chat/realtime.ts",
+    "apps/server/src/chat/session-auth.ts",
+    "apps/server/src/chat/state.ts",
+    "apps/server/src/computers/takeover-routes.ts",
+    "apps/server/src/computers/takeover.ts",
+    "apps/server/src/computers/writer-lease.ts",
+    "apps/server/src/effects/routes.ts",
+    "apps/server/src/files/artifacts.ts",
+    "apps/server/src/files/storage.ts",
+    "apps/server/src/integrations/access-explanation.ts",
+    "apps/server/src/integrations/access-reads.ts",
+    "apps/server/src/integrations/company-opt-in-read.ts",
+    "apps/server/src/integrations/company-opt-in-write.ts",
+    "apps/server/src/integrations/facts.ts",
+    "apps/server/src/integrations/instance-routes.ts",
+    "apps/server/src/integrations/instance-worker.ts",
+    "apps/server/src/integrations/profile-disable-route.ts",
+    "apps/server/src/integrations/profile-list-route.ts",
+    "apps/server/src/integrations/profile-revoke-route.ts",
+    "apps/server/src/integrations/registration.ts",
+    "apps/server/src/integrations/routes.ts",
+    "apps/server/src/integrations/selection-route.ts",
+    "apps/server/src/members/admission.ts",
+    "apps/server/src/members/bootstrap.ts",
+    "apps/server/src/members/group-routes.ts",
+    "apps/server/src/members/groups.ts",
+    "apps/server/src/members/inventory-routes.ts",
+    "apps/server/src/members/inventory.ts",
+    "apps/server/src/members/invitations.ts",
+    "apps/server/src/members/join.ts",
+    "apps/server/src/members/ownership-routes.ts",
+    "apps/server/src/members/ownership.ts",
+    "apps/server/src/members/read-counts.ts",
+    "apps/server/src/members/refusals.ts",
+    "apps/server/src/members/removal.ts",
+    "apps/server/src/members/roles.ts",
+    "apps/server/src/memory/access.ts",
+    "apps/server/src/memory/command-history.ts",
+    "apps/server/src/memory/forget.ts",
+    "apps/server/src/memory/initial-delivery.ts",
+    "apps/server/src/memory/maintenance-preparation.ts",
+    "apps/server/src/memory/maintenance-root.ts",
+    "apps/server/src/memory/maintenance.ts",
+    "apps/server/src/memory/reads.ts",
+    "apps/server/src/memory/recall-proof.ts",
+    "apps/server/src/memory/routes.ts",
+    "apps/server/src/memory/turn-preview.ts",
+    "apps/server/src/models-main.ts",
+    "apps/server/src/models-route.ts",
+    "apps/server/src/models/current-effects.ts",
+    "apps/server/src/models/spending-effects.ts",
+    "apps/server/src/models/spending.ts",
+    "apps/server/src/onboarding/archive.ts",
+    "apps/server/src/onboarding/options.ts",
+    "apps/server/src/onboarding/persona.ts",
+    "apps/server/src/routine-access-pause.ts",
+    "apps/server/src/routine-activation.ts",
+    "apps/server/src/routine-approval-stop.ts",
+    "apps/server/src/routine-assistant-pause.ts",
+    "apps/server/src/routine-company-preflight.ts",
+    "apps/server/src/routine-composition.ts",
+    "apps/server/src/routine-computer.ts",
+    "apps/server/src/routine-delivery-stop.ts",
+    "apps/server/src/routine-finish.ts",
+    "apps/server/src/routine-input.ts",
+    "apps/server/src/routine-read.ts",
+    "apps/server/src/routine-reassign.ts",
+    "apps/server/src/routine-root.ts",
+    "apps/server/src/routine-routes.ts",
+    "apps/server/src/routine-sender.ts",
+    "apps/server/src/routine-session.ts",
+    "apps/server/src/routine-stop-budget.ts",
+    "apps/server/src/routine-stop.ts"
+  ],
+  "partialFiles": {
+    "apps/server/src/providers/routes.ts": "Only the provider refusal handler is cleaned. Other route builders remain for a later part.",
+    "apps/server/src/chat/turn-credentials.ts": "The existing seven-argument exported credential function keeps its calling contract.",
+    "apps/server/test/provider-binding-guards.test.ts": "The earlier seven-argument fixture call is already absent. No call in this file has more than five arguments."
+  }
+}
