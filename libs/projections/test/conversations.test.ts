@@ -48,6 +48,9 @@ async function replaysToolFeed() {
     const runner = new ProjectionRunner(storage.db, nats.reader, logger);
     await runner.initialise(conversations);
     await runner.run(conversations);
+    const internalRows = await storage.db.query(
+      "SELECT event_id FROM conversation_feed WHERE type = 'agent.file_publication_started'");
+    expect(internalRows.rows).toEqual([]);
     const before = await readConversation(storage.db, 'test', 'chat');
     function rowData(row: (typeof before.rows)[number]) { return row.data; }
     expect(before.rows.map(rowData)).toEqual([
