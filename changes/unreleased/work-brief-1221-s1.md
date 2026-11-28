@@ -19,3 +19,7 @@ and resumed threads, including after a computer restart.
 
 Private thread starts keep their previous configuration without the new assistant
 instructions. Memory-free resume tests check the complete new configuration.
+
+Assistants plainly explain that their computer cannot reach the internet yet.
+Web pages, downloads and online installs fail; the organisation’s gateway will
+decide access later. They still try requests and explain refusals plainly.

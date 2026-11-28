@@ -53,7 +53,7 @@ function expectBrief(request: Record<string, unknown>, persona: string) {
   expect(modelInstructions).toContain(persona);
   expect(modelInstructions).not.toContain('You are Codex');
   expect(modelInstructions).toContain('personal assistant');
-  expect(modelInstructions).toContain('cannot open network sockets');
+  expect(modelInstructions).toContain('cannot reach the internet from your computer yet');
   expect(modelInstructions).toContain('/workspace/artifacts');
   expect(modelInstructions).toContain('server checks and shares new or changed files');
 }
