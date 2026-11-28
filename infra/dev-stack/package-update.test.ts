@@ -8,33 +8,56 @@ import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
 
-async function updateFixture(fail: boolean, condition = '') {
+type FixtureOptions = { slot?: string; entry?: boolean; fleet?: string };
+
+async function updateFixture(fail: boolean, condition = '', options: FixtureOptions = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'pilot-update-'));
   try {
-    const source = `import { applyPilotUpdate } from './infra/dev-stack/packaged.ts';
+    const source = `
+      import { applyPilotUpdate, upgradePackage, rollbackPackage } from
+        './infra/dev-stack/packaged.ts';
+      const condition = process.env.UPDATE_FIXTURE_CONDITION;
       try {
-        await applyPilotUpdate(globalThis.packageUpdateOwner, '2', ['images.server=new'],
-          '${'a'.repeat(40)}');
-        if (process.env.UPDATE_FIXTURE_CONDITION?.startsWith('wrong-')) {
-          globalThis.replaceUpdateIdentity(process.env.UPDATE_FIXTURE_CONDITION);
-          const { rollbackPackage } = await import('./infra/dev-stack/packaged.ts');
-          await rollbackPackage('2');
-        }
-        if (process.env.UPDATE_FIXTURE_CONDITION === 'manual-rollback') {
-          const { rollbackPackage } = await import('./infra/dev-stack/packaged.ts');
-          await rollbackPackage('2');
+        if (process.env.UPDATE_FIXTURE_ENTRY === '1') {
+          await upgradePackage();
+        } else {
+          await applyPilotUpdate(globalThis.packageUpdateOwner, '2', ['images.server=new'],
+            '${'a'.repeat(40)}');
         }
       } catch (error) {
         console.log(error.message);
+      }
+      const manual = condition?.startsWith('wrong-') || [
+        'manual-rollback', 'rollback-error', 'rollback-recovery', 'added-home-manual',
+        'fleet-rollback', 'foreign-lock',
+      ].includes(condition);
+      if (manual) {
+        try {
+          globalThis.replaceUpdateIdentity(condition);
+          globalThis.prepareRollback();
+          if (condition === 'fleet-rollback') {
+            process.env.OPENCRANE_FLEET_TASK = process.env.UPDATE_FIXTURE_FLEET;
+          }
+          await rollbackPackage('2');
+        } catch (error) {
+          console.log(error.message);
+        }
       }`;
     const args = ['--experimental-strip-types', '--import',
       './infra/dev-stack/test/package-update-preload.mjs', '--input-type=module', '-e', source];
-    const env = { ...process.env, DEV_STACK_ID: '1', UPDATE_FIXTURE_DIRECTORY: directory,
+    const env: NodeJS.ProcessEnv = { ...process.env, DEV_STACK_ID: options.slot ?? '1',
+      UPDATE_FIXTURE_ENTRY: options.entry ? '1' : '0', UPDATE_FIXTURE_FLEET: options.fleet,
+      UPDATE_FIXTURE_DIRECTORY: directory,
       UPDATE_FIXTURE_FAILURE: fail ? '1' : '0', UPDATE_FIXTURE_CONDITION: condition };
+    delete env['OPENCRANE_FLEET_TASK'];
+    if (options.fleet !== undefined && condition !== 'fleet-rollback') {
+      env['OPENCRANE_FLEET_TASK'] = options.fleet;
+    }
     const output = await execute(process.execPath, args, { env, timeout: 30_000 });
     const text = await readFile(join(directory, 'result.json'), 'utf8');
     const result = JSON.parse(text) as { gateway: string; revision: string;
-      computerImage: string; computerMode: string; calls: string[][] };
+      computerImage: string; computerMode: string; calls: string[][]; locked: boolean;
+      volumes: Array<{ metadata: { name: string; uid: string } }> };
     return { ...result, output: output.stdout };
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -188,3 +211,130 @@ test('a computer that becomes idle during the build keeps its saved lifecycle st
   leavesIdleComputerStateWithTheWorker);
 test('manual rollback returns the recorded installation to its earlier images',
   returnsToTheSavedRevision);
+
+async function refusesFleetUpdate() {
+  for (const fleet of ['', 'fixture-task']) {
+    const options = { slot: '2', entry: true, fleet };
+    const result = await updateFixture(false, '', options);
+    assert.match(result.output, /[Ff]leet/u);
+    assert.equal(result.calls.length, 0, 'Refuse before reading or changing the cluster');
+  }
+}
+
+async function refusesFleetRollback() {
+  for (const fleet of ['', 'fixture-task']) {
+    const options = { slot: '2', fleet };
+    const result = await updateFixture(false, 'fleet-rollback', options);
+    assert.match(result.output, /[Ff]leet/u);
+    assert.equal(result.calls.some(isRollback), false);
+    assert.equal(result.revision, '3');
+  }
+}
+
+async function operatorCanUpdateAndRollbackSlotTwo() {
+  const options = { slot: '2', entry: true };
+  const result = await updateFixture(false, 'manual-rollback', options);
+  assert.match(result.output, /^PASS applied application approval from GitHub run fixture\n$/u);
+  assert.equal(result.calls.some(isUpgrade), true);
+  assert.equal(result.calls.some(isRollback), true);
+  assert.equal(result.revision, '2');
+}
+
+async function rollsBackWithExcludedBackupJob() {
+  const result = await updateFixture(true, 'backup-during-update');
+  assert.match(result.output, /revision 2 was restored/u);
+  assert.equal(result.revision, '2');
+  assert.equal(result.computerImage, `registry.invalid/package@sha256:${'a'.repeat(64)}`);
+  assert.equal(result.locked, false);
+}
+
+async function resumesTheSavedRollback() {
+  const result = await updateFixture(true, 'rollback-error');
+  assert.match(result.output, /rollback could not be confirmed/u);
+  assert.doesNotMatch(result.output, /unfinished maintenance/u);
+  const rollbacks = result.calls.filter(isRollback);
+  assert.equal(rollbacks.length, 2);
+  assert.equal(result.revision, '2');
+  assert.equal(result.computerImage, `registry.invalid/package@sha256:${'a'.repeat(64)}`);
+  assert.equal(result.locked, false);
+}
+
+async function refusesAnotherUpdatesLock() {
+  const result = await updateFixture(false, 'foreign-lock');
+  assert.match(result.output, /unfinished maintenance/u);
+  assert.equal(result.calls.some(isRollback), false);
+  assert.equal(result.locked, true);
+}
+
+function assertAddedHome(result: Awaited<ReturnType<typeof updateFixture>>) {
+  const expected = { metadata: { name: 'home-computer-two', uid: 'new-home-id' } };
+  assert.deepEqual(result.volumes[1], expected);
+  assert.equal(result.locked, false);
+}
+
+async function keepsNewHomeAfterRestart() {
+  const result = await updateFixture(false, 'added-home');
+  assert.equal(result.output, '');
+  assert.equal(result.revision, '3');
+  assert.equal(result.calls.some(isRollback), false);
+  assertAddedHome(result);
+}
+
+async function rollsBackWithNewHome() {
+  const result = await updateFixture(true, 'added-home-failed-update');
+  assert.match(result.output, /revision 2 was restored/u);
+  assert.equal(result.revision, '2');
+  assertAddedHome(result);
+}
+
+async function manuallyRollsBackWithNewHome() {
+  const result = await updateFixture(false, 'added-home-manual');
+  assert.equal(result.output, '');
+  assert.equal(result.revision, '2');
+  assertAddedHome(result);
+}
+
+test('fleet update entry refuses populated and empty markers on an owned slot 2',
+  refusesFleetUpdate);
+test('fleet rollback entry refuses populated and empty markers on an owned slot 2',
+  refusesFleetRollback);
+test('the operator can update and roll back an owned slot 2 through both entrypoints',
+  operatorCanUpdateAndRollbackSlotTwo);
+test('a backup Job excluded by the update lock cannot prevent automatic rollback',
+  rollsBackWithExcludedBackupJob);
+test('manual recovery resumes the same saved update after a transient rollback error',
+  resumesTheSavedRollback);
+test('manual recovery refuses another update lock', refusesAnotherUpdatesLock);
+test('a home created after restart does not fail the final update check', keepsNewHomeAfterRestart);
+test('automatic rollback preserves a home created after restart', rollsBackWithNewHome);
+test('manual rollback preserves a home created after the update', manuallyRollsBackWithNewHome);
+
+const guardCases = [
+  { condition: 'scanner-margin', message: /Scanner release refused/u },
+  { condition: 'computer-source', message: /computer source revision differs/u },
+  { condition: 'tracked-chart', message: /Package command failed/u },
+  { condition: 'backup-image', message: /backup used different package images/u },
+  { condition: 'corrupt-backup', message: /Backup bytes differ/u },
+  { condition: 'computer-labels', message: /Retained Sandbox belongs to another computer or assistant/u },
+  { condition: 'computer-uid', message: /computer identity changed/u },
+  { condition: 'home-owner', message: /home|PVC/u },
+  { condition: 'running-image', message: /running computer image differs/u },
+];
+for (const guard of guardCases) {
+  async function refusesUnsafeUpdate() {
+    const result = await updateFixture(false, guard.condition);
+    assert.match(result.output, guard.message);
+    assert.equal(result.revision, '2');
+  }
+  test(`the update independently refuses ${guard.condition}`, refusesUnsafeUpdate);
+}
+
+for (const condition of ['wrong-context', 'wrong-namespace', 'wrong-revision', 'rollback-recovery']) {
+  async function refusesUnsafeRollback() {
+    const result = await updateFixture(false, condition);
+    assert.match(result.output, /another installation|Select the revision|recovery installation/u);
+    assert.equal(result.calls.some(isRollback), false);
+    assert.equal(result.revision, '3');
+  }
+  test(`manual rollback independently refuses ${condition}`, refusesUnsafeRollback);
+}
