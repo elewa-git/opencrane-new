@@ -20,6 +20,10 @@ async function updateFixture(fail: boolean, condition = '') {
           const { rollbackPackage } = await import('./infra/dev-stack/packaged.ts');
           await rollbackPackage('2');
         }
+        if (process.env.UPDATE_FIXTURE_CONDITION === 'manual-rollback') {
+          const { rollbackPackage } = await import('./infra/dev-stack/packaged.ts');
+          await rollbackPackage('2');
+        }
       } catch (error) {
         console.log(error.message);
       }`;
@@ -63,6 +67,13 @@ async function restoresGatewayAfterRollback() {
   assert.equal(result.computerImage, `registry.invalid/package@sha256:${'a'.repeat(64)}`);
   const patches = result.calls.filter(isGatewayPatch);
   assert.equal(patches.length, 3, 'Both update steps and rollback reset the gateway');
+  const rollback = result.calls.find(isRollback);
+  assert.equal(rollback?.includes('--wait=false'), true);
+  assert.equal(rollback?.includes('--wait'), false, 'Leave the unused recovery claim unbound');
+  function waitsForServer(args: string[]) {
+    return args.includes('rollout') && args.includes('deployment/server');
+  }
+  assert.equal(result.calls.some(waitsForServer), true);
 }
 
 async function backsUpBeforeChangingRelease() {
@@ -151,6 +162,14 @@ async function leavesIdleComputerStateWithTheWorker() {
   assert.equal(result.calls.some(isRollback), false);
 }
 
+async function returnsToTheSavedRevision() {
+  const result = await updateFixture(false, 'manual-rollback');
+  assert.equal(result.output, '');
+  assert.equal(result.revision, '2');
+  assert.equal(result.gateway, 'http://10.0.0.8:43000');
+  assert.equal(result.computerImage, `registry.invalid/package@sha256:${'a'.repeat(64)}`);
+}
+
 test('an in-place update repairs the gateway that Helm resets', restoresGatewayAfterUpgrade);
 test('a failed update restores the recorded revision and its gateway', restoresGatewayAfterRollback);
 test('the update verifies its backup before changing the release', backsUpBeforeChangingRelease);
@@ -167,3 +186,5 @@ test('a source change before Helm releases the update lock without changing serv
   releasesLockWhenSourceChangesBeforeHelm);
 test('a computer that becomes idle during the build keeps its saved lifecycle state',
   leavesIdleComputerStateWithTheWorker);
+test('manual rollback returns the recorded installation to its earlier images',
+  returnsToTheSavedRevision);

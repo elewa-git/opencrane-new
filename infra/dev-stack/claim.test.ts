@@ -690,16 +690,8 @@ if (program === 'helm' && args.includes('list')) {
     fs.rmSync(home + '/.config/opencrane/dev-stack-1/package-owner.json');
   }
 }
-if (program === 'helm' && args[0] === 'rollback' && state.pilot) {
-  // The source pilot keeps a recovery claim that no running workload mounts.
-  if (args.includes('--wait')) { save(); process.exit(1); }
-}
-if (program === 'helm' && args[0] === 'get' && args[1] === 'values' && state.pilot) {
-  output({ models: { mode: 'provider', qualification: true } });
-}
 if (program === 'kubectl' && state.pilot) {
   if (args.includes('sh.helm.release.v1.opencrane-package-1.v1')) output(state.pilot.release);
-  if (args.includes('services,ingresses')) output({ items: [] });
 }
 if (program === 'kubectl' && args.includes('nodes')) output({ items: state.nodes });
 if (program === 'kubectl' && args.includes('config') && args.includes('view')) {
@@ -757,7 +749,7 @@ async function targetFixture() {
   return { ...fixture, state, saveState, loadState, run, close };
 }
 
-async function rollsBackWithUnusedRecoveryClaim() {
+async function refusesUnrecordedPilotRollback() {
   const fixture = await targetFixture();
   try {
     const namespace = 'opencrane-package-1';
@@ -772,34 +764,23 @@ async function rollsBackWithUnusedRecoveryClaim() {
     fixture.state.pilot = { release: { metadata: { uid: releaseSecretUid, labels } } };
     await fixture.saveState();
     await writeFile(`${fixture.slotDirectory}/package-owner.json`, JSON.stringify(owner));
-    try {
-      await fixture.run('package-rollback', ['--revision', '1']);
-    } catch (cause) {
-      const failure = await readFile(`${fixture.slotDirectory}/failure.log`, 'utf8');
-      throw new Error(failure, { cause });
-    }
-    await fixture.loadState();
-    function isRollback(call: string[]) { return call[0] === 'helm' && call[1] === 'rollback'; }
-    const rollback = fixture.state.calls.find(isRollback);
-    assert.ok(rollback?.includes('--wait=false'));
-    function waitedForServer(call: string[]) {
-      return call.includes('rollout') && call.includes('deployment/server');
-    }
-    assert.ok(fixture.state.calls.some(waitedForServer));
-    fixture.state.fail = 'helm';
-    await fixture.saveState();
     await assert.rejects(fixture.run('package-rollback', ['--revision', '1']), {
       stderr: /Package command refused/u,
     });
+    await fixture.loadState();
+    function isRollback(call: string[]) {
+      return call[0] === 'helm' && call[1] === 'rollback';
+    }
+    assert.equal(fixture.state.calls.some(isRollback), false);
     const failure = await readFile(`${fixture.slotDirectory}/failure.log`, 'utf8');
-    assert.equal(failure, 'Error: Package command failed');
+    assert.equal(failure, 'Error: Rollback needs the update record from this installation');
   } finally {
     await fixture.close();
   }
 }
 
-test('pilot rollback waits for the server and leaves the unused recovery claim alone',
-  rollsBackWithUnusedRecoveryClaim);
+test('pilot rollback refuses an unrecorded revision on an owned installation',
+  refusesUnrecordedPilotRollback);
 
 async function targetLifecycle() {
   const fixture = await targetFixture();
