@@ -11,6 +11,7 @@ const build = resolve(`apps/web/dist/${development ? 'private-reply' : 'web'}/br
 const output = resolve('docs/process/p4-15-pr3l');
 const origin = 'https://private-display.opencrane.test';
 const exact = { exact: true };
+const replySelector = 'article[aria-label="Agent reply"] oc-assistant-markdown';
 const syntheticText = '# A private plan\n\n**Synthetic plan** [1]\n\n'
   + '```mermaid\ngraph LR\nDraft --> Review\n```';
 
@@ -43,9 +44,12 @@ async function capture(page, name, width) {
   await page.screenshot(options);
 }
 async function assertCleared(page) {
-  const markdown = page.locator('oc-assistant-markdown');
+  const markdown = page.locator(replySelector);
   const detached = { state: 'detached' };
   await markdown.waitFor(detached);
+  const memberOptions = { name: 'Your message', exact: true };
+  const memberMessages = page.getByRole('article', memberOptions);
+  await memberMessages.getByText('Show a short plan.', exact).waitFor();
   const markup = await page.locator('body').innerHTML();
   const accessible = await page.locator('body').ariaSnapshot();
   assert(!markup.includes('Synthetic plan'), 'Cleared text is absent');
@@ -72,7 +76,7 @@ async function captureLiveReply(page, fixture, delivery, width) {
   fixture.add('agent.output_lost', turn);
   fixture.add('agent.turn_completed', turn);
   fixture.sendFrame(reply);
-  assert.equal(await page.locator('oc-assistant-markdown').count(), 1);
+  assert.equal(await page.locator(replySelector).count(), 1);
   const otherClearance = { ...binding, type: 'private_output_cleared', threadId: 'other' };
   fixture.sendFrame(otherClearance);
   await image.waitFor();

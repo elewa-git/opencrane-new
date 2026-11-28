@@ -6,3 +6,5 @@ stay unlinked. Links support keyboard use and wrap on phones.
 Internal file-publication checks stay out of chat history, so publishing a shared
 file keeps the conversation readable. Older affected read tables need the existing
 offline conversation rebuild.
+
+The packaged model stand-in includes the helper used by chat-link checks.
