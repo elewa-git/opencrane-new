@@ -51,7 +51,7 @@ kind: Deployment
 metadata:
   name: server
 spec:
-  replicas: {{ ternary 0 1 .Values.pilotRestore.enabled }}
+  replicas: {{ ternary 0 1 (or .Values.pilotRestore.enabled .Values.pilotUpdatePaused) }}
   {{- /* Stop the old Pod before a replacement uses its keys or takes the budget lock. */}}
   strategy:
     type: Recreate

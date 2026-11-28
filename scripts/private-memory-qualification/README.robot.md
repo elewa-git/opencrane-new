@@ -4,6 +4,12 @@ For people, read [README.md](README.md) first.
 
 ## Local qualification image build
 
+`build-images.mjs --id <slot> --revision <commit> --computer-only` builds only the
+computer for a pilot update. It checks for a clean checkout, reviews licences and verifies image identities.
+It also checks that UID 1000 can read the source and import shared code.
+It writes the normal private build record without a package image. The pilot
+update command separately requires both exact-source CI image approvals.
+
 Run `nice -n 10 node scripts/private-memory-qualification/build-images.mjs --id 1
 --revision <full-commit>` from a clean checkout with an owned slot claim.
 The builder archives that commit and uses the production computer and package
@@ -16,7 +22,10 @@ full notice checker; the package uses the non-promoting candidate licence gate.
 The build checks Codex, the protection helper, native imports without
 source mounts, and the package layers. It never pushes, moves release tags, changes
 `sandbox-template.json`, starts a stack or approves deployment. Failure or
-cancellation leaves no `images.json`. The notice collector, licence checkers,
+cancellation leaves no `images.json`. A cancellation signal stops the active
+child's process group. After five seconds, forced termination stops children that
+ignored the signal. The pilot update applies a 30-minute build timeout.
+The notice collector, licence checkers,
 reviewed inventories and package layer test all come from the archived commit.
 The final record appears only after its complete contents have been written.
 

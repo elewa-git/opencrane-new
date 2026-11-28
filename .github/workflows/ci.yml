@@ -170,6 +170,8 @@ jobs:
           infra/dev-stack/handler-upgrade.test.ts infra/dev-stack/dispatcher-ready.test.ts
           infra/dev-stack/scanner-settings.test.ts
           infra/dev-stack/package-hosts.test.ts
+          infra/dev-stack/package-update.test.ts
+          infra/dev-stack/computer-source-permissions.test.ts
           infra/dev-stack/private-settings.test.ts infra/dev-stack/compose.secondary.test.ts
           infra/dev-stack/web-server.test.mjs infra/dev-stack/web-development.test.mjs
           infra/dev-stack/demo-prepare.test.ts infra/dev-stack/demo-smoke.test.ts

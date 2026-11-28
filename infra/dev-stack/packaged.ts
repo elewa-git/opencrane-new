@@ -71,7 +71,7 @@ const privateHosts: Record<string, string> = {
 type Namespace = {
   metadata: { uid: string; annotations?: Record<string, string> };
 };
-type PackageOwner = {
+export type PackageOwner = {
   worktree: string;
   slot: string;
   context: string;
@@ -92,7 +92,7 @@ type PackageValues = Parameters<typeof checkCnpgInstallation>[0] & PublicPackage
 type SecretData = { data?: Record<string, string> };
 type ReleaseSecret = { metadata: { uid: string; labels?: Record<string, string> } };
 
-async function command(program: string, args: string[], timeoutMs = 120_000, cwd = root,
+export async function command(program: string, args: string[], timeoutMs = 120_000, cwd = root,
   limits: CommandLimits = {}) {
   if (program === 'helm' && args.includes('--kube-context')) {
     const connection = await targetConnection(limits);
@@ -236,7 +236,7 @@ export async function packageConnectionArgs(owner: PackageOwner, limits: Command
   return { args, environment };
 }
 
-async function ownedKubectl(owner: PackageOwner, args: string[], timeoutMs?: number,
+export async function ownedKubectl(owner: PackageOwner, args: string[], timeoutMs?: number,
   signal?: AbortSignal, deadline?: number) {
   // Keep dispatch delays and ownership checks inside the caller's original time limit.
   const limits: CommandLimits = { deadline: deadline ?? Date.now() + (timeoutMs ?? 120_000) };
@@ -489,7 +489,7 @@ function requireOwnedRelease(secret: ReleaseSecret | undefined, owner: PackageOw
   }
 }
 
-async function checkedRelease() {
+export async function checkedRelease() {
   const owner = await verifyPackageOwner();
   const uid = await ownedReleaseSecretUid(owner);
   if (!uid || uid !== owner.releaseSecretUid) {
@@ -498,7 +498,7 @@ async function checkedRelease() {
   return owner;
 }
 
-async function releaseCommand(owner: PackageOwner, args: string[], timeoutMs?: number) {
+export async function releaseCommand(owner: PackageOwner, args: string[], timeoutMs?: number) {
   await packageConnectionArgs(owner);
   return command('helm', [...args, '--kube-context', owner.context, '--namespace', owner.namespace],
     timeoutMs);
@@ -508,12 +508,13 @@ type PilotUpgradeValues = {
   chartVersion?: string;
   exposure?: { public?: { enabled?: boolean } };
   pilotRestore?: { enabled?: boolean };
-  images?: { server?: string };
+  images?: Record<string, string>;
   secrets?: { scanner?: string };
+  scanner?: { approvedSha: string };
   models?: PackageModels;
 };
 
-async function installedValues(owner: PackageOwner) {
+export async function installedValues(owner: PackageOwner) {
   const current = await releaseCommand(owner, ['get', 'values', owner.release, '-o', 'json']);
   return JSON.parse(current) as PilotUpgradeValues;
 }
@@ -529,7 +530,7 @@ async function pilotUpgradeValues(owner: PackageOwner) {
   const original = await releaseCommand(owner, ['get', 'values', owner.release, '--revision', '1',
     '-o', 'json']);
   const first = JSON.parse(original) as PilotUpgradeValues;
-  const bootstrapImage = first.images?.server;
+  const bootstrapImage = first.images?.['server'];
   if (!bootstrapImage || !/@sha256:[a-f0-9]{64}$/u.test(bootstrapImage)) {
     throw new Error('The original bootstrap image is not pinned');
   }
@@ -537,7 +538,7 @@ async function pilotUpgradeValues(owner: PackageOwner) {
   if (!scannerSecret || !/^[a-z0-9][a-z0-9.-]*$/u.test(scannerSecret)) {
     throw new Error('The pilot scanner Secret is missing');
   }
-  return { bootstrapImage, scannerSecret, serverImage: values.images?.server };
+  return { bootstrapImage, scannerSecret, serverImage: values.images?.['server'] };
 }
 
 async function deployedRevision(owner: PackageOwner) {
@@ -556,12 +557,6 @@ async function deployedRevision(owner: PackageOwner) {
     throw new Error('Helm needs one deployed revision and no change already in progress');
   }
   return String(revision);
-}
-
-async function checkBackupIsIdle(owner: PackageOwner) {
-  const active = await ownedKubectl(owner, ['-n', namespace, 'get', 'cronjob', 'pilot-backup',
-    '-o', 'jsonpath={.status.active[*].uid}']);
-  if (active) throw new Error('Wait for the scheduled backup to finish before changing the release');
 }
 
 async function recordHostPreflight(owner: PackageOwner, image: string) {
@@ -615,62 +610,57 @@ async function createUpgradeSecret(owner: PackageOwner, secret: unknown) {
   }
 }
 
+function requirePilotOperator() {
+  if (process.env['OPENCRANE_FLEET_TASK'] !== undefined) {
+    throw new Error('Fleet tasks cannot update or roll back a pilot');
+  }
+}
+
 export async function upgradePackage() {
+  requirePilotOperator();
   const { publishApprovedApplication } = await import('../package/publish-approved-images.mjs');
   const owner = await checkedRelease();
   const { bootstrapImage, scannerSecret, serverImage } = await pilotUpgradeValues(owner);
   const conditions = await bootstrapConditions(owner);
-  if (!conditions.some(completed)) throw new Error('The original setup Job must be complete');
-  await command('git', ['diff', '--quiet', 'HEAD', '--', 'infra/package/chart']);
+  if (!conditions.some(completed)) {
+    throw new Error('The original setup Job must be complete');
+  }
   const revision = await command('git', ['rev-parse', 'HEAD']);
+  const { requireUpdateSource } = await import('./pilot-update.ts');
+  await requireUpdateSource(revision);
   const approvals = resolve(directory, 'release-approvals', revision);
   const approval = await publishApprovedApplication(approvals);
-  if (approval.image === serverImage) throw new Error('This application image is already installed');
+  if (approval.image === serverImage) {
+    throw new Error('This application image is already installed');
+  }
   await recordHostPreflight(owner, approval.image);
   await checkLiveExposure(owner);
-  await checkBackupIsIdle(owner);
   const scanner = await prepareUpgradeScanner(owner, scannerSecret, approvals);
-  await checkBackupIsIdle(owner);
   const previous = await deployedRevision(owner);
   await applyPilotUpdate(owner, previous, [`images.server=${approval.image}`,
     `images.web=${approval.image}`, `images.scanner=${scanner.image}`,
     `scanner.approvedSha=${scanner.approvedSha}`, `secrets.scanner=${scanner.name}`,
-    `bootstrapImage=${bootstrapImage}`]);
+    `bootstrapImage=${bootstrapImage}`], revision);
   console.log(`PASS applied application approval from GitHub run ${approval.runId}`);
 }
 
-async function applyPilotUpdate(owner: PackageOwner, previous: string, settings: string[]) {
-  // Keep the original release Secret for ownership checks and leave the finished Job intact.
-  const args = ['upgrade', owner.release, chartDirectory, '--reuse-values',
-    '--history-max', '0', '--wait=false'];
-  for (const setting of settings) args.push('--set-string', setting);
-  try {
-    await releaseCommand(owner, args, 180_000);
-    await waitForPilot(owner);
-  } catch (cause) {
-    try {
-      await restorePilotRelease(owner, previous);
-    } catch (rollback) {
-      throw new AggregateError([cause, rollback], 'Pilot update and rollback could not be confirmed');
-    }
-    throw new Error(`Pilot update failed. Helm revision ${previous} was restored`, { cause });
-  }
+async function applyPilotUpdate(owner: PackageOwner, previous: string, settings: string[],
+  sourceRevision: string) {
+  const { updatePilot } = await import('./pilot-update.ts');
+  await updatePilot(owner, previous, settings, sourceRevision);
 }
 
 export async function rollbackPackage(revision: string) {
-  if (!/^[1-9][0-9]*$/u.test(revision)) throw new Error('Select a recorded Helm revision');
+  requirePilotOperator();
+  if (!/^[1-9][0-9]*$/u.test(revision)) {
+    throw new Error('Select a recorded Helm revision');
+  }
   const owner = await checkedRelease();
-  await restorePilotRelease(owner, revision);
+  const { rollbackPilot } = await import('./pilot-update.ts');
+  await rollbackPilot(owner, revision);
 }
 
-async function restorePilotRelease(owner: PackageOwner, revision: string) {
-  await checkBackupIsIdle(owner);
-  await releaseCommand(owner, ['rollback', owner.release, revision, '--history-max', '0',
-    '--wait=false'], 180_000);
-  await waitForPilot(owner);
-}
-
-async function waitForPilot(owner: PackageOwner) {
+export async function waitForPilot(owner: PackageOwner) {
   // Leave the recovery claim unbound until a recovery installation uses it.
   const values = await installedValues(owner);
   const deployments = ['backup-catalogue'];
@@ -715,7 +705,7 @@ async function waitForBootstrap(owner: PackageOwner) {
   throw new Error('Package bootstrap Job timed out');
 }
 
-async function configureComputerGateway(owner: PackageOwner) {
+export async function configureComputerGateway(owner: PackageOwner) {
   const output = await ownedKubectl(owner, ['-n', namespace, 'get', 'service', 'server', '-o', 'json']);
   const service = JSON.parse(output) as { spec?: { type?: string; clusterIP?: string } };
   const address = service.spec?.clusterIP;

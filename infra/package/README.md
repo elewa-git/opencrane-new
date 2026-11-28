@@ -18,7 +18,7 @@ in the recorded Kubernetes cluster.
 
 ```mermaid
 flowchart LR
-  stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>Helm install and update"]
+  stack["infra/dev-stack<br/>slot ownership"] --> package["infra/package<br/>Helm install, update and rollback"]
   ci["GitHub packaging job<br/>approved images"] --> package
   package --> apps["Apps and assistant computers<br/>sign-in, chat, history and spending"]
   tailnet["Pilot users<br/>Tailscale Serve"] -->|through the loopback forwarder| apps
@@ -99,8 +99,11 @@ Not built yet:
 8. **A developer restores a pilot.** A separate empty installation checks the matching
    backup, rebuilds tables and permissions, and restores files. Reading opens only
    after verification. Workers and effects remain stopped.
-9. **An operator updates a pilot.** The new approved images replace the running
-   images. The pilot keeps the same storage and sign-in.
+9. **An operator updates a pilot.** A new verified backup comes first. The approved
+   images replace the running images and restart computers with their saved files.
+   A failed health check restores the previous images. An operator can resume an interrupted
+   rollback using the saved update record. New computer homes are kept. Fleet tasks cannot
+   run either command. Storage and sign-in stay in place.
 10. **A developer checks or removes an install.** Fresh-install checks use new storage
    and verify chat, its spending limit and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.

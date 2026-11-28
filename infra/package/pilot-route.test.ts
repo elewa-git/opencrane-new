@@ -128,6 +128,17 @@ async function refusesReplacedListener() {
   await withRoute(check);
 }
 
+async function refusesReplacedListenerOnRepeat() {
+  async function check(fixture: ReturnType<typeof routeFixture>) {
+    await switchPilot(fixture.settings, fixture.controls);
+    fixture.replaceListenerAfterStatus();
+    await assert.rejects(switchPilot(fixture.settings, fixture.controls), /forwarder/u);
+    assert.equal(fixture.current(), pilotTarget);
+    assert.equal(fixture.changes(), 1);
+  }
+  await withRoute(check);
+}
+
 async function keepsInterveningRoute() {
   async function check(fixture: ReturnType<typeof routeFixture>) {
     const replacement = 'http://127.0.0.1:29996';
@@ -152,6 +163,7 @@ async function reportsFailedConfirmation() {
 
 test('a root proxy requires a TCP HTTPS listener', refusesMissingHttps);
 test('a listener replaced after reading Serve leaves the demo mapped', refusesReplacedListener);
+test('a repeated switch rechecks the listener after reading Serve', refusesReplacedListenerOnRepeat);
 test('a concurrent Serve change keeps its mapping', keepsInterveningRoute);
 test('a switch without confirmation reports how to restore the saved demo', reportsFailedConfirmation);
 

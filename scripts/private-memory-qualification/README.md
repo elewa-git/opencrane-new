@@ -19,7 +19,7 @@ It uses Docker on the deployment host and reads the deployment's event store.
 
 ```mermaid
 flowchart LR
-  scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>builds images and checks results"]
+  scripts["scripts<br/>developer tools"] -.-> collector["private-memory-qualification<br/>builds checked images and checks results"]
   scripts -.-> sibling["check-local-qualification<br/>checks local results"]
   server["apps/server<br/>memory preparation"] -->|reads and rechecks results| collector
   collector -.->|checks memory, Stop and reply loss| server
@@ -31,7 +31,9 @@ flowchart LR
 
 ## What it is responsible for
 
-- Build both images from one clean commit and save their checked identities in a spare slot.
+- Build images from one clean commit and save their checked identities in a spare slot.
+  Pilot updates can build just the computer, with the same licence checks
+  and checks that the computer user can read the source.
 - Read the permitted container and silo from deployment-owned configuration.
 - Stop each journey and its children when it exceeds a limit or the collector exits.
 - Measure the source revision, image, host, silo and installation before collecting results.
@@ -138,6 +140,8 @@ helper stays open until both process reads and the live scan finish. A lost requ
 changed image or unreadable store leaves the result unfinished. A confirmed write
 remains a failure. One clean attempt is still only partial evidence; the full
 fresh-install journeys remain separate.
+Image builds stop their child processes when cancelled. A five-second grace period
+ends with forced termination if a child ignores the stop signal.
 Other tests use simulated observations and disposable containers to check refusal and cleanup.
 They do not qualify a deployment or enable memory.
 

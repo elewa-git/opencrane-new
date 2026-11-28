@@ -73,16 +73,17 @@ provider credentials and assistant computer homes.
 
 ## Update the running pilot
 
-Not yet safe for a live installation. Reinstall instead; the open checks are
-tracked as slice 3 of the pilot ticket. Use these steps for rehearsal only.
-
 An update applies the approved application and scanner images to the existing
 Helm release. The pilot keeps its volumes, sign-in settings, chat history and
 saved demo route. Plan a maintenance window away from the nightly backup, and
-keep a checked backup away from the installation before starting.
+keep the update's checked backup away from the installation. The command
+refuses if a new backup cannot verify before it changes the release.
 
 The [update and rollback commands](README.robot.md#update-the-running-pilot)
-record the Helm revision to return to. After the update, check that a member
+record the installation, previous Helm revision and computer images to return
+to. A failed update restores them automatically and checks service health.
+A later rollback uses the saved live slot, even after a recovery drill.
+After the update, check that a member
 can sign in and open a saved chat and upload. Check that the next scheduled
 backup uses the new image and can be restored into an empty installation.
 

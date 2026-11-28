@@ -18,15 +18,30 @@ let activeChild;
 let cancelled = false;
 const cancellation = new AbortController();
 
+function signalBuildProcess(pid, signal) {
+  try {
+    process.kill(-pid, signal);
+  } catch (error) {
+    if (error.code !== 'ESRCH') {
+      throw error;
+    }
+  }
+}
+
 function cancelBuild() {
+  if (cancelled) {
+    return;
+  }
   cancelled = true;
   cancellation.abort();
-  if (activeChild?.pid) {
-    try {
-      process.kill(-activeChild.pid, 'SIGTERM');
-    } catch (error) {
-      if (error.code !== 'ESRCH') throw error;
+  const pid = activeChild?.pid;
+  if (pid) {
+    signalBuildProcess(pid, 'SIGTERM');
+    function forceBuildStop() {
+      signalBuildProcess(pid, 'SIGKILL');
     }
+    // Bound cancellation even when Docker or one of its children ignores SIGTERM.
+    setTimeout(forceBuildStop, 5000);
   }
 }
 
@@ -36,19 +51,22 @@ function run(command, args, options = {}) {
       rejectRun(new Error('Image build cancelled'));
       return;
     }
-    const child = spawn(command, args, {
+    const childOptions = {
       cwd: options.cwd ?? worktree,
       detached: true,
       env: { ...process.env, ...options.env },
       stdio: options.input === undefined ? ['ignore', 'pipe', 'inherit'] : ['pipe', 'pipe', 'inherit'],
-    });
+    };
+    const child = spawn(command, args, childOptions);
     activeChild = child;
     const output = [];
     function collect(data) {
       output.push(data);
     }
     function finished(code) {
-      if (activeChild === child) activeChild = undefined;
+      if (activeChild === child) {
+        activeChild = undefined;
+      }
       if (cancelled) {
         rejectRun(new Error('Image build cancelled'));
       } else if (code !== (options.expectedExitCode ?? 0)) {
@@ -60,15 +78,23 @@ function run(command, args, options = {}) {
     child.stdout.on('data', collect);
     child.on('error', rejectRun);
     child.on('close', finished);
-    if (options.input !== undefined) child.stdin.end(options.input);
+    if (options.input !== undefined) {
+      child.stdin.end(options.input);
+    }
   }
   return new Promise(startProcess);
 }
 
 export function buildPlan(slot, revision, attempt) {
-  if (slot !== '1' && slot !== '2') throw new Error('Expected a secondary slot');
-  if (!revisionPattern.test(revision)) throw new Error('Expected a full source revision');
-  if (!/^[a-zA-Z0-9-]+$/u.test(attempt)) throw new Error('Invalid attempt name');
+  if (slot !== '1' && slot !== '2') {
+    throw new Error('Expected a secondary slot');
+  }
+  if (!revisionPattern.test(revision)) {
+    throw new Error('Expected a full source revision');
+  }
+  if (!/^[a-zA-Z0-9-]+$/u.test(attempt)) {
+    throw new Error('Invalid attempt name');
+  }
   const prefix = `opencrane-qualification-${attempt}`;
   return {
     slot,
@@ -82,7 +108,9 @@ export function buildPlan(slot, revision, attempt) {
 
 export function checkedImageIdentity(metadata, inspection, revision, archiveConfiguration) {
   const manifestDigest = metadata['containerimage.digest'];
-  if (!digestPattern.test(manifestDigest)) throw new Error('Missing immutable manifest digest');
+  if (!digestPattern.test(manifestDigest)) {
+    throw new Error('Missing immutable manifest digest');
+  }
   if (!digestPattern.test(archiveConfiguration)) {
     throw new Error('Image archive has no configuration digest');
   }
@@ -102,22 +130,32 @@ export function checkedImageIdentity(metadata, inspection, revision, archiveConf
 
 async function checkedSlot(slot) {
   const directory = join(homedir(), '.config/opencrane', `dev-stack-${slot}`);
-  if (await realpath(directory) !== directory) throw new Error('Slot directory is a link');
+  if (await realpath(directory) !== directory) {
+    throw new Error('Slot directory is a link');
+  }
   const markerPath = join(directory, 'stack-owner');
   const markerInfo = await lstat(markerPath);
-  if (!markerInfo.isFile()) throw new Error('Slot owner marker is not a file');
+  if (!markerInfo.isFile()) {
+    throw new Error('Slot owner marker is not a file');
+  }
   const marker = await readFile(markerPath, 'utf8');
   const firstLine = marker.split('\n')[0];
   const owner = firstLine.startsWith('worktree=') ? firstLine.slice(9) : firstLine;
-  if (owner !== worktree) throw new Error('Slot belongs to another worktree');
+  if (owner !== worktree) {
+    throw new Error('Slot belongs to another worktree');
+  }
   return directory;
 }
 
 async function checkedSource(revision) {
   const head = (await run('git', ['rev-parse', 'HEAD'])).trim();
-  if (head !== revision) throw new Error('Source revision is not the checkout HEAD');
+  if (head !== revision) {
+    throw new Error('Source revision is not the checkout HEAD');
+  }
   const changes = await run('git', ['status', '--porcelain', '--untracked-files=normal']);
-  if (changes.trim()) throw new Error('Source checkout must be clean');
+  if (changes.trim()) {
+    throw new Error('Source checkout must be clean');
+  }
 }
 
 async function extractSource(revision, attemptDirectory) {
@@ -135,10 +173,14 @@ function sha256(contents) {
 }
 
 async function checkedBlob(archivePath, digest) {
-  if (!digestPattern.test(digest)) throw new Error('Image archive has an invalid digest');
+  if (!digestPattern.test(digest)) {
+    throw new Error('Image archive has an invalid digest');
+  }
   const name = `blobs/sha256/${digest.slice('sha256:'.length)}`;
   const contents = await run('tar', ['-xOf', archivePath, name]);
-  if (sha256(contents) !== digest) throw new Error('Image archive digest differs from its contents');
+  if (sha256(contents) !== digest) {
+    throw new Error('Image archive digest differs from its contents');
+  }
   return JSON.parse(contents);
 }
 
@@ -147,7 +189,9 @@ async function checkedArchiveConfiguration(archivePath, manifestDigest) {
   const configurationDigest = manifest.config?.digest;
   await checkedBlob(archivePath, configurationDigest);
   const savedManifest = JSON.parse(await run('tar', ['-xOf', archivePath, 'manifest.json']));
-  if (savedManifest.length !== 1) throw new Error('Save exactly one image');
+  if (savedManifest.length !== 1) {
+    throw new Error('Save exactly one image');
+  }
   const configurationFile = savedManifest[0].Config;
   const configuration = await run('tar', ['-xOf', archivePath, configurationFile]);
   if (sha256(configuration) !== configurationDigest) {
@@ -182,7 +226,9 @@ async function downloadPinnedTool(url, expectedSha256, destination) {
   await run('curl', ['--fail', '--location', '--silent', '--show-error', url, '--output', destination]);
   const contents = await readFile(destination);
   const actual = createHash('sha256').update(contents).digest('hex');
-  if (actual !== expectedSha256) throw new Error('Pinned build tool checksum differs');
+  if (actual !== expectedSha256) {
+    throw new Error('Pinned build tool checksum differs');
+  }
 }
 
 async function prepareLicenceTools(attemptDirectory) {
@@ -203,30 +249,58 @@ export function reviewedValidationPaths(source) {
   };
 }
 
-async function scanAndCheckLicences(source, plan, computerIdentity, packageIdentity,
-  attemptDirectory, tools) {
-  const computerScan = join(attemptDirectory, 'computer-sbom.json');
+async function scanPackage(source, plan, identity, attemptDirectory, tools) {
   const packageScan = join(attemptDirectory, 'package-sbom.json');
-  await run(tools.syft, ['scan', `docker:${plan.computer.tag}`, '-o', `syft-json=${computerScan}`]);
-  await run(tools.syft, ['scan', `docker:${plan.package.tag}`, '-o', `syft-json=${packageScan}`]);
-  await checkedScanIdentity(computerScan, plan.computer.tag, computerIdentity);
-  await checkedScanIdentity(packageScan, plan.package.tag, packageIdentity);
+  await run(tools.syft, ['scan', `docker:${plan.tag}`, '-o', `syft-json=${packageScan}`]);
+  await checkedScanIdentity(packageScan, plan.tag, identity);
+  const validationPaths = reviewedValidationPaths(source);
+  await run('python3', [validationPaths.packageChecker, '--candidate-server', packageScan],
+    { cwd: source });
+}
+
+async function scanComputer(source, plan, identity, attemptDirectory, tools) {
+  const computerScan = join(attemptDirectory, 'computer-sbom.json');
+  await run(tools.syft, ['scan', `docker:${plan.tag}`, '-o', `syft-json=${computerScan}`]);
+  await checkedScanIdentity(computerScan, plan.tag, identity);
   const validationPaths = reviewedValidationPaths(source);
   const noticeCollector = await readFile(validationPaths.noticeCollector);
   const notices = await run('docker', ['run', '--rm', '--network', 'none', '-i',
-    '--entrypoint', '/usr/bin/python3', plan.computer.tag, '-', 'notices'],
+    '--entrypoint', '/usr/bin/python3', plan.tag, '-', 'notices'],
   { input: noticeCollector });
   const noticePath = join(attemptDirectory, 'computer-notices.json');
   const inventoryPath = join(attemptDirectory, 'computer-licences.json');
   await writeFile(noticePath, notices, { mode: 0o600 });
   await run('python3', [validationPaths.computerChecker, computerScan,
     tools.osiPath, inventoryPath, noticePath], { cwd: source });
-  await run('python3', [validationPaths.packageChecker, '--candidate-server', packageScan],
-    { cwd: source });
+}
+
+async function checkComputerReadability(tag) {
+  const script = `import { accessSync, constants, readdirSync, statSync } from 'node:fs';
+    import { join } from 'node:path';
+    function check(directory) {
+      accessSync(directory, constants.R_OK | constants.X_OK);
+      for (const name of readdirSync(directory)) {
+        const path = join(directory, name);
+        const information = statSync(path);
+        if (information.isDirectory()) {
+          check(path);
+        } else {
+          accessSync(path, constants.R_OK);
+        }
+      }
+    }
+    for (const directory of ['/app/src', '/app/libs', '/scripts/private-memory-qualification']) {
+      check(directory);
+    }
+    await import('/app/libs/events/src/tool-call.ts');
+    await import('/app/libs/models/src/routing.ts');`;
+  await run('docker', ['run', '--rm', '--network', 'none', '--read-only', '--user', '1000:1000',
+    '--entrypoint', 'node', tag, '--experimental-strip-types', '--input-type=module', '-e', script]);
 }
 
 async function checkedScanIdentity(path, tag, identity) {
-  const scan = JSON.parse(await readFile(path, 'utf8'));
+  const contents = await readFile(path, 'utf8');
+  const scan = JSON.parse(contents);
   const source = scan.source;
   const metadata = source?.metadata;
   const expectedPin = `${tag}@${identity.manifestDigest}`;
@@ -264,7 +338,9 @@ async function checkImports(source, plan, packageArchive) {
     [plan.package.tag, packageCodex]]) {
     const checksum = await run('docker', ['run', '--rm', '--network', 'none', '--read-only',
       '--entrypoint', 'sha256sum', tag, binary]);
-    if (checksum.split(' ')[0] !== codexSha256) throw new Error('Pinned Codex binary differs');
+    if (checksum.split(' ')[0] !== codexSha256) {
+      throw new Error('Pinned Codex binary differs');
+    }
     await run('docker', ['run', '--rm', '--network', 'none', '--read-only',
       '--entrypoint', 'node', tag, '--eval',
       `require('${tag === plan.computer.tag ? '/scripts' : '/app/scripts'}`
@@ -284,23 +360,30 @@ export async function writeCompletedRecord(recordPath, record, signal, write = w
   try {
     await write(temporaryPath, `${JSON.stringify(record, null, 2)}\n`,
       { mode: 0o600, flag: 'wx' });
-    if (signal.aborted) throw new Error('Image build cancelled');
+    if (signal.aborted) {
+      throw new Error('Image build cancelled');
+    }
     // Link the complete file only after every check; an existing record must refuse.
     await link(temporaryPath, recordPath);
     published = true;
     await rm(temporaryPath);
-    if (signal.aborted) throw new Error('Image build cancelled');
+    if (signal.aborted) {
+      throw new Error('Image build cancelled');
+    }
   } catch (error) {
     await rm(temporaryPath, { force: true });
-    if (published) await rm(recordPath, { force: true });
+    if (published) {
+      await rm(recordPath, { force: true });
+    }
     throw error;
   }
 }
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args.length !== 4 || args[0] !== '--id' || args[2] !== '--revision') {
-    throw new Error('Usage: build-images.mjs --id 1|2 --revision <full-commit>');
+  const computerOnly = args[4] === '--computer-only';
+  if (args.length !== (computerOnly ? 5 : 4) || args[0] !== '--id' || args[2] !== '--revision') {
+    throw new Error('Usage: build-images.mjs --id 1|2 --revision <full-commit> [--computer-only]');
   }
   const attempt = randomUUID();
   const plan = buildPlan(args[1], args[3], attempt);
@@ -315,10 +398,16 @@ async function main() {
   await chmod(attemptDirectory, 0o700);
   const source = await extractSource(plan.revision, attemptDirectory);
   const computer = await buildImage(source, { ...plan.computer, revision: plan.revision }, attemptDirectory);
-  const packageImage = await buildImage(source, { ...plan.package, revision: plan.revision }, attemptDirectory);
   const licenceTools = await prepareLicenceTools(attemptDirectory);
-  await scanAndCheckLicences(source, plan, computer, packageImage, attemptDirectory, licenceTools);
-  await checkImports(source, plan, packageImage.archive);
+  await checkComputerReadability(plan.computer.tag);
+  await scanComputer(source, plan.computer, computer, attemptDirectory, licenceTools);
+  let packageImage;
+  if (!computerOnly) {
+    const packagePlan = { ...plan.package, revision: plan.revision };
+    packageImage = await buildImage(source, packagePlan, attemptDirectory);
+    await scanPackage(source, plan.package, packageImage, attemptDirectory, licenceTools);
+    await checkImports(source, plan, packageImage.archive);
+  }
   const record = { slot: plan.slot, sourceRevision: plan.revision, computer, package: packageImage,
     computerTag: plan.computer.tag, packageTag: plan.package.tag };
   const recordPath = join(attemptDirectory, 'images.json');

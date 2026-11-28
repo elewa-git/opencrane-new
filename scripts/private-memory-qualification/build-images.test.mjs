@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { execFile, spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync,
   rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { test } from 'node:test';
+import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { checkedImageIdentity } from './build-images.mjs';
 
@@ -165,7 +166,7 @@ async function fixtureBuildImage() {
     'await buildImage(source, { ...plan.computer, revision: plan.revision }, attemptDirectory)',
     'await fixtureBuildImage()');
   source = replaceFixtureCall(source,
-    'await buildImage(source, { ...plan.package, revision: plan.revision }, attemptDirectory)',
+    'await buildImage(source, packagePlan, attemptDirectory)',
     'await fixtureBuildImage()');
   source = replaceFixtureCall(source, 'await prepareLicenceTools(attemptDirectory)',
     '{ syft: process.env.FIXTURE_SYFT, osiPath: process.env.FIXTURE_OSI }');
@@ -175,7 +176,7 @@ async function fixtureBuildImage() {
         + '\n    await new Promise(setImmediate);');
   } else if (signalPoint === 'after-write') {
     source = replaceFixtureCall(source,
-      "    if (signal.aborted) throw new Error('Image build cancelled');",
+      "    if (signal.aborted) {\n      throw new Error('Image build cancelled');\n    }",
       "    cancelBuild();\n"
         + "    if (signal.aborted) throw new Error('Image build cancelled');");
   }
@@ -321,3 +322,71 @@ test('real validation callers use archived files and working directory after a b
   validationUsesArchivedRevision);
 test('main cancels before and after linking and removes both record files',
   cancellationDuringCompletionRemovesPublication);
+
+function runningProcess(pid) {
+  try {
+    const status = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const state = status.slice(status.lastIndexOf(')') + 2).split(' ')[0];
+    return state !== 'Z';
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return false;
+    }
+    throw error;
+  }
+}
+
+function killFixtureProcess(path) {
+  if (!existsSync(path)) {
+    return;
+  }
+  const pid = Number(readFileSync(path, 'utf8'));
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch (error) {
+    if (error.code !== 'ESRCH') {
+      throw error;
+    }
+  }
+}
+
+async function timeoutKillsNonCooperativeBuildTree() {
+  const command = `trap '' TERM
+sh -c 'trap "" TERM; echo $$ > "$FAKE_DOCKER_LOG.grandchild"; exec sleep 60' &
+echo $$ > "$FAKE_DOCKER_LOG.child"
+wait`;
+  const fixture = fakeBuildFixture(command);
+  const template = readFileSync('apps/computer/sandbox-template.json', 'utf8');
+  const execute = promisify(execFile);
+  const started = Date.now();
+  const options = { env: fixture.env, timeout: 1000 };
+  const build = execute(process.execPath, buildArgs, options);
+  // Bound the test independently so a broken cancellation path cannot hang the suite.
+  let watchdog;
+  function testDeadline(_resolve, reject) {
+    function expired() { reject(new Error('Timed-out image build did not finish within 8 seconds')); }
+    watchdog = setTimeout(expired, 8000);
+  }
+  try {
+    const deadline = new Promise(testDeadline);
+    const completion = Promise.race([build, deadline]);
+    await assert.rejects(completion, /Command failed/u);
+    assert.ok(Date.now() - started < 8000);
+    const child = Number(readFileSync(`${fixture.dockerLog}.child`, 'utf8'));
+    const grandchild = Number(readFileSync(`${fixture.dockerLog}.grandchild`, 'utf8'));
+    assert.equal(runningProcess(child), false, 'Kill the Docker child after its grace period');
+    assert.equal(runningProcess(grandchild), false, 'Kill the non-cooperative grandchild too');
+    assertNoPublication(fixture, template);
+  } finally {
+    clearTimeout(watchdog);
+    // Clean up the deliberately uncooperative fixture even when the regression returns.
+    for (const suffix of ['child', 'grandchild']) {
+      killFixtureProcess(`${fixture.dockerLog}.${suffix}`);
+    }
+    await build.catch(function expectedCancellation() {});
+    rmSync(fixture.home, { recursive: true, force: true });
+  }
+}
+
+test('the build timeout kills a child and grandchild that both ignore SIGTERM',
+  timeoutKillsNonCooperativeBuildTree);

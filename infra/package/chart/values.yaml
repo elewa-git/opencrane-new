@@ -1,4 +1,5 @@
 chartVersion: "0.1.0"
+pilotUpdatePaused: false
 organisation:
   name: ""
 images:
