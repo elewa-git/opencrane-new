@@ -54,8 +54,8 @@ export function requireCurrentComputer(computer: StoredEvent | undefined, sequen
 }
 
 export function requireSharedTurnTools(sharingClass: 'shared_only' | undefined) {
-  const configuration = sessionConfiguration({ conversation: {}, sharingClass,
-    memoryEnabled: false });
+  const sessionInput = { conversation: {}, sharingClass, memoryEnabled: false };
+  const configuration = sessionConfiguration(sessionInput);
   if (configuration.sharingClass !== undefined) {
     throw new Error('Shared turns have no tools');
   }

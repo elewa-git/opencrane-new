@@ -1,0 +1,238 @@
+{
+  "windowStart": "4ac3e85ea",
+  "windowEnd": "2e24538b0e944935f9a3a613693b1b14bc41eec1",
+  "changed": [
+    "libs/models/src/approval-invalidation.ts",
+    "libs/models/src/authority.ts",
+    "libs/models/src/bearer-identity.ts",
+    "libs/models/src/budget-writer.ts",
+    "libs/models/src/connection-account.ts",
+    "libs/models/src/connection-custody-stage.ts",
+    "libs/models/src/connection-custody.ts",
+    "libs/models/src/credential-patterns.ts",
+    "libs/models/src/decision-context.ts",
+    "libs/models/src/decision-conversation-catchup.ts",
+    "libs/models/src/decision-conversation.ts",
+    "libs/models/src/decision-refusal.ts",
+    "libs/models/src/personal-account.ts",
+    "libs/models/src/personal-key-consent.ts",
+    "libs/models/src/personal-key-save.ts",
+    "libs/models/src/remote-https.ts",
+    "libs/models/src/turn-binding-check.ts"
+  ],
+  "skippedForOpenPullRequests": {
+    "libs/models/src/actor.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/approvals.ts": [
+      "work/clean-1043-s2",
+      "work/pilot-1052-s1"
+    ],
+    "libs/models/src/bearer-connections.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/budget-config.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/budget-stop-handler.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/company-bearer.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/company-oauth.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/company-opt-in.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/company-selection.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/connection-admin-disable-change-read.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/connection-append.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/connection-change-read.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/connection-profile-admin-read.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/connection-profile-read.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/connection-reconciliation.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/connection-selection-change-read.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/connection-selection.ts": [
+      "work/tools-1196-s1",
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/credential-broker.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/credential-release.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/decision-activity.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/decision.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/descendant-admission.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/egress-admission.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/egress-receipt.ts": [
+      "work/clean-1048-s1",
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/gateway.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/hosted-admission.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/hosted-registration.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/mcp-catalogue-watch.ts": [
+      "work/clean-1043-s2",
+      "work/pilot-1052-s1"
+    ],
+    "libs/models/src/mcp-dispatch-contract.ts": [
+      "work/pilot-1052-s1"
+    ],
+    "libs/models/src/mcp-dispatch-request.ts": [
+      "work/clean-1043-s2",
+      "work/pilot-1052-s1"
+    ],
+    "libs/models/src/mcp-dispatch.ts": [
+      "work/clean-1048-s1",
+      "work/clean-1043-s2",
+      "work/pilot-1052-s1"
+    ],
+    "libs/models/src/mcp-instance-observation.ts": [
+      "work/clean-1048-s1",
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/mcp-instance.ts": [
+      "work/clean-1048-s1",
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/mcp.ts": [
+      "work/pilot-1052-s1"
+    ],
+    "libs/models/src/memory-context.ts": [
+      "work/clean-1048-s1",
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/memory-preparation.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/memory-prepare-request.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/oauth-callback.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/oauth-confirmation.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/oauth-refresh-save.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/oauth-refresh.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/oauth-revoke.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/oauth-start.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/original-call-status.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/personal-mcp-dispatch.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/personal-tool-context.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/provider-bindings.ts": [
+      "work/clean-1048-s1",
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/provider-drain.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/provider-switch-on.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/provider-verification.ts": [
+      "work/clean-1048-s1"
+    ],
+    "libs/models/src/providers.ts": [
+      "work/clean-1048-s1",
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/reconciliation.ts": [
+      "work/clean-1048-s1",
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/routine-company-release.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/tool-authority.ts": [
+      "work/clean-1043-s2"
+    ],
+    "libs/models/src/tool-policy.ts": [
+      "work/clean-1043-s2",
+      "work/pilot-1052-s1"
+    ],
+    "libs/models/src/welcome-completion.ts": [
+      "work/clean-1043-s2"
+    ]
+  },
+  "remainingWindowFiles": [
+    "libs/models/src/call-retry.ts",
+    "libs/models/src/company-profile-reader.ts",
+    "libs/models/src/connection-custody-digest.ts",
+    "libs/models/src/connection-server.ts",
+    "libs/models/src/connection-stage-journal.ts",
+    "libs/models/src/connection-stage-lock.ts",
+    "libs/models/src/connection-stage-material.ts",
+    "libs/models/src/decision-grants.ts",
+    "libs/models/src/gateway-renderer.ts",
+    "libs/models/src/grants.ts",
+    "libs/models/src/hosted-cosign.ts",
+    "libs/models/src/hosted-licences.ts",
+    "libs/models/src/hosted-verification.ts",
+    "libs/models/src/hosted-vulnerabilities.ts",
+    "libs/models/src/index.ts",
+    "libs/models/src/oauth-attempt.ts",
+    "libs/models/src/oauth-configuration-file.ts",
+    "libs/models/src/oauth-exchange.ts",
+    "libs/models/src/oauth-refresh-fold.ts",
+    "libs/models/src/oauth-selection.ts",
+    "libs/models/src/paying-group.ts",
+    "libs/models/src/private-callers.ts",
+    "libs/models/src/root-budget.ts"
+  ],
+  "partialFiles": {
+    "libs/models/src/authority.ts": "Cleaned the new fact and permission readers. The public functions with long parameter lists and the surrounding older helpers remain for a follow-up part.",
+    "libs/models/src/budget-writer.ts": "Cleaned the changed append input and deadline helpers. Older writer helpers remain outside this repair.",
+    "libs/models/src/connection-custody.ts": "Split the new label digest expression. Older custody code remains outside this repair.",
+    "libs/models/src/remote-https.ts": "Expanded the changed failure callback. Older HTTP callbacks remain outside this repair."
+  }
+}

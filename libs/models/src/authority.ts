@@ -54,18 +54,21 @@ export interface AuthorityFactsRequest {
   permissions?: AuthorityPermissions | undefined;
 }
 
-/** Read immutable history and its projection receipts before starting live authority work. */
+/** Read saved history and check it has reached the read tables before checking current access. */
 export async function prepareAuthorityFacts(store: EventStore, binding: Binding,
   request: AuthorityFactsRequest) {
   const { requester, assistant, conversation, resourceType, resourceId, fresh,
     conversationRows, grants, applied, readHistory, permissions } = request;
   const checkApplied = receiptReader(memberAuthorisation(binding), applied);
-  const facts = [], receipts: string[] = [];
+  const facts = [];
+  const receipts: string[] = [];
   let active = true;
   const subjects = [`ownership-${binding.silo}`, `member-${requester}`,
     `assistant-${assistant}`, grantStream(resourceType, resourceId)];
   // Reuse a caller's earlier chat read only when it also checks later access changes.
-  if (!conversationRows) subjects.push(`conversation-${conversation}`);
+  if (!conversationRows) {
+    subjects.push(`conversation-${conversation}`);
+  }
   fresh.include(...subjects, ...(resourceType === 'mcp_server' ? [`mcp-${resourceId}`] : []));
   const snapshotHead = fresh.head;
   const deadline = fresh.deadline;
@@ -91,20 +94,28 @@ export async function prepareAuthorityFacts(store: EventStore, binding: Binding,
   for (const row of authorityRows) {
     const event = row.event;
     const fields = data(event);
-    if (event.silo !== binding.silo) continue;
+    if (event.silo !== binding.silo) {
+      continue;
+    }
     if (relevant(event, requester, assistant, conversation, resourceType, resourceId, decisionGrantees)) {
       receipts.push(event.id);
       facts.push([event.id, row.sequence, fields]);
     }
     if (event.subject === `assistant-${assistant}` && event.type === 'assistant.settings_changed') {
       facts.push([event.id, row.sequence, fields]);
-      if (typeof fields['active'] === 'boolean') active = fields['active'];
+      if (typeof fields['active'] === 'boolean') {
+        active = fields['active'];
+      }
     }
   }
-  if (!active) throw new AuthorityRefused('Assistant inactive');
+  if (!active) {
+    throw new AuthorityRefused('Assistant inactive');
+  }
   await requireReceipts(receipts, checkApplied);
   const watched = [...subjects, ...teams];
-  if (resourceType === 'mcp_server') watched.push(`mcp-${resourceId}`);
+  if (resourceType === 'mcp_server') {
+    watched.push(`mcp-${resourceId}`);
+  }
   return { facts, subjects: watched };
 }
 
@@ -145,10 +156,13 @@ export function checkAuthorityPermissions(auth: Pick<AuthorityPermissions,
   request: Pick<AuthorityFactsRequest,
     'requester' | 'assistant' | 'conversation' | 'resourceType' | 'resourceId'>) {
   const { requester, assistant, conversation, resourceType, resourceId } = request;
-  const checks = [auth.check(requester, 'member'), auth.actsFor(requester, assistant),
+  const checks = [
+    auth.check(requester, 'member'),
+    auth.actsFor(requester, assistant),
     auth.conversation(requester, conversation, 'post'),
     auth.use('person', requester, resourceType, resourceId),
-    auth.use('assistant', assistant, resourceType, resourceId)];
+    auth.use('assistant', assistant, resourceType, resourceId),
+  ];
   return Promise.all(checks);
 }
 
@@ -160,8 +174,12 @@ export function requirePermissions(permissions: { status: 'ok' | 'unavailable'; 
     return permission.status === 'ok' && !permission.allowed;
   }
   // Preserve a confirmed denial even when another permission check is unavailable.
-  if (permissions.some(denied)) throw new AuthorityRefused('Current authority refused');
-  if (permissions.some(unavailable)) throw new Error('Current authority unavailable');
+  if (permissions.some(denied)) {
+    throw new AuthorityRefused('Current authority refused');
+  }
+  if (permissions.some(unavailable)) {
+    throw new Error('Current authority unavailable');
+  }
 }
 
 function receiptReader(auth: ReturnType<typeof memberAuthorisation>,

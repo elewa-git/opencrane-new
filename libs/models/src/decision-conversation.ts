@@ -24,8 +24,14 @@ export function decisionConversationReader(store: EventStore, db: Query,
     // Translate the remaining budget because PostgreSQL deadlines use performance.now().
     const projectionStarted = performance.now();
     const remaining = request.deadline - store.clock.now();
-    const lookup = { ...request, deadline: projectionStarted + remaining,
-      silo, metadataTypes, latestTypes, ignoredTypes: outputReportTypes };
+    const lookup = {
+      ...request,
+      deadline: projectionStarted + remaining,
+      silo,
+      metadataTypes,
+      latestTypes,
+      ignoredTypes: outputReportTypes,
+    };
     const indexed = await decisionConversationPositions(db, lookup);
     if (indexed.checkpointPosition > request.head) {
       const latest = await store.head(undefined, request.deadline);
@@ -38,7 +44,7 @@ export function decisionConversationReader(store: EventStore, db: Query,
     // Read changes after the projection's saved position, including both close formats.
     const latest = await store.head(subject, request.deadline, true);
     const through = Math.min(latest, request.head);
-    // Global positions may include other streams. This conservative bound also caps
+    // Allow for positions in other streams. This bound also caps
     // the number of conversation events read inside the original access deadline.
     if (through - indexed.position > 64) {
       return caughtUpConversation(store, silo, request.conversationId, request.head, through);
@@ -50,8 +56,13 @@ export function decisionConversationReader(store: EventStore, db: Query,
       }
       let row: StoredEvent;
       if (entry.type === 'conversation.created') {
-        const creationRead = { silo, subject, position, type: 'conversation.created',
-          deadline: request.deadline };
+        const creationRead = {
+          silo,
+          subject,
+          position,
+          type: 'conversation.created',
+          deadline: request.deadline,
+        };
         row = await readFirstEvent(store, creationRead);
       } else {
         row = await store.readEvent(position, request.deadline);
@@ -67,7 +78,9 @@ export function decisionConversationReader(store: EventStore, db: Query,
       const changes = store.readStream(subject, indexed.position + 1,
         request.deadline, true, through);
       for await (const row of changes) {
-        if (row.event.silo !== silo) throw new Error('Wrong silo');
+        if (row.event.silo !== silo) {
+          throw new Error('Wrong silo');
+        }
         conversation.push(row);
       }
     }

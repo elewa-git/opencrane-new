@@ -23,8 +23,10 @@ function copyAssistantCreation(rows: StoredEvent[]) {
 }
 
 const assistantCreation: SummaryKind<StoredEvent[]> = {
-  name: 'personal-key-assistant-creation', keep: 64,
-  empty: emptyAssistantCreation, add: addAssistantCreation,
+  name: 'personal-key-assistant-creation',
+  keep: 64,
+  empty: emptyAssistantCreation,
+  add: addAssistantCreation,
 };
 
 /** Keep the first creation event; later settings cannot change legacy key consent. */
@@ -41,7 +43,9 @@ export function assistantMayUsePersonalKey(choice: PersonalKeyConsent,
     return choice.allowedAssistantIds.includes(assistantId);
   }
   for (const row of rows) {
-    if (row.event.type !== 'assistant.created') continue;
+    if (row.event.type !== 'assistant.created') {
+      continue;
+    }
     const created = assistantCreatedDataSchema.safeParse(row.event.data);
     return created.success && created.data.assistantId === assistantId &&
       created.data.kind === 'personal' && created.data.ownerId === choice.userId;

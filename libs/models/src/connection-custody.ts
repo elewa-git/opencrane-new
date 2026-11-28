@@ -500,7 +500,9 @@ function metadataFor(input: CustodyStage) {
     if (['endpointDigest', 'operationId', 'expectedSequence', 'appendUntil'].includes(field)) {
       annotations[`${prefix}${field}`] = String(value);
     } else {
-      labels[`${prefix}${field}`] = `sha256-${sha256Hex(String(value)).slice(0, 40)}`;
+      const digest = sha256Hex(String(value));
+      const labelDigest = digest.slice(0, 40);
+      labels[`${prefix}${field}`] = `sha256-${labelDigest}`;
     }
   }
   return { labels, annotations };

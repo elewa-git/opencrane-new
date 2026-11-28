@@ -93,8 +93,13 @@ export class BudgetWriter {
       if (this.store.clock.now() >= deadline) {
         throw new Error('Budget append unavailable');
       }
-      const command: AppendCommand = { event, expectedSequence: this.sequence,
-        historyChecked: true, deadline, ...(checkAccess ? { checkAccess } : {}) };
+      const command: AppendCommand = {
+        event,
+        expectedSequence: this.sequence,
+        historyChecked: true,
+        deadline,
+        ...(checkAccess ? { checkAccess } : {}),
+      };
       this.pending = { event, expectedSequence: this.sequence, possiblyPublished: true };
       // Keep the command before entering storage: an exception cannot prove it was not sent.
       const result = await this.store.append(command);
@@ -226,13 +231,17 @@ export interface AccessDeadlineOptions extends BudgetDeadlineOptions {
 export function accessDeadline({ clock, checkAccess, deadline }: AccessDeadlineOptions) {
   const original = deadline ?? knownAccessDeadline(checkAccess);
   const fallback = clock.now() + 2000;
-  if (typeof original === 'number') return Math.min(original, fallback);
+  if (typeof original === 'number') {
+    return Math.min(original, fallback);
+  }
   return fallback;
 }
 
 export function knownAccessDeadline(checkAccess?: () => Promise<void>) {
   const deadline: unknown = Reflect.get(checkAccess ?? {}, 'deadline');
-  if (typeof deadline === 'number') return deadline;
+  if (typeof deadline === 'number') {
+    return deadline;
+  }
   return undefined;
 }
 

@@ -13,8 +13,18 @@ import { ModelRequestRefused as RequestRefused, data, priceTableId,
   type ModelCall } from './state.ts';
 
 const id = legacyTurnSchema.shape.assistant;
-const computerSchema = z.object({ silo: id, assistant: id, exp: z.int(), iat: z.int(),
-  typ: z.literal('computer'), computer: id, generation: z.int().nonnegative() });
+const generationNumberSchema = z.int();
+const generationSchema = generationNumberSchema.nonnegative();
+const computerFields = {
+  silo: id,
+  assistant: id,
+  exp: z.int(),
+  iat: z.int(),
+  typ: z.literal('computer'),
+  computer: id,
+  generation: generationSchema,
+};
+const computerSchema = z.object(computerFields);
 
 export type CheckedDecisionCredentials = { computer: unknown; turn: unknown; sequence: number };
 export function decisionIdentity(checked: CheckedDecisionCredentials) {
@@ -37,10 +47,17 @@ export async function decisionContext(actor: BudgetActor, binding: Binding,
   identity: DecisionIdentity, access: DecisionContextAccess): Promise<ModelCall> {
   const { computer, turnToken, liveSequence } = identity;
   const { fresh, conversation, turn, resourceType, resourceId, grants } = access;
-  const permission = await memberAuthorisation(binding).check(turnToken.requester, 'member');
-  if (binding.silo !== actor.silo) throw new AuthorityRefused('Membership unavailable or refused');
-  if (permission.status === 'unavailable') throw new Error('Current authority unavailable');
-  if (!permission.allowed) throw new AuthorityRefused('Membership unavailable or refused');
+  const authorisation = memberAuthorisation(binding);
+  const permission = await authorisation.check(turnToken.requester, 'member');
+  if (binding.silo !== actor.silo) {
+    throw new AuthorityRefused('Membership unavailable or refused');
+  }
+  if (permission.status === 'unavailable') {
+    throw new Error('Current authority unavailable');
+  }
+  if (!permission.allowed) {
+    throw new AuthorityRefused('Membership unavailable or refused');
+  }
   const readAuthorityHistory = authorityHistoryReader(actor.store, fresh);
   const assistantRead = readAuthorityHistory(`assistant-${computer.assistant}`);
   const authorityRead = currentAuthority(actor.store, binding, turnToken.requester,
@@ -48,10 +65,14 @@ export async function decisionContext(actor: BudgetActor, binding: Binding,
     grants, undefined, readAuthorityHistory);
   const [assistants, authority] = await Promise.all([assistantRead, authorityRead]);
   const assistant = assistants.find(isAssistantCreated);
-  if (!assistant) throw new Error('Assistant refused');
+  if (!assistant) {
+    throw new Error('Assistant refused');
+  }
   const created = conversation.find(isConversationCreated);
   if (!created || data(created.event)['assistantId'] !== computer.assistant ||
-      conversation.some(isConversationClosed)) throw new Error('Conversation refused');
+      conversation.some(isConversationClosed)) {
+    throw new Error('Conversation refused');
+  }
   const payingGroupId = requirePayingGroupId(turn);
   if (data(assistant.event)['kind'] === 'team') {
     const createdData = data(created.event);
@@ -67,11 +88,19 @@ export async function decisionContext(actor: BudgetActor, binding: Binding,
   const facts = [computer, turnToken, assistant.sequence, liveSequence,
     turn.sequence, permission.allowed, authority, payingGroupId];
   const contextDigest = digestContext(facts);
-  return { model: turnToken.model, payingGroupId, priceTableId,
-    computerId: computer.computer, generation: computer.generation,
+  return {
+    model: turnToken.model,
+    payingGroupId,
+    priceTableId,
+    computerId: computer.computer,
+    generation: computer.generation,
     assistantId: computer.assistant,
-    requesterId: turnToken.requester, conversationId: turnToken.conversation,
-    turnId: turnToken.turn, threadId: turnToken.thread, contextDigest };
+    requesterId: turnToken.requester,
+    conversationId: turnToken.conversation,
+    turnId: turnToken.turn,
+    threadId: turnToken.thread,
+    contextDigest,
+  };
 }
 
 function requirePayingGroupId(turn: StoredEvent) {
@@ -86,12 +115,13 @@ function requirePayingGroupId(turn: StoredEvent) {
 function requireSessionPayer(assistant: StoredEvent, created: StoredEvent, payingGroupId: string) {
   const assistantData = data(assistant.event);
   const createdData = data(created.event);
-  const configuration = sessionConfiguration({
+  const sessionInput = {
     conversation: { payingGroupId: optionalString(createdData['payingGroupId']) },
     assistantKind: optionalString(assistantData['kind']),
     assistantPayingGroupId: optionalString(assistantData['payingGroupId']),
     memoryEnabled: false,
-  });
+  };
+  const configuration = sessionConfiguration(sessionInput);
   if (configuration.assistantPayerRequired &&
       (!configuration.payerMatchesAssistant || createdData['payingGroupId'] !== payingGroupId)) {
     throw new RequestRefused('Shared payer binding mismatch');

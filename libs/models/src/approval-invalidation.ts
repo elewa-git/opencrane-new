@@ -25,11 +25,18 @@ export function invalidatesApproval(event: EventEnvelope, turnId: string) {
 }
 
 export function closesDecisionTurn(event: EventEnvelope, turnId: string) {
-  const closesTurn = [
+  const closingTypes = [
     'agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested',
-  ].includes(event.type);
-  return closesTurn && z.object({ turnId: z.string() }).parse(event.data).turnId === turnId;
+  ];
+  if (!closingTypes.includes(event.type)) {
+    return false;
+  }
+  const fields = turnIdSchema.parse(event.data);
+  return fields.turnId === turnId;
 }
+
+const turnIdFields = { turnId: z.string() };
+const turnIdSchema = z.object(turnIdFields);
 
 export async function approvalInvalidation(store: EventStore, silo: string,
   read: ApprovalInvalidationRead) {
@@ -38,10 +45,15 @@ export async function approvalInvalidation(store: EventStore, silo: string,
     return { closed: true, conversationPosition: 0, cancelReason: 'takeover' as const };
   }
   const rows = snapshot.conversationRows;
-  if (!rows) throw new Error('Approval conversation history unavailable');
+  if (!rows) {
+    throw new Error('Approval conversation history unavailable');
+  }
   function startsBoundTurn(row: StoredEvent) {
-    return row.event.type === 'agent.turn_started' &&
-      z.object({ turnId: z.string() }).parse(row.event.data).turnId === request.turnId;
+    if (row.event.type !== 'agent.turn_started') {
+      return false;
+    }
+    const fields = turnIdSchema.parse(row.event.data);
+    return fields.turnId === request.turnId;
   }
   function invalidatesBoundApproval(row: StoredEvent) {
     return invalidatesApproval(row.event, request.turnId);
@@ -49,7 +61,9 @@ export async function approvalInvalidation(store: EventStore, silo: string,
   const start = rows.findIndex(startsBoundTurn);
   const later = rows.slice(start + 1);
   const conversationPosition = snapshot.conversationPosition ?? rows.at(-1)?.sequence ?? 0;
-  if (start < 0) return { closed: true, conversationPosition };
+  if (start < 0) {
+    return { closed: true, conversationPosition };
+  }
   const invalidating = later.find(invalidatesBoundApproval);
   if (invalidating) {
     const cancelReason = turnCancellationReason(invalidating.event.type);
@@ -63,9 +77,17 @@ export async function approvalInvalidation(store: EventStore, silo: string,
 }
 
 function turnCancellationReason(type: string): ApprovalCard['cancelReason'] {
-  if (type === 'conversation.closed') return 'conversation_closed';
-  if (type === 'message.posted') return 'new_message';
-  if (type === 'agent.turn_started') return 'new_turn';
-  if (type === 'agent.turn_stop_requested') return 'turn_stopped';
+  if (type === 'conversation.closed') {
+    return 'conversation_closed';
+  }
+  if (type === 'message.posted') {
+    return 'new_message';
+  }
+  if (type === 'agent.turn_started') {
+    return 'new_turn';
+  }
+  if (type === 'agent.turn_stop_requested') {
+    return 'turn_stopped';
+  }
   return 'turn_ended';
 }
