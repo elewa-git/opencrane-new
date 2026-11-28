@@ -489,7 +489,8 @@ async function showsAccessChangedForSignedInNonMember(): Promise<void> {
     }
     return fetchFixture(input);
   }
-  vi.spyOn(globalThis, 'fetch').mockImplementation(read);
+  const fetchSpy = vi.spyOn(globalThis, 'fetch');
+  fetchSpy.mockImplementation(read);
   const loads = vi.spyOn(ChatSession.prototype, 'load');
   const fixture = mountWorkspace('');
   try {
