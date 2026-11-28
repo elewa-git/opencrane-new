@@ -1,5 +1,101 @@
 # #1221 packaged journey receipt
 
+## Run 4 — PASS
+
+**Date:** 28 November 2026. **Environment:** fresh packaged slot-1 install,
+real provider, operator run without `OPENCRANE_FLEET_TASK`.
+**Tested source:** `b23192dad1cf71bd64cb62fe12906407fd832390`.
+
+Rebased onto `origin/main` at `d6928cd30` before installation. This includes
+PR #1226's repair for history reads after a shared file. The rebase changed no
+computer source, image pin or recorded checksum. The installed-image source check
+and package licence/checksum check both passed, so no computer rebuild was needed.
+Pushed the rebased head and waited for both exact-head approvals:
+[application 46101000479](https://github.com/elewa-git/opencrane-new/actions/runs/46101000479)
+and [scanner 46101002974](https://github.com/elewa-git/opencrane-new/actions/runs/46101002974).
+Both passed. All four approval/image artifacts were present and unexpired before
+package preparation, with expiry on 29 November.
+
+### Fresh installation
+
+- **PASS:** slot 1 was free and the one-minute load stayed below 6 for five minutes,
+  sampled every 30 seconds. Earlier load spikes restarted that timer. The live pilot
+  was excluded from the wait as instructed. Claimed slot 1 explicitly.
+- **PASS:** package preparation, private secret preparation, fresh package installation
+  and package check. Every secondary stack command selected id 1. Used the documented
+  `OPENCRANE_ACCEPT_DEV_HOST_RISK=accepted-dev-box-366` exception for this host's swap
+  and crash-report settings. No host setting was changed.
+- **PASS:** before the first personal-chat prompt, both running computer pods used
+  `sha256:c9c92d8376363be6c1de511d499b4ff0007c24a73d0c551345049635fcd5a132`,
+  matching the tested head's pin. Their reported image IDs matched and
+  `/app/src/assistant-brief.ts` existed in both.
+- **PASS:** the `computer-runtime` gateway pointed to the cluster model service,
+  rather than `http://127.0.0.1:1`. No run interruption or gateway 502 occurred.
+
+### Browser steps and observations
+
+| Step | Result | Observation |
+| --- | --- | --- |
+| Invite and onboard a member | PASS | Saved all four survey answers, approved persona revision 2 naming Aster, and completed the welcome. |
+| Personal chat, Memory off | PASS | Opened at 1280 and 390 px. All five requests omitted an execution-mode override; saved starts also omitted it. This fresh install had no Memory qualification, so personal turns used the Memory-off default. No restricted turn was observed. |
+| Introduce yourself | PASS | “Hi Sam, I’m Aster, your personal assistant.” The reply did not identify itself as Codex. |
+| What can you do here? | PARTIAL alone | Plainly said it cannot reach the internet from its computer yet, and that web pages, downloads and online installs fail. Listed downloadable files, but omitted local software installs and browser control. |
+| Explicit capability follow-up | PASS | Confirmed chat file sharing, allowed sandbox software installs subject to package availability, unavailable internet and no browser-control tool. The initial omissions were checked with a further question, without changing product code. |
+| Make a short slide deck introducing yourself | PASS | Shared `Meet_Aster.pptx` as a visible chat file card. The downloaded file was 33,803 bytes and contained four slides naming Aster. |
+| Reload after sharing the deck | PASS | The same file card remained visible after two full reloads, at both widths. The history API returned HTTP 200 after file publication. |
+| Fetch example.com | PASS | A command failed because a program was absent, then a network attempt failed with name resolution unavailable. The browser reply plainly said it could not inspect the page and offered pasted or uploaded content instead. It claimed no successful fetch. |
+
+The explicit follow-up was: “Can you share files to this chat, install software,
+access the internet, or control a browser? Please explain the limits plainly.”
+It completed the capability check; the unprompted answer's omissions remain recorded
+above. No source changes or rework round were part of this journey.
+
+The private journey script needed navigation corrections: it first waited for
+persona approval on the survey page, then waited on the old welcome page state,
+then looked for a button where the completed welcome offers a link. Continued from
+saved survey and welcome state after checking it in the browser. No saved answer,
+provider test or chat prompt was resubmitted. These were journey-script corrections;
+no application change was made. Sanitised service logs were retained before teardown.
+
+### Screenshots and small result
+
+| Observation | Desktop, 1280 px | Phone, 390 px |
+| --- | --- | --- |
+| Welcome complete | [PNG](run4-welcome-complete-1280.png) | [PNG](run4-welcome-complete-390.png) |
+| Personal chat | [PNG](run4-chat-1280.png) | [PNG](run4-chat-390.png) |
+| Aster introduction | [PNG](run4-intro-1280.png) | [PNG](run4-intro-390.png) |
+| Initial capabilities | [PNG](run4-capabilities-1280.png) | [PNG](run4-capabilities-390.png) |
+| Explicit capability follow-up | [PNG](run4-capabilities-followup-1280.png) | [PNG](run4-capabilities-followup-390.png) |
+| Deck card after reload | [PNG](run4-deck-reloaded-1280.png) | [PNG](run4-deck-reloaded-390.png) |
+| Fetch refusal | [PNG](run4-fetch-1280.png) | [PNG](run4-fetch-390.png) |
+
+[Approved persona](run4-persona-approved-1280.png) · [Small result](run4-result.json).
+Raw service logs, browser diagnostics and the downloaded deck remain outside the
+repository. Raw files include `package-up.log`, `server-package.log`,
+`browser-result.json`, `welcome-wait-result.json`, `delivery-check.json` and
+`spending-final.json`.
+
+### Spending, checks and release
+
+**PASS — spend:** **17 euro cents** settled across 15 reservations and 15
+settlements, including provider setup and the five chat turns. Unknown settlements:
+0. Outstanding holds: 0 cents. This is the new run's spend, separate from earlier
+runs. With the operator's approximate starting spend of 20 cents, the daily total
+was about 37 cents, within the 2,000-cent allowance.
+
+**PASS — local checks:** full typecheck; event catalogue, 175 types; Knip, with two
+existing configuration hints; changelog lint; Markdown lint; package licence and
+source checksum check; installed computer source and permission check. No product
+code changed in this run, so changed-file ESLint had no files to check. Public
+privacy and secret scans passed before the rebase push and run again for the receipt.
+
+**PASS — hosted CI:** [run 46101006732](https://github.com/elewa-git/opencrane-new/actions/runs/46101006732)
+passed on the tested head: all four test shards, both fixture jobs, checks and
+`ci-ok`. **PASS — release:** package-down and down completed; slot 1 reported free
+and its package namespace was absent. The owner stack, port 44200 and
+live pilot slot 2 were untouched. This run makes no claim about private Memory,
+browser control or successful internet access.
+
 ## Round 8 — plain internet wording
 
 **Date:** 28 November 2026. **Verdict: PARTIAL.** Source checks pass; a fresh
