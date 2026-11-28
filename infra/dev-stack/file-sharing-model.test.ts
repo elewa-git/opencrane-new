@@ -36,6 +36,12 @@ async function runFileSharingExample(): Promise<void> {
     const port = /Stub ready (\d+)/u.exec(message.toString())?.[1];
     assert(port);
     const url = `http://127.0.0.1:${port}/v1/responses`;
+    const probeRequest = { stream: false, input: 'Reply only OK.' };
+    const probeOptions = { method: 'POST', body: JSON.stringify(probeRequest) };
+    const probe = await fetch(url, probeOptions);
+    assert.equal(probe.status, 200);
+    const probeText = await probe.text();
+    assert.match(probeText, /output_text.*OK/u);
     const instructions = 'Approved persona: Your name is Aster. Be clear and useful.';
     const input: object[] = [{ type: 'message', role: 'user',
       content: 'make a short slide deck introducing yourself' }];
