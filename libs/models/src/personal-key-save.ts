@@ -19,7 +19,7 @@ export interface PersonalKeySaveInput {
   material: string;
 }
 
-/** Check access and identity under the profile lock before storing a key. */
+/** Hold the profile lock so access cannot change before the verified key is staged. */
 export function savePersonalKey(store: EventStore, binding: Binding, memberId: string,
   dependencies: PersonalKeyDependencies, input: PersonalKeySaveInput) {
   let serverId: string | undefined;

@@ -132,3 +132,25 @@ shared with open pull requests and were left for the follow-up work.
 Private raw files include `startup.log`, `status-after-core.log`, `teardown.log`,
 `status-after-down.log`, `load-wait.jsonl`, `package-node.log`,
 `prepare-routes-isolated.log`, `vitest-final.log` and `ci-shard3.log`.
+
+## First review fixes
+
+The remote 401/403 refusal and the unknown decision-error return now use braced
+blocks. The personal-key comment explains why the profile lock is held: access
+must not change before the verified key is staged. No behaviour changed.
+
+Three temporary source checks first failed for these three findings. Their failing
+version was committed before the fixes. After the fixes, both focused runs passed
+all 61 checks in four files (53.25 and 65.01 seconds). These runs included the
+existing decision-refusal, bearer-identity and bearer-connection tests. The temporary
+checks were then removed; the existing behaviour assertions were unchanged.
+
+Local gates: PASS for full typecheck, the event catalogue, Knip, changed-file
+ESLint with zero warnings, changelog, Markdown, public privacy and secret scans.
+Knip reported two existing configuration hints. All tests, lint and typecheck
+commands ran under `nice -n 10`. The source edits were checked against the
+engineering standard's cleanup table; no limit or assertion was loosened.
+
+The fresh-stack journey was NOT RUN again because these fixes only change braces
+and a comment. The earlier fresh-stack PASS applies to the product commit named
+above. No secondary stack was claimed for these fixes.

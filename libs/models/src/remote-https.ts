@@ -39,7 +39,9 @@ export function exchangeRemote(target: Awaited<ReturnType<typeof prepareRemote>>
     }
     function receive(res: IncomingMessage) {
       function refuse(code: string) { res.destroy(); reject(new Error(code)); }
-      if (res.statusCode === 401 || res.statusCode === 403) return refuse('connection_required');
+      if (res.statusCode === 401 || res.statusCode === 403) {
+        return refuse('connection_required');
+      }
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400) {
         return refuse('redirect_refused');
       }

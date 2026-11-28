@@ -42,7 +42,9 @@ export function respondDecisionUnavailable(response: ServerResponse, error: unkn
     response.end(JSON.stringify(body));
     return true;
   }
-  if (!decisionUnavailable(error)) return false;
+  if (!decisionUnavailable(error)) {
+    return false;
+  }
   const body = { requestId, error: 'Decision service unavailable' };
   response.writeHead(503);
   response.end(JSON.stringify(body));
