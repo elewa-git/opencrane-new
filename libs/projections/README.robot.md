@@ -382,10 +382,21 @@ The server reads one computer record per changed chat feed, without lifecycle-hi
 
 ## Tool decisions in conversation feeds
 
-`agent.memory_context_recorded` and `agent.private_exited` stay in the event log.
+`agent.memory_context_recorded`, `agent.private_exited` and
+`agent.file_publication_started` stay in the event log.
 The conversations worker does not put them in `conversation_feed` or advance chat
 metadata for them. This keeps internal records out of HTTP history and live
 WebSocket replies. Offline replay uses the same rule.
+
+Forward history, tail windows and older pages skip publication-start rows saved
+by older workers. The read position still advances past them, so HTTP and live
+WebSocket readers can continue without a rebuild. The server's display check
+still refuses internal publication details.
+
+An optional offline rebuild removes these stale rows:
+`npm run replay -- conversations --confirm-conversations-stopped`.
+The server and conversation worker must be stopped first. Replay keeps the
+shared-file and reply rows.
 
 An MCP `decision.recorded` with a `conversationId` enters that conversation's
 feed with only `turnId`, `outcome`, `reason`, `requestId` and optional `callId` and

@@ -50,7 +50,7 @@ import { LiveView } from '../live-view/live-view';
 import { organisationName } from '../core/organisation-name';
 
 import {
-  capturedByLine, displayTextParts, fileCreator, fileName, fileScreenshotCreator, fileType,
+  capturedByLine, fileCreator, fileName, fileScreenshotCreator, fileType,
   fileUrl, hasAttachment, hasScreenshotFile, hasTranscriptScreenshot, imageThumbnailUrl,
   isOwnedAgentFile, isScreenshotAttachment, screenshotFacts, screenshotFactsForPath, screenshotIdFromFile,
   shortTime, utcDateTime,
@@ -613,5 +613,4 @@ export class Workspace implements OnInit {
   }
   protected name(path: string): string { return fileName(path); }
   protected type(path: string): string { return fileType(path); }
-  protected readonly textParts = displayTextParts;
 }

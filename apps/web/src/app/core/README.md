@@ -22,7 +22,7 @@ This folder keeps the website's live connection to the server running. It lets c
 | `websocket.service.ts` | Manages the live connection, recent messages and connection status. |
 | `socket-factory.ts` | Supplies browser connections, page addresses and random retry timing. |
 | `organisation-name.ts` | Reads and trims the public organisation name. |
-| `navigate.ts` | Supplies normal browser page navigation. |
+| `navigate.ts` | Supplies normal browser navigation and chat links that change pages without reloading. |
 | `read-retry.ts` | Spaces read attempts and stops them when the page leaves or time runs out. |
 
 ## How it connects

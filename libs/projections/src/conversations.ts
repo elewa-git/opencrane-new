@@ -155,7 +155,7 @@ export async function rebuildConversationsProjection(db: Db, source: EventSource
 function conversationFeedEntry(event: EventEnvelope) {
   // Keep private memory evidence and audit records away from public chat replies.
   const auditTypes = ['agent.memory_context_recorded', 'agent.private_exited',
-    'agent.native_request_refused',
+    'agent.native_request_refused', 'agent.file_publication_started',
     'conversation.child_requested', 'conversation.child_start_failed',
     'conversation.child_retry_requested', 'conversation.child_activated'];
   if (auditTypes.includes(event.type)) return;
@@ -272,6 +272,8 @@ async function collectWindowRows(db: Query, silo: string, conversationId: string
 
 export function isHiddenConversationRow(type: string, data: unknown, position: number,
   closedPosition: number) {
+  // Skip internal rows saved by older workers so history stays readable before a rebuild.
+  if (type === 'agent.file_publication_started') return true;
   if (closedPosition === 0 || position <= closedPosition) return false;
   // Keep human posts that were saved after close, but freeze all other displayed output.
   if (type !== 'message.posted') return true;

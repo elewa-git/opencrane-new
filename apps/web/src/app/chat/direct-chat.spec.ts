@@ -549,12 +549,15 @@ async function resumesSocketHistory(): Promise<void> {
   const event = {
     version: 1, topic: 'conversation', conversationId: 'existing', type: 'event',
     position: 3, generation: 1,
-    row: eventRow(3, 'bob', 'I will confirm before lunch.'),
+    row: eventRow(3, 'bob', 'I will confirm before lunch. https://example.test `www.code.test`'),
   };
   const incoming = new MessageEvent('message', { data: JSON.stringify(event) });
   socket.onmessage?.(incoming);
   socket.onmessage?.(incoming);
   await waitForText(fixture, 'I will confirm before lunch.');
+  expect(root(fixture).querySelector('.message a')?.getAttribute('href'))
+    .toBe('https://example.test');
+  expect(root(fixture).querySelector('.message code a')).toBeNull();
   expect(root(fixture).querySelectorAll('.message')).toHaveLength(3);
   assertOnlyHumanRequests(api);
   fixture.destroy();
@@ -2864,7 +2867,8 @@ it('starts once with the original review and checks the original id after an unc
     await waitForText(fixture, '€7.40');
     buttonNamed(fixture, 'Start child thread').click();
     buttonNamed(fixture, 'Start child thread').click();
-    await waitForText(fixture, 'Check status');
+    // Wait for the response; the pending status button appears before it arrives.
+    await waitForText(fixture, 'Start not confirmed. Check the same request status.');
     expect(root(fixture).querySelector('oc-modal-sheet dialog[open]')).toBeNull();
     await vi.waitFor(() => expect(buttonNamed(fixture, 'Check status').disabled).toBe(false));
     buttonNamed(fixture, 'Check status').click();

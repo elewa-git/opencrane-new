@@ -125,6 +125,11 @@ const server = createServer((req, res) => {
       answer = 'PDF reading failed.';
       if (code) answer = `The project code is ${code}.`;
     }
+    let linkExample: typeof import('./chat-links-model.ts') | undefined;
+    if (prompt.includes('CHAT_LINKS_PROOF')) {
+      linkExample = await import('./chat-links-model.ts');
+      answer = linkExample.chatLinksText;
+    }
     const stopped = new AbortController();
     res.once('close', () => stopped.abort());
     res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -138,7 +143,9 @@ const server = createServer((req, res) => {
       demoCall = stageBModelCall(body);
       answer = stageBModelAnswer(body) ?? answer;
     }
-    if (demoCall) {
+    if (linkExample && !customOutput) {
+      emit({ type: 'response.output_item.done', item: linkExample.chatLinksFileCall() });
+    } else if (demoCall) {
       emit({ type: 'response.output_item.done', item: demoCall });
     } else if (proxyProofCall) {
       emit({ type: 'response.output_item.done', item: { type: 'function_call',
@@ -152,7 +159,7 @@ const server = createServer((req, res) => {
     } else {
       emit({ type: 'response.output_item.added', item: { id: message, type: 'message', role: 'assistant', content: [] } });
       let replyChunks = ['Hello ', 'from your ', 'computer.'];
-      if (pdf || prompt.includes('STAGE_B_')) replyChunks = [answer];
+      if (pdf || linkExample || prompt.includes('STAGE_B_')) replyChunks = [answer];
       for (const delta of replyChunks) {
         emit({ type: 'response.output_text.delta', delta });
         let delayMs = 500;

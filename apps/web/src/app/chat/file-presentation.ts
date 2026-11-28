@@ -158,21 +158,3 @@ export function hasScreenshotFile(files: string[], screenshots: ChatAttachment[]
   }
   return false;
 }
-
-export function displayTextParts(text: string): {
-  text: string; kind: 'text' | 'bold' | 'citation' | 'a2ui';
-}[] {
-  const spaced = text.replace(/\s+(?=\[\d+\])/g, '\u00a0');
-  const parts = spaced.split(/(\*\*[^*]+\*\*|\[\d+\]|```a2ui[\s\S]*?(?:```|$))/g);
-  const visible = parts.filter(Boolean);
-  return visible.map(describeDisplayPart);
-}
-
-function describeDisplayPart(part: string): {
-  text: string; kind: 'text' | 'bold' | 'citation' | 'a2ui';
-} {
-  if (part.startsWith('```a2ui')) return { text: part, kind: 'a2ui' };
-  if (part.startsWith('**')) return { text: part.slice(2, -2), kind: 'bold' };
-  if (/^\[\d+\]$/.test(part)) return { text: part, kind: 'citation' };
-  return { text: part, kind: 'text' };
-}

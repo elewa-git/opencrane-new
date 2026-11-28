@@ -1,7 +1,7 @@
 @for (block of blocks(); track $index) {
   @switch (block.kind) {
     @case ('code') {
-      @if (block.language.toLowerCase() === 'mermaid') {
+      @if (!inlineOnly() && block.language.toLowerCase() === 'mermaid') {
         <oc-mermaid-diagram [code]="block.text" [closed]="block.closed" [volatile]="volatile()" />
       } @else {
         <section class="code-block" aria-label="Code block">
@@ -60,11 +60,17 @@
 <ng-template #inline let-parts>
   @for (part of parts; track $index) {
     @switch (part.kind) {
-      @case ('bold') { <strong>{{ part.text }}</strong> }
-      @case ('italic') { <em>{{ part.text }}</em> }
+      @case ('bold') { <strong><ng-container
+        *ngTemplateOutlet="inline; context: { $implicit: part.children }" /></strong> }
+      @case ('italic') { <em><ng-container
+        *ngTemplateOutlet="inline; context: { $implicit: part.children }" /></em> }
       @case ('code') { <code>{{ part.text }}</code> }
       @case ('link') {
         <a [href]="part.href" target="_blank" rel="noopener noreferrer">{{ part.text }}</a>
+      }
+      @case ('app-link') {
+        <a [href]="part.href" [attr.aria-disabled]="navigationBlocked() || null"
+          (click)="followAppLink($event, part.href)">{{ part.text }}</a>
       }
       @case ('workspace-file') {
         @if (publishedFile(part.href); as path) {

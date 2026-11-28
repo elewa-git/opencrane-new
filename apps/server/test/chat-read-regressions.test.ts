@@ -5,7 +5,8 @@ import { once } from 'node:events';
 import { attachWebSocketServer } from '../src/websocket.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { chatFeedSchema } from '@opencrane/protocol';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { sessionCookie } from '@opencrane/auth/testing';
@@ -122,6 +123,53 @@ async function close() {
   if (directory) await rm(directory, { recursive: true, force: true });
 }
 afterAll(close);
+
+let stalePublicationPosition = 0;
+
+async function prepareStalePublicationHistory() {
+  await appendAndAuthorise({
+    subject: 'conversation-stale-publication', type: 'conversation.created', data: {
+      conversationId: 'stale-publication', mode: 'agent_session',
+      assistantId: 'personal', createdBy: 'alice',
+    },
+  });
+  await appendAndAuthorise({
+    subject: 'conversation-stale-publication', type: 'message.posted', data: {
+      conversationId: 'stale-publication', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', utterance: 'Keep this message readable.',
+    },
+  });
+  const publication = await appendAndAuthorise({
+    subject: 'conversation-stale-publication', type: 'agent.file_publication_started', data: {
+      conversationId: 'stale-publication', turnId: 'old-turn', digest: 'a'.repeat(64),
+    },
+  });
+  stalePublicationPosition = await nats.store.head();
+  await runner.run(conversations);
+  const values = ['test', 'stale-publication', stalePublicationPosition, publication.id,
+    publication.type, JSON.stringify(publication.data), publication.time];
+  // Recreate the row an older worker saved, without rebuilding the read table.
+  await dbs.queue.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)', values);
+}
+
+async function readsPastStalePublication(query: string) {
+  const response = await request('GET', `/api/conversations/stale-publication/messages${query}`,
+    undefined, 'alice');
+  expect(response.statusCode, response.body).toBe(200);
+  const feed = chatFeedSchema.parse(response.json());
+  function rowType(row: (typeof feed.rows)[number]) {
+    return row.type;
+  }
+  expect(feed.rows.map(rowType)).toEqual(['conversation.created', 'message.posted']);
+  expect(feed.rows[1]?.data.text).toBe('Keep this message readable.');
+  expect(feed.position).toBe(stalePublicationPosition);
+  expect(response.body).not.toContain('old-turn');
+  expect(response.body).not.toContain('a'.repeat(64));
+  const denied = await request('GET', `/api/conversations/stale-publication/messages${query}`,
+    undefined, 'owner');
+  expect(denied.statusCode).toBe(403);
+}
+const staleHistoryQueries = ['', '?since=0', '?tail=50', '?before=9007199254740991&limit=50'];
 
 async function listsSixtySessions() {
   for (let index = 0; index < 60; index++) {
@@ -346,3 +394,10 @@ async function admitsWhilePostingFollowUp() {
   }
 }
 it('admits a personal turn while a follow-up message is posted', admitsWhilePostingFollowUp);
+
+function stalePublicationHistoryChecks() {
+  beforeAll(prepareStalePublicationHistory);
+  it.each(staleHistoryQueries)('reads history past a stale internal publication row: %s',
+    readsPastStalePublication);
+}
+describe('history with rows saved by older workers', stalePublicationHistoryChecks);

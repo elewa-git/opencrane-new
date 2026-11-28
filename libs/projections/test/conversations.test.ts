@@ -38,6 +38,9 @@ async function replaysToolFeed() {
     const finished = { ...started, status: 'completed', durationMs: 75 };
     await append('agent.tool_call_started', 'conversation-chat', started);
     await append('agent.tool_call_finished', 'conversation-chat', finished);
+    await append('agent.file_publication_started', 'conversation-chat', {
+      conversationId: 'chat', turnId: 'turn', digest: 'a'.repeat(64),
+    });
     await append('agent.private_exited', 'conversation-chat', {
       conversationId: 'chat', turnId: 'turn',
     });
@@ -45,6 +48,9 @@ async function replaysToolFeed() {
     const runner = new ProjectionRunner(storage.db, nats.reader, logger);
     await runner.initialise(conversations);
     await runner.run(conversations);
+    const internalRows = await storage.db.query(
+      "SELECT event_id FROM conversation_feed WHERE type = 'agent.file_publication_started'");
+    expect(internalRows.rows).toEqual([]);
     const before = await readConversation(storage.db, 'test', 'chat');
     function rowData(row: (typeof before.rows)[number]) { return row.data; }
     expect(before.rows.map(rowData)).toEqual([
@@ -63,4 +69,5 @@ async function replaysToolFeed() {
     await nats.close();
   }
 }
-it('copies only safe MCP decision fields and rebuilds the same tool feed from events', replaysToolFeed);
+it('keeps internal file publication out of the readable tool feed, including replay',
+  replaysToolFeed);

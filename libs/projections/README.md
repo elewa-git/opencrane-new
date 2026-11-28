@@ -31,6 +31,7 @@ flowchart LR
 - Turn saved events into tables and keep each worker's saved position with its changes.
 - Keep membership, participation and grant history, and index saved chat records with coverage counts for call checks.
 - Keep chat messages, activity, files and each person's private list choices.
+  Keep checks used to share files out of the message list, including rows saved by older workers.
 - Keep tool reviews, publication records and provider choices separate from permission to act.
 - Keep spending records as integer euro cents.
 - Build a safe organisation history without copying private text or credentials.

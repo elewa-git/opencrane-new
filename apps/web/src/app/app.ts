@@ -40,7 +40,7 @@ import { NAVIGATE } from './core/navigate';
 import { organisationName } from './core/organisation-name';
 
 @Component({
-  selector: 'app-root',
+  selector: 'oc-app-page',
   imports: [
     Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, DirectChat, Conversations,
     ToolPolicyScreen, ToolAccessExplanation,
@@ -58,7 +58,7 @@ import { organisationName } from './core/organisation-name';
     '[class.settings-root]': 'accountPath',
   },
 })
-export class App implements OnInit, OnDestroy {
+class AppPage implements OnInit, OnDestroy {
   protected readonly overviewAccessLost = signal(false);
   protected readonly overviewPages = signal<readonly OrganisationPage[]>([]);
   private readonly navigate = inject(NAVIGATE);
@@ -137,5 +137,23 @@ export class App implements OnInit, OnDestroy {
 
   protected unavailableTitle(): string {
     return organisationPageLabel(this.activePage) ?? 'Page not found';
+  }
+}
+
+@Component({
+  selector: 'app-root',
+  imports: [AppPage],
+  template: '@for (page of pages(); track page) { <oc-app-page /> }',
+  styles: ':host { display: contents; }',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '(window:popstate)': 'changePage()' },
+})
+export class App {
+  protected readonly pages = signal([0]);
+
+  protected changePage(): void {
+    // Recreate the page so its reads, live connections and private replies end on navigation.
+    const nextPage = (this.pages()[0] ?? 0) + 1;
+    this.pages.set([nextPage]);
   }
 }

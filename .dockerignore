@@ -24,6 +24,7 @@ infra/dev-stack/*
 !infra/dev-stack/connection-custody-bridge.ts
 !infra/dev-stack/model-stub.ts
 !infra/dev-stack/stage-b-model.ts
+!infra/dev-stack/chat-links-model.ts
 !infra/dev-stack/secondary-models.ts
 !infra/dev-stack/journey-guard.ts
 !infra/dev-stack/zitadel.json

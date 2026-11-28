@@ -41,7 +41,7 @@ flowchart LR
 - Prepare test sign-in and a free stand-in AI provider.
 - Preserve private survey and memory keys across restarts; chats need no key storage.
 - Apply safe background subscription changes while services are stopped.
-- Run browser journeys and keep screenshots and measurements, including both viewer connections.
+- Run browser journeys for chat links, files and viewing, and keep screenshots and measurements.
 - Check the claimed stack and protected target before private memory collection.
 - Check package hosts and require the free stand-in for fleet tasks. Record any explicit
   local host-risk exception. Update and remove only owned releases.

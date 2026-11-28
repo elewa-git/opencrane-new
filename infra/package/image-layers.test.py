@@ -163,6 +163,7 @@ class ImageLayerTests(unittest.TestCase):
     def test_missing_model_import_refuses_even_with_entry_point_present(self):
         required = ("infra/dev-stack/connection-custody-bridge.ts",
                     "infra/dev-stack/model-stub.ts", "infra/dev-stack/stage-b-model.ts",
+                    "infra/dev-stack/chat-links-model.ts",
                     "apps/server/src/models-main.ts")
         for module in required:
             with self.subTest(module=module):
@@ -204,6 +205,7 @@ class ImageLayerTests(unittest.TestCase):
     def test_development_files_stay_within_the_narrow_allowlist(self):
         allowed = {"config.ts", "identity.ts", "owner-bootstrap.ts", "private-directories.ts",
                    "connection-custody-bridge.ts", "model-stub.ts", "stage-b-model.ts",
+                   "chat-links-model.ts",
                    "secondary-models.ts", "journey-guard.ts", "zitadel.json"}
         package_files = {"bootstrap.ts", "web.mjs", "web-page.mjs", "worker.mjs", "kubeconfig.mjs",
                          "scanner.mjs", "object-credentials.mjs", "object-lease-ready.mjs",

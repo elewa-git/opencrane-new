@@ -21,6 +21,7 @@ import { DirectChatColleagues } from './direct-chat-colleagues';
 import { ReadMarker } from './read-marker';
 import { RecipientPicker, type Colleague, type ReviewedSnapshot } from './recipient-picker';
 import { WebSocketService } from '../core/websocket.service';
+import { AssistantMarkdown } from './assistant-markdown';
 import { ChatComposer } from './composer';
 import {
   newDirectCommandId, requestedDirectConversationId, updateDirectConversationAddress,
@@ -49,7 +50,7 @@ type ReadState = 'idle' | 'loading' | 'ready' | 'failed';
 @Component({
   selector: 'oc-direct-chat',
   imports: [SharedState, ChatComposer, PaperSurface, NavigationMenu, RecipientPicker,
-    ModalSheet, CloseReviewDialog],
+    ModalSheet, CloseReviewDialog, AssistantMarkdown],
   templateUrl: './direct-chat.html',
   styleUrl: './direct-chat.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -270,7 +271,7 @@ export class DirectChat implements OnInit, OnDestroy {
     this.returnParticipantFocus = false;
     this.focusComposerAfterRead = false;
     await this.participantManager.open();
-    requestAnimationFrame(this.focusParticipantTitle.bind(this));
+    requestAnimationFrame(this.focusParticipantControl.bind(this, this.participantHeading));
   }
 
   protected closeParticipants(): void {
@@ -708,7 +709,7 @@ export class DirectChat implements OnInit, OnDestroy {
     }
     if (this.returnParticipantFocus) {
       this.returnParticipantFocus = false;
-      requestAnimationFrame(this.restoreParticipantOpener.bind(this));
+      requestAnimationFrame(this.focusParticipantControl.bind(this, this.participantOpener));
     }
   }
 
@@ -725,12 +726,8 @@ export class DirectChat implements OnInit, OnDestroy {
     if (document.visibilityState === 'visible') void this.markReadAfterRender();
   }
 
-  private focusParticipantTitle(): void {
-    this.participantHeading()?.nativeElement.focus();
-  }
-
-  private restoreParticipantOpener(): void {
-    this.participantOpener()?.nativeElement.focus();
+  private focusParticipantControl(control: () => ElementRef<HTMLElement> | undefined): void {
+    control()?.nativeElement.focus();
   }
 
 }

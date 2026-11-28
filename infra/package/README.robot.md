@@ -542,9 +542,10 @@ both bootstrap programs, `scheduled-backup-run.ts` and `infra/dev-stack/secondar
 the chart’s model entry point. The backup runner, collector, source adapter and event
 collector have explicit Docker context exceptions and image-file allowlist entries.
 The package uses the secondary stack’s stand-in by default. Provider mode skips
-that process and its relay port. Its bridge and tool-rehearsal helper ship through the same
-explicit `.dockerignore` exceptions as the launcher and stub. Removing a required
-imported file refuses even when the entry point remains. It also checks every
+that process and its relay port. Its bridge, tool-rehearsal helper and chat-link
+helper ship through explicit `.dockerignore` exceptions, as do the launcher and stub.
+The import check fails when a required file is missing, even if its entry point
+is present. It also checks every
 shipped TypeScript module for runtime imports from test folders. The existing bootstrap source suite checks that every
 imported dev-stack file reachable from setup or the model has an explicit Docker
 context exception and refuses test folder imports.

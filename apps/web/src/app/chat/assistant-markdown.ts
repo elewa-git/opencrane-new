@@ -7,6 +7,7 @@ import { DogEar } from '../ui/paper';
 import { MermaidDiagram } from './mermaid-diagram';
 import { parseMarkdown, type MarkdownBlock } from './markdown-parser';
 import { fileName, fileUrl } from './file-presentation';
+import { navigateInApp } from '../core/navigate';
 import { untilAborted } from './until-aborted';
 
 @Component({
@@ -25,6 +26,8 @@ export class AssistantMarkdown implements OnDestroy {
   readonly conversationId = input('');
   readonly availableFiles = input<string[]>([]);
   readonly volatile = input(false);
+  readonly inlineOnly = input(false);
+  readonly navigationBlocked = input(false);
   readonly citationOpened = output<string>();
   readonly fileOpened = output<string>();
   protected readonly blocks = computed(this.parseReply.bind(this));
@@ -35,7 +38,19 @@ export class AssistantMarkdown implements OnDestroy {
   } | null>(null);
 
   private parseReply(): MarkdownBlock[] {
-    return parseMarkdown(this.text());
+    return parseMarkdown(this.text(), this.inlineOnly());
+  }
+
+  protected followAppLink(event: MouseEvent, href: string): void {
+    if (this.navigationBlocked()) {
+      event.preventDefault();
+      return;
+    }
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
+      return;
+    }
+    event.preventDefault();
+    navigateInApp(href);
   }
 
   protected publishedFile(link: string | undefined): string {

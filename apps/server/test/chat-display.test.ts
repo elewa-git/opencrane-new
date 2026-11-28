@@ -5,6 +5,16 @@ import { transcript } from '../../web/test/chat-state.ts';
 import { chatDisplayData } from '../src/chat/display.ts';
 
 const requestId = '00000000-0000-4000-8000-000000000001';
+
+function refusesInternalPublicationDisplay() {
+  const data = { conversationId: 'fixture-conversation', turnId: 'fixture-turn',
+    digest: 'a'.repeat(64) };
+  function display() {
+    return chatDisplayData('agent.file_publication_started', data);
+  }
+  expect(display).toThrow('Chat display unavailable');
+}
+it('refuses to turn internal publication details into display data', refusesInternalPublicationDisplay);
 const turnId = 'fixture-turn';
 const conversationId = 'fixture-conversation';
 const callFields = {

@@ -31,7 +31,8 @@ const lateReply = { ...reply, turnId: 'next',
   data: { text: 'Late private reply', turnId: 'next' } };
 
 function privateText() {
-  const reply = globalThis.document.querySelector('oc-assistant-markdown');
+  const selector = 'article[aria-label="Agent reply"] oc-assistant-markdown';
+  const reply = globalThis.document.querySelector(selector);
   return reply?.textContent?.trim() ?? null;
 }
 function connected() {
@@ -134,6 +135,11 @@ async function scenario(browser, broadcast) {
     fixture.send(question);
     fixture.send(started);
     fixture.send(reply);
+    const memberOptions = { name: 'Your message', exact: true };
+    const exact = { exact: true };
+    const memberMessage = tabA.getByRole('article', memberOptions);
+    const memberMarkdown = memberMessage.locator('oc-assistant-markdown');
+    await memberMarkdown.getByText('Show a plan.', exact).waitFor();
     // Playwright serialises one function at a time, so supply its helper explicitly.
     await tabA.waitForFunction(`(${privateText})() === 'Synthetic private reply'`);
     const tabB = await context.newPage();

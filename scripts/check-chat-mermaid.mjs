@@ -183,10 +183,17 @@ try {
   const firstDelta = { ...turn, messageId: 'reply', text: 'Ordinary reply' };
   fixture.add('agent.message_delta', firstDelta);
   await page.goto(origin + '/workspace?conversation=chat');
-  const reply = page.locator('oc-assistant-markdown');
+  const replyOptions = { name: 'Agent reply', exact: true };
+  const replyArticles = page.getByRole('article', replyOptions);
+  const reply = replyArticles.locator('oc-assistant-markdown');
   const textOptions = { exact: true };
   const ordinaryReply = reply.getByText('Ordinary reply', textOptions);
   await ordinaryReply.waitFor();
+  const memberOptions = { name: 'Your message', exact: true };
+  const memberMessage = page.getByRole('article', memberOptions);
+  const memberMarkdown = memberMessage.locator('oc-assistant-markdown');
+  assert.equal(await memberMarkdown.textContent(), 'Draw a route');
+  assert.equal(await memberMarkdown.getByRole('img').count(), 0);
   await page.waitForLoadState('networkidle');
   assert.equal(scripts.some(containsMermaid), false, 'Ordinary replies must not load Mermaid');
 
@@ -290,8 +297,9 @@ try {
     text: '```mermaid\ngraph LR\nSecond --> Diagram\n```',
   });
   fixture.add('agent.turn_completed', nextTurn);
-  const replyImages = page.locator('oc-assistant-markdown img[alt="Diagram"]');
-  const secondReplyImage = page.locator('oc-assistant-markdown').nth(1).getByRole('img');
+  const replyImages = reply.locator('img[alt="Diagram"]');
+  const secondReply = reply.nth(1);
+  const secondReplyImage = secondReply.getByRole('img');
   await secondReplyImage.waitFor({ timeout: 20_000 });
   assert.equal(await replyImages.count(), 3, 'Both messages must show every valid diagram');
 
@@ -308,7 +316,8 @@ try {
     text: '```mermaid\ngraph LR\nLast --> Diagram\n```',
   });
   fixture.add('agent.turn_completed', lastTurn);
-  const lastReplyImage = page.locator('oc-assistant-markdown').nth(2).getByRole('img');
+  const lastReply = reply.nth(2);
+  const lastReplyImage = lastReply.getByRole('img');
   await lastReplyImage.waitFor({ timeout: 35_000 });
   assert.equal(await replyImages.count(), 4, 'A stalled renderer must recover for later replies');
 

@@ -1,0 +1,21 @@
+{
+  "source": "5b9a55243246e811dc2908e13e7736c60a773ea5",
+  "freshStack": "PASS",
+  "slot": 1,
+  "startupCoreJourney": "PASS",
+  "standaloneStandardJourney": "FAIL",
+  "chatLinksJourney": "PASS",
+  "chatLinksWidthsPx": [390, 1280],
+  "linkScreenshots": 8,
+  "pilotReadTablesInspected": false,
+  "pilotRebuildApplicability": "NOT DETERMINED; applies if publication-start rows are present",
+  "operatorRebuildCommand": "npm run replay -- conversations --confirm-conversations-stopped",
+  "firstAttempt": "FAIL",
+  "webTests": 1689,
+  "changedWebChecks": 352,
+  "modelChecksPerRun": 9,
+  "projectionAndDisplayChecksPerRun": 21,
+  "eventTypes": 175,
+  "shippedCodeLines": 457,
+  "independentReview": "NOT RUN"
+}

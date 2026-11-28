@@ -10,6 +10,7 @@ const origin = 'https://private-retention.opencrane.test';
 const privateText = '```text\nSynthetic private code\n```\n\n'
   + '```mermaid\ngraph LR\nPrivate --> Plan\n```';
 const retainForTest = process.argv.includes('--retain-for-test');
+const replySelector = 'article[aria-label="Agent reply"] oc-assistant-markdown';
 
 async function serveAssets(route) {
   await serveWebBuild(route, build);
@@ -50,7 +51,7 @@ function observeCancellation() {
   globalThis.replyOperations = operations;
 }
 
-function observeCopies() {
+function observeCopies(selector) {
   function watchCopy(component, methodName) {
     const original = component[methodName];
     function settled() {
@@ -64,14 +65,14 @@ function observeCopies() {
     }
     component[methodName] = copy;
   }
-  const markdown = globalThis.document.querySelector('oc-assistant-markdown');
+  const markdown = globalThis.document.querySelector(selector);
   const diagram = globalThis.document.querySelector('oc-mermaid-diagram');
   watchCopy(globalThis.ng.getComponent(markdown), 'copyCode');
   watchCopy(globalThis.ng.getComponent(diagram), 'copySource');
 }
 
-function rememberReply() {
-  const element = globalThis.document.querySelector('oc-assistant-markdown');
+function rememberReply(selector) {
+  const element = globalThis.document.querySelector(selector);
   const diagram = element.querySelector('oc-mermaid-diagram');
   const component = globalThis.ng.getComponent(element);
   const diagramComponent = globalThis.ng.getComponent(diagram);
@@ -109,8 +110,8 @@ function retainedReferences() {
   return globalThis.replyReferences.map(isRetained);
 }
 
-function retainReplyForTest() {
-  const element = globalThis.document.querySelector('oc-assistant-markdown');
+function retainReplyForTest(selector) {
+  const element = globalThis.document.querySelector(selector);
   const component = globalThis.ng.getComponent(element);
   function heldClipboardCallback() {
     return component;
@@ -119,15 +120,13 @@ function retainReplyForTest() {
   globalThis.heldClipboardCallback = heldClipboardCallback;
 }
 
-function deliverReply(fixture) {
-  const question = { text: 'Show the plan.', authorId: 'me' };
-  const human = fixture.add('message.posted', question);
-  const turn = { turnId: human.id, executionMode: 'restricted' };
+function deliverReply(fixture, turnId) {
+  const turn = { turnId, executionMode: 'restricted' };
   fixture.add('agent.turn_started', turn);
   const binding = { version: 1, topic: 'conversation', conversationId: 'chat',
-    turnId: human.id, threadId: 'thread', generation: 7, inputGeneration: human.id };
+    turnId, threadId: 'thread', generation: 7, inputGeneration: turnId };
   const reply = { ...binding, type: 'private_reply',
-    data: { text: privateText, turnId: human.id } };
+    data: { text: privateText, turnId } };
   fixture.sendFrame(reply);
   return binding;
 }
@@ -196,9 +195,9 @@ async function startCopies(page, pendingDiagram) {
   } else {
     await page.locator('img[alt="Diagram"]').waitFor();
   }
-  await page.evaluate(rememberReply);
+  await page.evaluate(rememberReply, replySelector);
   // Observe the returned waits without keeping the component in a test callback.
-  await page.evaluate(observeCopies);
+  await page.evaluate(observeCopies, replySelector);
   const before = await page.evaluate(retainedReferences);
   assert.deepEqual(before, pendingDiagram ? [true, true, true, true]
     : [true, true, true, true, true]);
@@ -213,7 +212,10 @@ function finishCopies() {
 }
 
 async function assertAbsent(page) {
-  assert.equal(await page.locator('oc-assistant-markdown, img[alt="Diagram"]').count(), 0);
+  const protectedElements = page.locator(`${replySelector}, img[alt="Diagram"]`);
+  assert.equal(await protectedElements.count(), 0);
+  const memberMarkdown = page.locator('article[aria-label="Your message"] oc-assistant-markdown');
+  assert.equal(await memberMarkdown.textContent(), 'Show the plan.');
   const markup = await page.locator('body').innerHTML();
   assert(!markup.includes('Synthetic private code'));
   await collectReply(page);
@@ -234,21 +236,27 @@ async function clearDuringCopy(browser, pendingDiagram) {
     // Wait for Angular to open the socket even when compilation or startup is slow.
     await page.waitForFunction(chatConnected);
     await fixture.waitForReadySocket();
+    const question = { text: 'Show the plan.', authorId: 'me' };
+    const human = fixture.add('message.posted', question);
+    const memberMarkdown = page.locator('article[aria-label="Your message"] oc-assistant-markdown');
+    await memberMarkdown.waitFor();
+    assert.equal(await memberMarkdown.textContent(), question.text);
     await page.evaluate(holdClipboard);
+    // Count only private reply work. Keep the saved question's renderer alive after clearance.
     await page.evaluate(observeCancellation);
     if (pendingDiagram) {
       renderer = await holdDiagramStartup(page);
     }
-    const binding = deliverReply(fixture);
+    const binding = deliverReply(fixture, human.id);
     await startCopies(page, pendingDiagram);
     await renderer?.started;
     if (retainForTest) {
-      await page.evaluate(retainReplyForTest);
+      await page.evaluate(retainReplyForTest, replySelector);
     }
     const clearance = { ...binding, type: 'private_output_cleared' };
     fixture.sendFrame(clearance);
     const detached = { state: 'detached' };
-    await page.locator('oc-assistant-markdown').waitFor(detached);
+    await page.locator(replySelector).waitFor(detached);
     await page.locator('.oc-mermaid-renderer').waitFor(detached);
     await waitForCancellation(page);
     await collectReply(page);
