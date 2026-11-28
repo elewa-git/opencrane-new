@@ -1,7 +1,39 @@
 {
   "journey": "NOT RUN",
-  "date": "2026-11-27",
+  "date": "2026-11-28",
   "sourceCommit": "810f7294a78874f98e0512da6abe1b5a9455a3cf",
+  "latestAttempt": {
+    "result": "NOT RUN",
+    "started": "2026-11-27T23:46:55Z",
+    "ended": "2026-11-28T00:17:16Z",
+    "productSource": "810f7294a78874f98e0512da6abe1b5a9455a3cf",
+    "restoredBranchTip": "36a4d85a8",
+    "slot": 1,
+    "pilotSlotExcluded": 2,
+    "initialAdmission": "PASS",
+    "applicationApprovalArtifact": "available",
+    "scannerApprovalArtifact": "available",
+    "packagePrepare": {
+      "result": "FAIL",
+      "failedCheck": "Approval lookup requires a named branch; checkout was detached.",
+      "safeFailure": "Package command failed",
+      "rawLog": "package-prepare-failure.log"
+    },
+    "cleanup": {
+      "packageDown": "PASS",
+      "slotDown": "PASS"
+    },
+    "followUpAdmission": {
+      "result": "NOT RUN",
+      "durationSeconds": 1821,
+      "slotOneFree": true,
+      "fiveMinuteLoadBelowSix": false
+    },
+    "freshPackagedInstall": "NOT RUN",
+    "browserJourney": "NOT RUN",
+    "screenshots": [],
+    "eventAudit": "NOT RUN"
+  },
   "slot": 1,
   "requestedViewports": [
     "1280x900",

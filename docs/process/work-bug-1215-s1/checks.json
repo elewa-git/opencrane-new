@@ -1,5 +1,22 @@
 {
   "sourceCommit": "810f7294a78874f98e0512da6abe1b5a9455a3cf",
+  "latestJourneyAttempt": {
+    "date": "2026-11-28",
+    "result": "NOT RUN",
+    "packagePrepare": "FAIL",
+    "packagePrepareSafeReason": "Approval lookup requires a named branch; checkout was detached.",
+    "packageCleanup": "PASS",
+    "slotTeardown": "PASS",
+    "followUpAdmission": "NOT RUN",
+    "followUpAdmissionReason": "No five-minute load window below 6 occurred within 30 minutes.",
+    "freshPackagedInstall": "NOT RUN",
+    "browserAt1280": "NOT RUN",
+    "browserAt390": "NOT RUN",
+    "eventAudit": "NOT RUN",
+    "rawLogs": [
+      "package-prepare-failure.log"
+    ]
+  },
   "checks": {
     "workspace": {
       "result": "PASS",

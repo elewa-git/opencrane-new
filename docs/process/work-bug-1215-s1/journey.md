@@ -1,19 +1,54 @@
 # First send in a new assistant session
 
 **NOT RUN** for a saved first message whose reply is lost, reload persistence
-and Retry after connection recovery. The blocking journey gap remains.
+and Retry after connection recovery. Run 2 passed the initial slot and load
+check, but package preparation refused a detached checkout. After cleanup, the
+five-minute load condition did not return within the 30-minute limit.
 The three style findings are fixed. The source checks below passed.
 
 ## Source and environment
 
-- Date: 27 November 2026.
+- Date: 27–28 November 2026.
 - Checked source: `810f7294a78874f98e0512da6abe1b5a9455a3cf`.
 - Requested environment: a fresh packaged install in secondary slot 1.
 - Requested Chromium sizes: 1280 × 900 and 390 × 844 pixels.
-- No stack was claimed, installed or started in this round. No browser journey ran.
+- Run 2 claimed slot 1 but stopped during package preparation. No packaged install
+  or browser journey ran.
 - Slot 2 is the protected pilot. It was excluded from the wait and left untouched.
 
-## Why the journey did not run
+## Run 2: package preparation and admission
+
+The run started on 27 November and ended on 28 November 2026. Its source was
+`810f7294a78874f98e0512da6abe1b5a9455a3cf`, which contains the approved product
+changes. Both exact-source image approval runs still had unexpired artifacts.
+The slot and five-minute load checks passed before the first claim.
+
+Package preparation then refused. The checkout had been detached for the
+receipt-only commit procedure, while approval lookup requires a named branch.
+The slot's safe failure record said `Package command failed`; inspection of the
+approval check identified the missing branch name as the failed check. Its raw
+copy is `package-prepare-failure.log` in the private task receipt.
+
+Package cleanup and slot teardown passed. The branch was restored to its named
+tip. I checked slot 1 and load every 30 seconds while waiting to claim again.
+Slot 1 stayed free, but no five-minute period below load 6 occurred within 30
+minutes. The follow-up packaged install and browser journey did not run. No
+screenshots or event audit were produced. The slot is free.
+
+| Run 2 check | Result |
+| --- | --- |
+| Initial slot and load admission | PASS |
+| Exact-source application and scanner artifacts | PASS; unexpired |
+| Package preparation | FAIL; approval check requires a named branch |
+| Package cleanup | PASS |
+| Slot teardown | PASS |
+| Follow-up five-minute load window within 30 minutes | NOT RUN |
+| Fresh packaged install | NOT RUN |
+| Saved reply loss, reload and Retry at 1280 px | NOT RUN |
+| Saved reply loss, reload and Retry at 390 px | NOT RUN |
+| Exactly one saved message event | NOT RUN |
+
+## Why run 1 did not run
 
 The wait made 73 checks from 22:18:26 to 22:58:45 UTC. Each stack status command
 used `DEV_STACK_ID=1` and `--id 1`. Slot 1 was occupied until near the end of the
