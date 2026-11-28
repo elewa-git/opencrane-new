@@ -17,6 +17,10 @@ async function startsFromWakePodFixture(): Promise<void> {
   const fixtureStub = `${fixture}/stub.ts`;
   const stubSource = await readFile(stubPath, 'utf8');
   await writeFile(fixtureStub, stubSource);
+  for (const helper of ['file-sharing-model.ts', 'exec-tool-call.ts']) {
+    const source = await readFile(new URL(helper, import.meta.url), 'utf8');
+    await writeFile(`${fixture}/${helper}`, source);
+  }
   const generation = randomUUID();
   const revision = catalogueDigest([approvalJourneyTool()]);
   const environment = { ...process.env, MODEL_STUB_PORT: '0',
@@ -26,7 +30,9 @@ async function startsFromWakePodFixture(): Promise<void> {
   try {
     let output = '';
     for await (const chunk of stub.stdout) {
-      output += chunk.toString();
+      const message: unknown = chunk;
+      assert(Buffer.isBuffer(message));
+      output += message.toString();
       if (/Stub ready \d+/u.test(output)) break;
     }
     assert.match(output, /Stub ready \d+/u);

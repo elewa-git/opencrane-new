@@ -30,6 +30,9 @@ export class AssistantMarkdown implements OnDestroy {
   readonly navigationBlocked = input(false);
   readonly citationOpened = output<string>();
   readonly fileOpened = output<string>();
+  readonly sharingAllowed = input(false);
+  readonly sharingBlocked = input(false);
+  readonly fileShareRequested = output<string>();
   protected readonly blocks = computed(this.parseReply.bind(this));
   protected readonly copyStatus = signal<{
     blockIndex: number;
@@ -74,6 +77,12 @@ export class AssistantMarkdown implements OnDestroy {
 
   protected openFile(path: string): void {
     this.fileOpened.emit(path);
+  }
+
+  protected requestFileShare(link: string): void {
+    if (this.sharingAllowed() && !this.sharingBlocked()) {
+      this.fileShareRequested.emit(link);
+    }
   }
 
   protected fileLabel(label: string, path: string): string {

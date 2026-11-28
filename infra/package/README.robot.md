@@ -24,7 +24,10 @@ that the value reaches the web container.
 The root `.dockerignore` excludes repository test folders and test files from the
 package build. Its allow-list includes provider startup, model settings and the fleet
 guard. `runtime-context.test.mjs` checks these paths in the Docker build context
-before the application image is built. The context includes `web.mjs` and its
+before the application image is built. It also checks the file-sharing stand-in and
+its shared exec-call builder, then runs the recursive runtime import checker on
+the copied context. Removing either helper must make that checker refuse it.
+The context includes `web.mjs` and its
 shared `web-page.mjs` renderer.
 The development static server imports the upgrade handler from `web.mjs`;
 importing it does not start a package listener. For ordinary HTTP, the package

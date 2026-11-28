@@ -52,6 +52,27 @@ marker, including an empty marker, before Helm. A marked installer refuses ordin
 provider mode and passes the marker directly to the models container. An unmarked
 installer refuses a runtime Secret prepared by a fleet task.
 
+## Assistant file sharing
+
+`file-sharing-model.ts` supplies deterministic file examples to the free model.
+The slide-deck request requires the native request's trusted `instructions` field to contain
+`Your name is Aster.` before it writes a three-page `Meet_Aster.pdf`. Separate requests
+create notes or the EICAR antivirus test file outside the publication folder. Share
+copies them into that folder through a real shell call. Normal scanning and access
+checks decide whether they become chat files. These examples check transport and
+browser behaviour; they do not qualify a real model's writing or judgement.
+The file and link examples share `exec-tool-call.ts` to call the real computer.
+The wake fixture includes both helpers needed for an ordinary stand-in reply.
+With a fresh claimed slot 1 running, `DEV_STACK_ID=1 nice -n 10 xvfb-run --auto-servernum node
+--experimental-strip-types infra/dev-stack/file-sharing-journey.ts` checks both widths through Playwright.
+It uses headed Chromium on an isolated virtual display and waits for its PDF viewer
+to finish loading. It approves Aster through the survey page, or checks that the
+approved Aster persona remains in use after an interrupted run. It previews and
+downloads the deck and notes,
+and checks that sharing the antivirus test file produces a refusal. The script writes
+screenshots and a small result summary to `docs/process/work-share-1220-s1/`.
+Downloaded files stay in the task's private receipt folder.
+
 ## Personal Memory response collection
 
 `memory-personal-browser.ts` comes from the draft personal Memory journey. It records

@@ -25,7 +25,7 @@ flowchart LR
   stack["infra/dev-stack<br/>local OpenCrane"] -->|uses local Kubernetes| devbox["infra/devbox<br/>machine setup"]
   stack -->|starts and checks services| services["NATS, PostgreSQL and OpenFGA<br/>events, tables and permissions"]
   stack -->|starts file services| files["MinIO and ClamAV<br/>files and scanning"]
-  stack -->|starts apps and checks welcome, chat, viewing and approvals| apps["Server, website and workers<br/>OpenCrane apps"]
+  stack -->|starts apps and checks welcome, chat, files, viewing and approvals| apps["Server, website and workers<br/>OpenCrane apps"]
   stack -->|prepares test sign-in| zitadel["Zitadel<br/>sign-in service"]
   stack -->|checks reviewed tool calls through TLS| demo["Demo tool server<br/>synthetic effects"]
   stack -.->|reuses website proxy handling| package
@@ -42,6 +42,7 @@ flowchart LR
 - Preserve private survey and memory keys across restarts; chats need no key storage.
 - Apply safe background subscription changes while services are stopped.
 - Run browser journeys for chat links, files and viewing, and keep screenshots and measurements.
+  The free file-sharing example creates a slide deck and checks sharing a file on request.
 - Check the claimed stack and protected target before private memory collection.
 - Check package hosts and require the free stand-in for fleet tasks. Record any explicit
   local host-risk exception. Update and remove only owned releases.

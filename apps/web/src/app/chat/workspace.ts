@@ -32,6 +32,7 @@ import { BrandMark } from '../ui/brand-mark';
 import type { ChatConversation } from '@opencrane/protocol';
 import { workspaceTitle } from './conversations-data';
 import { ChatSession } from './chat-session';
+import { canShareFile, requestFileShare, sendDraft } from './file-sharing';
 import { PayingGroupName } from './paying-group-name';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
@@ -164,11 +165,9 @@ export class Workspace implements OnInit {
     if (this.chat.denied()) this.closeReview.clear();
   }
 
-  protected async send(text: string): Promise<void> {
-    if (this.isClosedConversation()) return;
-    const sent = await this.chat.send(text);
-    if (sent) this.draft.set('');
-  }
+  protected readonly send = sendDraft.bind(null, this.chat, this.draft);
+  protected readonly shareFile = requestFileShare.bind(null, this.chat, this.draft);
+  protected readonly canShareFile = canShareFile.bind(null, this.chat, this.draft);
   protected selectMemoryFree(): void {
     this.chat.chooseMemoryFree();
     this.focusComposer();

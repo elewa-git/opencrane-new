@@ -50,7 +50,10 @@ Bare HTTPS and www. addresses and email addresses become links. Trailing punctua
 stays outside the link. Web and email links open in a new tab. Links to this app
 open the requested page without reloading the website. Shared workspace paths,
 written bare or as Markdown links, open that file's preview. Other local file links
-show a plain note without a link or path. Unsafe schemes stay text.
+show a plain note without a link or path. In an assistant reply, Share asks the
+assistant to send a fresh copy to the chat. It waits until the message box is clear
+and the session can accept a request. The normal file checks still apply.
+Unsafe schemes stay text.
 Code spans and blocks keep addresses as code. Long links wrap on phones.
 HTML stays text. Mermaid diagrams appear as images once their code block closes.
 Drawing happens in a separate browser document with network access blocked.

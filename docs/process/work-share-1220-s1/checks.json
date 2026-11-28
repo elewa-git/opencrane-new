@@ -1,0 +1,108 @@
+{
+  "sourceCommit": "3de77755d7bc642d5706aac6dc033016aecd39ba",
+  "shippedCodeLines": 496,
+  "checks": {
+    "typecheck": "PASS",
+    "events": {
+      "result": "PASS",
+      "types": 175
+    },
+    "focusedWeb": {
+      "result": "PASS",
+      "tests": 48,
+      "runs": 2
+    },
+    "allWeb": {
+      "result": "PASS",
+      "files": 93,
+      "tests": 1695
+    },
+    "filePublication": {
+      "result": "PASS",
+      "tests": 4
+    },
+    "standIn": {
+      "result": "PASS",
+      "tests": 10,
+      "runs": 2
+    },
+    "webBuild": "PASS",
+    "eslint": "PASS",
+    "knip": "PASS",
+    "changelog": "PASS",
+    "markdown": "PASS"
+  },
+  "paidSpendCents": 0,
+  "journey": "PASS",
+  "startupAttempts": [
+    {
+      "result": "FAIL",
+      "reason": "Stand-in refused a valid text provider probe",
+      "retainedServiceLogs": 14,
+      "down": "PASS"
+    },
+    {
+      "result": "PASS",
+      "passLines": 37,
+      "longChatApprovals": "NOT RUN"
+    }
+  ],
+  "viewports": [
+    1280,
+    390
+  ],
+  "slotReleased": true,
+  "browserAttempts": [
+    "PARTIAL",
+    "PARTIAL",
+    "PASS"
+  ],
+  "retainedFinalLogs": {
+    "applications": 16,
+    "containers": 8,
+    "computers": 3,
+    "withheld": 1
+  },
+  "reviewFixes": {
+    "date": "2026-11-28",
+    "applicationSourceCommit": "195144d00790b318a82a2fafa3ecf0ded82da66d",
+    "shippedCodeLines": 611,
+    "changedWeb": {
+      "result": "PASS",
+      "tests": 14,
+      "runs": 2
+    },
+    "nodeChecks": {
+      "result": "PASS",
+      "tests": 13,
+      "runs": 2
+    },
+    "exportedImageChecks": {
+      "result": "PASS",
+      "tests": 3,
+      "runs": 2
+    },
+    "finalDockerContext": {
+      "result": "PASS",
+      "tests": 1,
+      "runs": 2
+    },
+    "guardRemoval": {
+      "denied": "PASS",
+      "recovering": "PASS",
+      "savedClose": "PASS",
+      "trustedPersona": "PASS"
+    },
+    "typecheck": "PASS",
+    "events": "PASS",
+    "knip": "PASS",
+    "changedEslint": "PASS",
+    "changelog": "PASS",
+    "markdown": "PASS",
+    "privacy": "PASS",
+    "secrets": "PASS",
+    "journeyRerun": "NOT RUN",
+    "journeyReason": "Application behaviour unchanged; previous fresh-stack PASS retained",
+    "realProviderJudgement": "NOT RUN"
+  }
+}

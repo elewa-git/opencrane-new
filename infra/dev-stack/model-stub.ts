@@ -36,6 +36,71 @@ function refusesProviderKey(authorization: string | undefined) {
   const value = readFileSync(file, 'utf8').trim();
   return !value || authorization !== `Bearer ${value}`;
 }
+interface ModelInput {
+  type?: string;
+  role?: string;
+  content?: unknown;
+  output?: unknown;
+}
+interface ModelRequest {
+  stream?: boolean;
+  input?: ModelInput[] | string;
+}
+function isModelInput(value: unknown): value is ModelInput {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  if ('type' in value && typeof value.type !== 'string') {
+    return false;
+  }
+  return !('role' in value) || typeof value.role === 'string';
+}
+function isModelRequest(value: unknown): value is ModelRequest {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  if ('stream' in value && typeof value.stream !== 'boolean') {
+    return false;
+  }
+  if (!('input' in value) || typeof value.input === 'string') {
+    return true;
+  }
+  return Array.isArray(value.input) && value.input.every(isModelInput);
+}
+function requestInputs(request: ModelRequest): ModelInput[] {
+  if (typeof request.input === 'string') {
+    const message = { type: 'message', role: 'user', content: request.input };
+    return [message];
+  }
+  return request.input ?? [];
+}
+async function localFileExample(prompt: string, request: unknown, hasOutput: boolean) {
+  if (prompt.includes('CHAT_LINKS_PROOF')) {
+    const example = await import('./chat-links-model.ts');
+    const text = example.chatLinksText;
+    if (hasOutput) {
+      return { text };
+    }
+    return { text, call: example.chatLinksFileCall() };
+  }
+  const example = await import('./file-sharing-model.ts');
+  return example.fileSharingExample(prompt, request, hasOutput);
+}
+function isUserMessage(item: ModelInput): boolean {
+  return item.type === 'message' && item.role === 'user';
+}
+function isCustomOutput(item: ModelInput): boolean {
+  return item.type === 'custom_tool_call_output';
+}
+function isToolOutput(item: ModelInput): boolean {
+  return item.type === 'function_call_output' || isCustomOutput(item);
+}
+function outputText(item: ModelInput): string {
+  if (typeof item.output === 'string') {
+    return item.output;
+  }
+  return JSON.stringify(item.output ?? '');
+}
 const server = createServer((req, res) => {
   // Count arrivals even when the route or credential is refused.
   if (req.url?.startsWith('/v1/')) {
@@ -99,8 +164,11 @@ const server = createServer((req, res) => {
   req.on('end', () => { void (async () => {
     countProviderRequest(req.headers.authorization);
     if (process.env['MODEL_STUB_CAPTURE']) appendFileSync(process.env['MODEL_STUB_CAPTURE'], Buffer.concat(chunks).toString() + '\n', { mode: 0o600 });
-    const body = JSON.parse(Buffer.concat(chunks).toString()) as { stream?: boolean;
-      input?: Array<{ type?: string; role?: string; content?: unknown; output?: unknown }> };
+    const decoded: unknown = JSON.parse(Buffer.concat(chunks).toString());
+    if (!isModelRequest(decoded)) {
+      throw new Error('Invalid stand-in model request');
+    }
+    const body = decoded;
     if (body.stream === false) {
       const content = [{ type: 'output_text', text: 'OK' }];
       const output = [{ type: 'message', role: 'assistant', content }];
@@ -109,12 +177,15 @@ const server = createServer((req, res) => {
       res.end(JSON.stringify({ status: 'completed', output, usage }));
       return;
     }
-    const input = body.input ?? [];
-    const user = input.findLastIndex(item => item.type === 'message' && item.role === 'user');
+    const input = requestInputs(body);
+    const user = input.findLastIndex(isUserMessage);
     const prompt = JSON.stringify(input[user]?.content ?? '');
     const pdf = prompt.includes('UPLOAD_PDF_PROOF') || prompt.includes('What is the project code in the attached PDF?');
-    const output = input.slice(user+1).filter(item => ['function_call_output', 'custom_tool_call_output'].includes(item.type ?? '')).map(item => typeof item.output === 'string' ? item.output : JSON.stringify(item.output ?? '')).join('\n');
-    const customOutput = input.slice(user+1).some(item => item.type === 'custom_tool_call_output');
+    const replies = input.slice(user + 1);
+    const toolReplies = replies.filter(isToolOutput);
+    const replyTexts = toolReplies.map(outputText);
+    const output = replyTexts.join('\n');
+    const customOutput = replies.some(isCustomOutput);
     const proxyProofCall = process.env['MODEL_STUB_PROXY_HOLD'] === '1' &&
       prompt.includes('PROXY_PROOF') && !output;
     const path = /\/workspace\/uploads\/[\w/-]+\/project\.pdf\.md/u.exec(prompt)?.[0];
@@ -125,10 +196,9 @@ const server = createServer((req, res) => {
       answer = 'PDF reading failed.';
       if (code) answer = `The project code is ${code}.`;
     }
-    let linkExample: typeof import('./chat-links-model.ts') | undefined;
-    if (prompt.includes('CHAT_LINKS_PROOF')) {
-      linkExample = await import('./chat-links-model.ts');
-      answer = linkExample.chatLinksText;
+    const fileExample = await localFileExample(prompt, body, customOutput);
+    if (fileExample) {
+      answer = fileExample.text;
     }
     const stopped = new AbortController();
     res.once('close', () => stopped.abort());
@@ -143,8 +213,8 @@ const server = createServer((req, res) => {
       demoCall = stageBModelCall(body);
       answer = stageBModelAnswer(body) ?? answer;
     }
-    if (linkExample && !customOutput) {
-      emit({ type: 'response.output_item.done', item: linkExample.chatLinksFileCall() });
+    if (fileExample?.call) {
+      emit({ type: 'response.output_item.done', item: fileExample.call });
     } else if (demoCall) {
       emit({ type: 'response.output_item.done', item: demoCall });
     } else if (proxyProofCall) {
@@ -159,7 +229,7 @@ const server = createServer((req, res) => {
     } else {
       emit({ type: 'response.output_item.added', item: { id: message, type: 'message', role: 'assistant', content: [] } });
       let replyChunks = ['Hello ', 'from your ', 'computer.'];
-      if (pdf || linkExample || prompt.includes('STAGE_B_')) replyChunks = [answer];
+      if (pdf || fileExample || prompt.includes('STAGE_B_')) replyChunks = [answer];
       for (const delta of replyChunks) {
         emit({ type: 'response.output_text.delta', delta });
         let delayMs = 500;

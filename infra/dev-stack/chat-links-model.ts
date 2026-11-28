@@ -1,3 +1,5 @@
+import { execToolCall } from './exec-tool-call.ts';
+
 export const chatLinksPrompt = 'CHAT_LINKS_PROOF';
 
 const longAddress = 'https://example.test/' + 'long-address-'.repeat(20);
@@ -16,8 +18,5 @@ export function chatLinksFileCall() {
   // Use the computer's ordinary file publication so the browser checks real shared-file access.
   const command = "mkdir -p /workspace/artifacts && printf 'A shared file for the link check.\\n' "
     + '> /workspace/artifacts/link-proof.txt';
-  const argumentsText = JSON.stringify({ cmd: command, max_output_tokens: 100 });
-  const input = `text(await tools.exec_command(${argumentsText}))`;
-  return { type: 'custom_tool_call', id: 'ct_chat_links', status: 'completed',
-    name: 'exec', call_id: 'call_chat_links', input };
+  return execToolCall(command, 'chat_links');
 }
