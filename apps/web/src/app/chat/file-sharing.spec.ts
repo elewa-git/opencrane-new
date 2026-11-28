@@ -30,7 +30,7 @@ function createSocket(): SocketLike {
 
 async function mountWorkspace() {
   const posted: unknown[] = [];
-  let responseStatus = 201;
+  let responseStatus = 200;
   function readRequest(input: RequestInfo | URL, init?: RequestInit) {
     const url = input instanceof Request ? input.url : String(input);
     const path = new URL(url, location.origin).pathname;
@@ -38,6 +38,10 @@ async function mountWorkspace() {
     if (path === '/auth/me') body = { authenticated: true, user: { name: 'Sam' } };
     if (path === '/api/chat') body = { memberId: 'me', assistantId: 'assistant' };
     if (path === '/api/conversations') body = { rows: [conversation] };
+    if (path.includes('/changes/')) {
+      const missing = new Response('{}', { status: 404 });
+      return Promise.resolve(missing);
+    }
     if (path.includes('/messages')) {
       if (init?.method === 'POST') {
         if (typeof init.body !== 'string') throw new Error('Expected a JSON message');
@@ -88,6 +92,8 @@ async function requestsFileInOneStep() {
   context.share.click();
   await context.fixture.whenStable();
   expect(context.posted).toHaveLength(1);
+  expect(context.fixture.componentInstance['draft']()).toBe('');
+  expect(context.fixture.componentInstance['chat'].error()).toBe('');
   expect(context.posted[0]).toMatchObject({
     text: `Please share a fresh copy of "${filePath}" in this chat.`,
   });
@@ -130,11 +136,13 @@ async function blocksUnavailableSessions() {
   context.share.click();
   expect(context.posted).toHaveLength(0);
   chat.computer.set('ready');
-  chat.rows.update(function closeSession(rows) {
+  const rows = chat.rows();
+  function closeSession() {
     const closed = { id: 'close', position: 4, type: 'conversation.closed' as const, time,
       data: { conversationId: 'chat', closedBy: 'me' } };
     return [...rows, closed];
-  });
+  }
+  chat.rows.update(closeSession);
   context.fixture.detectChanges();
   expect(context.share.disabled).toBe(true);
   context.share.click();
@@ -151,9 +159,41 @@ async function keepsRefusedRequestVisible() {
   await context.fixture.whenStable();
   const chat = context.fixture.componentInstance['chat'];
   expect(context.posted).toHaveLength(1);
-  expect(chat.error()).not.toBe('');
+  expect(chat.denied()).toBe(true);
+  context.fixture.detectChanges();
+  expect(context.root.textContent).toContain('You no longer have access');
   expect(context.root.querySelector('oc-conversation-file-card')).toBeNull();
   context.fixture.destroy();
 }
 
 it('shows an access refusal without claiming the file was shared', keepsRefusedRequestVisible);
+
+async function retriesTheSameShareRequest() {
+  const context = await mountWorkspace();
+  context.setResponseStatus(503);
+  context.share.click();
+  await context.fixture.whenStable();
+  const workspace = context.fixture.componentInstance;
+  function requestQueued() {
+    context.fixture.detectChanges();
+    expect(workspace['chat'].queued()).toBe(true);
+    expect(workspace['chat'].busy()).toBe(false);
+  }
+  await vi.waitFor(requestQueued);
+  expect(workspace['draft']()).toContain('Please share a fresh copy of');
+  expect(context.share.disabled).toBe(true);
+  context.setResponseStatus(200);
+  const retry = context.root.querySelector<HTMLButtonElement>('.composer-dock .connection-strip button');
+  expect(retry?.textContent).toBe('Retry');
+  retry?.click();
+  function requestSent() {
+    expect(context.posted).toHaveLength(2);
+    expect(workspace['draft']()).toBe('');
+  }
+  await vi.waitFor(requestSent);
+  expect(context.posted[1]).toEqual(context.posted[0]);
+  context.fixture.destroy();
+}
+
+it('keeps a failed Share request visible and retries the original message once',
+  retriesTheSameShareRequest);

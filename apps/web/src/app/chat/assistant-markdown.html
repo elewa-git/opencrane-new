@@ -78,7 +78,7 @@
             {{ fileLabel(part.text, path) }}
           </button>
         } @else {
-          <span class="workspace-file-note">{{ unsharedFileName(part.href) }} — not shared by the agent.</span>
+          <ng-container *ngTemplateOutlet="unshared; context: { $implicit: part.href }" />
         }
       }
       @case ('workspace-image') {
@@ -86,7 +86,7 @@
           <img class="workspace-image" [src]="imageUrl(path)" [alt]="part.text"
             loading="lazy" referrerpolicy="no-referrer">
         } @else {
-          <span class="workspace-file-note">{{ unsharedFileName(part.href) }} — not shared by the agent.</span>
+          <ng-container *ngTemplateOutlet="unshared; context: { $implicit: part.href }" />
         }
       }
       @case ('citation') {
@@ -97,5 +97,14 @@
       }
       @case ('text') {<ng-container>{{ part.text }}</ng-container>}
     }
+  }
+</ng-template>
+<ng-template #unshared let-link>
+  <span class="workspace-file-note">{{ unsharedFileName(link) }} — not shared by the agent.</span>
+  @if (sharingAllowed()) {
+    <button type="button" class="workspace-file-share" [disabled]="sharingBlocked()"
+      [attr.aria-label]="'Share ' + unsharedFileName(link)" (click)="requestFileShare(link)">
+      Share
+    </button>
   }
 </ng-template>

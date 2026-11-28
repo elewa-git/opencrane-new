@@ -36,6 +36,41 @@ function refusesProviderKey(authorization: string | undefined) {
   const value = readFileSync(file, 'utf8').trim();
   return !value || authorization !== `Bearer ${value}`;
 }
+interface ModelInput {
+  type?: string;
+  role?: string;
+  content?: unknown;
+  output?: unknown;
+}
+interface ModelRequest {
+  stream?: boolean;
+  input?: ModelInput[];
+}
+function isModelInput(value: unknown): value is ModelInput {
+  if (typeof value !== 'object' || value === null) return false;
+  if ('type' in value && typeof value.type !== 'string') return false;
+  return !('role' in value) || typeof value.role === 'string';
+}
+function isModelRequest(value: unknown): value is ModelRequest {
+  if (typeof value !== 'object' || value === null) return false;
+  if ('stream' in value && typeof value.stream !== 'boolean') return false;
+  if (!('input' in value)) return true;
+  return Array.isArray(value.input) && value.input.every(isModelInput);
+}
+async function localFileExample(prompt: string, request: unknown, hasOutput: boolean) {
+  if (prompt.includes('CHAT_LINKS_PROOF')) {
+    const example = await import('./chat-links-model.ts');
+    const text = example.chatLinksText;
+    if (hasOutput) return { text };
+    return { text, call: example.chatLinksFileCall() };
+  }
+  const sharingPattern = 'make a short slide deck introducing yourself'
+    + '|Save notes for the slide deck|Save an antivirus test file|Please share a fresh copy of';
+  const sharingPrompt = new RegExp(sharingPattern, 'iu');
+  if (!sharingPrompt.test(prompt)) return undefined;
+  const example = await import('./file-sharing-model.ts');
+  return example.fileSharingExample(prompt, request, hasOutput);
+}
 const server = createServer((req, res) => {
   // Count arrivals even when the route or credential is refused.
   if (req.url?.startsWith('/v1/')) {
@@ -99,8 +134,9 @@ const server = createServer((req, res) => {
   req.on('end', () => { void (async () => {
     countProviderRequest(req.headers.authorization);
     if (process.env['MODEL_STUB_CAPTURE']) appendFileSync(process.env['MODEL_STUB_CAPTURE'], Buffer.concat(chunks).toString() + '\n', { mode: 0o600 });
-    const body = JSON.parse(Buffer.concat(chunks).toString()) as { stream?: boolean;
-      input?: Array<{ type?: string; role?: string; content?: unknown; output?: unknown }> };
+    const decoded: unknown = JSON.parse(Buffer.concat(chunks).toString());
+    if (!isModelRequest(decoded)) throw new Error('Invalid stand-in model request');
+    const body = decoded;
     if (body.stream === false) {
       const content = [{ type: 'output_text', text: 'OK' }];
       const output = [{ type: 'message', role: 'assistant', content }];
@@ -125,11 +161,8 @@ const server = createServer((req, res) => {
       answer = 'PDF reading failed.';
       if (code) answer = `The project code is ${code}.`;
     }
-    let linkExample: typeof import('./chat-links-model.ts') | undefined;
-    if (prompt.includes('CHAT_LINKS_PROOF')) {
-      linkExample = await import('./chat-links-model.ts');
-      answer = linkExample.chatLinksText;
-    }
+    const fileExample = await localFileExample(prompt, body, customOutput);
+    if (fileExample) answer = fileExample.text;
     const stopped = new AbortController();
     res.once('close', () => stopped.abort());
     res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -143,8 +176,8 @@ const server = createServer((req, res) => {
       demoCall = stageBModelCall(body);
       answer = stageBModelAnswer(body) ?? answer;
     }
-    if (linkExample && !customOutput) {
-      emit({ type: 'response.output_item.done', item: linkExample.chatLinksFileCall() });
+    if (fileExample?.call) {
+      emit({ type: 'response.output_item.done', item: fileExample.call });
     } else if (demoCall) {
       emit({ type: 'response.output_item.done', item: demoCall });
     } else if (proxyProofCall) {
@@ -159,7 +192,7 @@ const server = createServer((req, res) => {
     } else {
       emit({ type: 'response.output_item.added', item: { id: message, type: 'message', role: 'assistant', content: [] } });
       let replyChunks = ['Hello ', 'from your ', 'computer.'];
-      if (pdf || linkExample || prompt.includes('STAGE_B_')) replyChunks = [answer];
+      if (pdf || fileExample || prompt.includes('STAGE_B_')) replyChunks = [answer];
       for (const delta of replyChunks) {
         emit({ type: 'response.output_text.delta', delta });
         let delayMs = 500;

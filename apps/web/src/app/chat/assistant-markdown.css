@@ -24,8 +24,11 @@ pre code { padding: 0; background: transparent; }
 :host > :first-child { margin-top: 0; }
 
 :host > :last-child { margin-bottom: 0; }
-a:focus-visible, .workspace-file-link:focus-visible {
+a:focus-visible, .workspace-file-link:focus-visible, .workspace-file-share:focus-visible {
   outline: 2px solid var(--oc-accent-dark);
   outline-offset: 3px;
 }
 .workspace-file-link { overflow-wrap: anywhere; text-align: left; }
+.workspace-file-share { min-width: 44px; min-height: 44px; margin-left: 8px;
+  padding: 8px; color: var(--oc-accent-dark); text-decoration: underline; }
+.workspace-file-share:disabled { color: var(--oc-ink-muted); cursor: default; }

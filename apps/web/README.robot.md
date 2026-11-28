@@ -1231,7 +1231,7 @@ both widths. Remove also cancels the active upload. `npm run visual:chat` measur
 both controls, including cancellation, and checks named-file status, Retry and Send
 with multiple chips against an intercepted API.
 Composer and sent states were captured at 1280 and 390 px with intercepted
-replies in `docs/process/chat-attachments/`. Fresh-install qualification remains NOT RUN.
+replies in `docs/process/chat-attachments/`. The file-sharing journey records fresh-install checks separately from these intercepted captures.
 `file-drop.spec.ts` checks workspace drag events at the upload request boundary.
 The batch cases use Angular signals and run in `chat/upload-batch.spec.ts` with the
 other Angular tests.
@@ -1557,7 +1557,13 @@ against published files this viewer may open. Published PNG, JPEG, WebP and GIF
 image syntax loads inline through the same checked conversation file route as cards.
 Other published image syntax opens a file preview link. An unmatched or ambiguous
 name shows its file name and says the agent has not shared it. Other local file
-paths show the same note without exposing the path. Remote image syntax stays text;
+paths show the same note without exposing the path. Assistant replies in the workspace
+offer Share beside this note. It sends a visible request for a fresh copy through the
+normal message route. Only the server's scanned publication creates a file card.
+The action waits while the composer has a draft or attachments, another turn is active,
+a send needs checking, the session is closed or access is unavailable. A refused send
+keeps the request in the composer for its normal Retry. Member messages, colleague
+chats and temporary private replies do not offer this assistant action. Remote image syntax stays text;
 ordinary HTTPS and email links still work.
 `npm run visual:assistant-files-2` captures both widths with an intercepted API.
 `npm run visual:reply-images` captures inline images and
