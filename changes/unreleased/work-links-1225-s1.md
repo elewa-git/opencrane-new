@@ -4,7 +4,7 @@ viewer, and links to this app change pages without a reload. Unsafe schemes and 
 stay unlinked. Links support keyboard use and wrap on phones.
 
 Internal file-publication checks stay out of chat history, so publishing a shared
-file keeps the conversation readable. Older affected read tables need the existing
-offline conversation rebuild.
+file keeps the conversation readable. History reads also skip these internal rows
+when an older worker has already saved them, without needing a rebuild.
 
 The packaged model stand-in includes the helper used by chat-link checks.

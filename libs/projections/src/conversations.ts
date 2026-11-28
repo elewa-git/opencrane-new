@@ -272,6 +272,8 @@ async function collectWindowRows(db: Query, silo: string, conversationId: string
 
 export function isHiddenConversationRow(type: string, data: unknown, position: number,
   closedPosition: number) {
+  // Skip internal rows saved by older workers so history stays readable before a rebuild.
+  if (type === 'agent.file_publication_started') return true;
   if (closedPosition === 0 || position <= closedPosition) return false;
   // Keep human posts that were saved after close, but freeze all other displayed output.
   if (type !== 'message.posted') return true;

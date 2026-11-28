@@ -6,7 +6,7 @@ import { attachWebSocketServer } from '../src/websocket.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { chatFeedSchema } from '@opencrane/protocol';
-import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { sessionCookie } from '@opencrane/auth/testing';
@@ -127,13 +127,12 @@ afterAll(close);
 let stalePublicationPosition = 0;
 
 async function prepareStalePublicationHistory() {
-  const created = await appendAndAuthorise({
+  await appendAndAuthorise({
     subject: 'conversation-stale-publication', type: 'conversation.created', data: {
       conversationId: 'stale-publication', mode: 'agent_session',
       assistantId: 'personal', createdBy: 'alice',
     },
   });
-  await auth.handler.handle(created, pgDb(dbs.queue));
   await appendAndAuthorise({
     subject: 'conversation-stale-publication', type: 'message.posted', data: {
       conversationId: 'stale-publication', authorId: 'alice', authorKind: 'human',
@@ -152,7 +151,6 @@ async function prepareStalePublicationHistory() {
   // Recreate the row an older worker saved, without rebuilding the read table.
   await dbs.queue.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)', values);
 }
-beforeAll(prepareStalePublicationHistory);
 
 async function readsPastStalePublication(query: string) {
   const response = await request('GET', `/api/conversations/stale-publication/messages${query}`,
@@ -172,8 +170,6 @@ async function readsPastStalePublication(query: string) {
   expect(denied.statusCode).toBe(403);
 }
 const staleHistoryQueries = ['', '?since=0', '?tail=50', '?before=9007199254740991&limit=50'];
-it.each(staleHistoryQueries)('reads history past a stale internal publication row: %s',
-  readsPastStalePublication);
 
 async function listsSixtySessions() {
   for (let index = 0; index < 60; index++) {
@@ -398,3 +394,10 @@ async function admitsWhilePostingFollowUp() {
   }
 }
 it('admits a personal turn while a follow-up message is posted', admitsWhilePostingFollowUp);
+
+function stalePublicationHistoryChecks() {
+  beforeAll(prepareStalePublicationHistory);
+  it.each(staleHistoryQueries)('reads history past a stale internal publication row: %s',
+    readsPastStalePublication);
+}
+describe('history with rows saved by older workers', stalePublicationHistoryChecks);

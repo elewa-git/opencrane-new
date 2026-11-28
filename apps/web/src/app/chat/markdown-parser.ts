@@ -17,6 +17,7 @@ export interface MarkdownBlock {
 }
 
 function appLink(value: string): string | undefined {
+  // Treat only this origin as the app so external URLs cannot enter in-app navigation.
   if (/[\\\s]/u.test(value) || value.startsWith('//')) {
     return undefined;
   }
@@ -45,6 +46,7 @@ function safeLink(value: string): boolean {
 }
 
 function workspaceFileLink(value: string): boolean {
+  // Separate computer paths from app routes so files use the authorised shared-file viewer.
   if (/^file:/iu.test(value) || value.startsWith('/tmp/')) {
     return true;
   }

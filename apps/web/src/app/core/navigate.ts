@@ -8,5 +8,6 @@ export const NAVIGATE = new InjectionToken<Navigate>('NAVIGATE', {
 
 export function navigateInApp(url: string): void {
   history.pushState(null, '', url);
+  // Notify Angular to recreate the page because pushState does not emit popstate.
   window.dispatchEvent(new PopStateEvent('popstate'));
 }
