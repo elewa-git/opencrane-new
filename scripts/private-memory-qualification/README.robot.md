@@ -5,8 +5,8 @@ For people, read [README.md](README.md) first.
 ## Local qualification image build
 
 `build-images.mjs --id <slot> --revision <commit> --computer-only` builds only the
-computer for a pilot update. It keeps the same clean-source, licence and image
-identity checks. It also checks source reads and shared imports as UID 1000.
+computer for a pilot update. It checks for a clean checkout, reviews licences and verifies image identities.
+It also checks that UID 1000 can read the source and import shared code.
 It writes the normal private build record without a package image. The pilot
 update command separately requires both exact-source CI image approvals.
 

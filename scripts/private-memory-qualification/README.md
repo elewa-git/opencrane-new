@@ -32,7 +32,8 @@ flowchart LR
 ## What it is responsible for
 
 - Build images from one clean commit and save their checked identities in a spare slot.
-  Pilot updates can build just the computer, with the same licence and source-read checks.
+  Pilot updates can build just the computer, with the same licence checks
+  and checks that the computer user can read the source.
 - Read the permitted container and silo from deployment-owned configuration.
 - Stop each journey and its children when it exceeds a limit or the collector exits.
 - Measure the source revision, image, host, silo and installation before collecting results.

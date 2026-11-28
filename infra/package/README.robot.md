@@ -1108,13 +1108,16 @@ namespace a different ID and new volumes. An older export without a namespace
 ID still needs a separate slot or cluster.
 
 ```sh
-archive="$PRIVATE_DIR/pilot-backup-$BACKUP_ID.tar"
-read -r source_cluster source_namespace source_namespace_uid < "$archive.source"
-set -- "$archive" "$source_cluster" "$source_namespace"
-if [ -n "$source_namespace_uid" ]; then
-  set -- "$@" "$source_namespace_uid"
-fi
-node --experimental-strip-types infra/package/pilot-archive-import.ts "$@"
+(
+  set -eu
+  archive="$PRIVATE_DIR/pilot-backup-$BACKUP_ID.tar"
+  read -r source_cluster source_namespace source_namespace_uid < "$archive.source"
+  set -- "$archive" "$source_cluster" "$source_namespace"
+  if [ -n "$source_namespace_uid" ]; then
+    set -- "$@" "$source_namespace_uid"
+  fi
+  node --experimental-strip-types infra/package/pilot-archive-import.ts "$@"
+)
 ```
 
 Follow [Restore one pilot backup](#restore-one-pilot-backup) to stop the
@@ -1124,6 +1127,12 @@ drill install. Clear the drill through the guarded package cleanup after
 retaining its evidence.
 
 ## Update the running pilot
+
+The complete fresh-installation journey is not yet qualified. The update passed,
+but rehearsal cleanup interrupted the final browser checks after rollback.
+This command is not yet for a live installation. The
+[journey receipt](../../docs/process/work-pilot-1167-s3/journey.md) records what passed
+and what remains.
 
 `package-upgrade` updates a populated pilot on the same chart version. It keeps
 its volumes, sign-in settings, provider credentials and saved route. The operator

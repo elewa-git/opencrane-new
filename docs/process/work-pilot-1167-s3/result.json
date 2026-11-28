@@ -1,0 +1,15 @@
+{
+  "journey": "FAIL",
+  "successfulUpdateWidths": [
+    1280,
+    390
+  ],
+  "automaticRollbackImagesAndHealth": "PASS",
+  "postRollbackSignIn1280": "FAIL: rehearsal cleanup removed the installation",
+  "postRollbackFileAndReply": "NOT RUN",
+  "postRollback390": "NOT RUN",
+  "slot": 1,
+  "released": true,
+  "productCommit": "860daa5725ab8ca09bc380d42a810148ae88d2c8",
+  "finalServiceLogCapture": "PARTIAL: earlier logs retained; final capture unavailable after cleanup"
+}
