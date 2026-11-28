@@ -23,7 +23,7 @@ export interface PersonalToolContext {
   expiresAt: number;
 }
 
-/** Share verified account eligibility across selection, turn admission and per-call release. */
+/** Apply the same verified-account checks when choosing an account and using its key. */
 export async function selectedPersonalAccount(rows: StoredEvent[], serverRows: StoredEvent[],
   selection: Selection, loadConfiguration?: OAuthConfigurationLoader, toolName?: string) {
   const profile = foldConnection(rows);
@@ -43,15 +43,22 @@ export async function selectedPersonalAccount(rows: StoredEvent[], serverRows: S
   const original = foldConnection(originalRows);
   const originalAccount = original.data && connectionAccount(original.data.activation);
   if (original.sequence !== selection.profileRevision || !originalAccount ||
-      !sameAccountIdentity(verification.account, originalAccount)) return null;
+      !sameAccountIdentity(verification.account, originalAccount)) {
+    return null;
+  }
   const policy = toolPolicyFromRows(serverRows);
-  if (!matchesReviewedIdentity(policy, verification, toolName)) return null;
+  if (!matchesReviewedIdentity(policy, verification, toolName)) {
+    return null;
+  }
   function configurationCurrent() {
     return Promise.resolve(true);
   }
-  return { generation: saved.activation.generation, profileRevision: profile.sequence,
+  return {
+    generation: saved.activation.generation,
+    profileRevision: profile.sequence,
     expiresAt: Math.min(verification.account.expiresAt, Date.parse(policy.expiresAt ?? '')),
-    configurationCurrent };
+    configurationCurrent,
+  };
 }
 
 type Policy = ReturnType<typeof toolPolicyFromRows>;

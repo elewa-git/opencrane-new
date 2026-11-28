@@ -1,10 +1,13 @@
 export function credentialPatterns(material: string | undefined): string[] {
-  if (material === undefined) return [];
+  if (material === undefined) {
+    return [];
+  }
   const patterns = new Set<string>();
   for (const value of [material, `Bearer ${material}`]) {
     patterns.add(value);
-    patterns.add(Buffer.from(value).toString('base64'));
-    patterns.add(Buffer.from(value).toString('base64url'));
+    const bytes = Buffer.from(value);
+    patterns.add(bytes.toString('base64'));
+    patterns.add(bytes.toString('base64url'));
   }
   // Check eight-character pieces because every longer copied part contains one.
   for (let index = 0; index <= material.length - 8; index += 1) {
@@ -15,7 +18,9 @@ export function credentialPatterns(material: string | undefined): string[] {
 
 function containsCredentialPattern(value: string, patterns: string[]): boolean {
   for (const pattern of patterns) {
-    if (value.includes(pattern)) return true;
+    if (value.includes(pattern)) {
+      return true;
+    }
   }
   return false;
 }
@@ -35,10 +40,15 @@ function decodeUrlEscapes(value: string): string {
 
 function containsEncodedCredential(value: string, patterns: string[]): boolean {
   const encodedRuns = value.match(/[A-Za-z0-9+/_-]{8,}={0,2}/gu);
-  if (encodedRuns === null) return false;
+  if (encodedRuns === null) {
+    return false;
+  }
   for (const encoded of encodedRuns) {
-    const decoded = Buffer.from(encoded, 'base64url').toString('utf8');
-    if (containsCredentialPattern(decoded, patterns)) return true;
+    const decodedBytes = Buffer.from(encoded, 'base64url');
+    const decoded = decodedBytes.toString('utf8');
+    if (containsCredentialPattern(decoded, patterns)) {
+      return true;
+    }
   }
   return false;
 }
@@ -51,7 +61,9 @@ export function containsCredentialText(value: string, patterns: string[]): boole
       return true;
     }
     const decoded = decodeUrlEscapes(candidate);
-    if (decoded === candidate) return false;
+    if (decoded === candidate) {
+      return false;
+    }
     candidate = decoded;
   }
 }

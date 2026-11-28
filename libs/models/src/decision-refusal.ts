@@ -15,7 +15,8 @@ export function decisionError(error: unknown) {
   if (error instanceof BudgetRefused || error instanceof ModelRequestRefused ||
       error instanceof LoadedMemoryRefused || error instanceof MemoryToolRefused ||
       error instanceof PayingGroupRefused || error instanceof RoutineDispatchRefused ||
-      error instanceof AuthorityApplying || error instanceof NativeDelegationDisabled || error instanceof ConversationHistoryApplying) {
+      error instanceof AuthorityApplying || error instanceof NativeDelegationDisabled ||
+      error instanceof ConversationHistoryApplying) {
     return error.message;
   }
   return 'Request refused or decision service unavailable';
@@ -36,8 +37,9 @@ function decisionUnavailable(error: unknown): boolean {
 export function respondDecisionUnavailable(response: ServerResponse, error: unknown,
   requestId: string): boolean {
   if (error instanceof ConversationHistoryApplying) {
+    const body = { requestId, error: error.message };
     response.writeHead(503);
-    response.end(JSON.stringify({ requestId, error: error.message }));
+    response.end(JSON.stringify(body));
     return true;
   }
   if (!decisionUnavailable(error)) return false;

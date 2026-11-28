@@ -4,7 +4,9 @@ import type { z } from 'zod';
 type Activation = NonNullable<z.infer<typeof connectionCreatedDataSchema>['activation']>;
 
 export function connectionAccount(activation: Activation) {
-  if (activation.reason === 'oauth_confirmed') return activation.account;
+  if (activation.reason === 'oauth_confirmed') {
+    return activation.account;
+  }
   return verifiedBearerAccount(activation);
 }
 
@@ -22,7 +24,9 @@ export function selectedProfileMatches(saved: Saved, selection: Selection) {
 }
 
 export function verifiedBearerAccount(activation: Activation) {
-  if (activation.reason === 'oauth_confirmed') return undefined;
+  if (activation.reason === 'oauth_confirmed') {
+    return undefined;
+  }
   return activation.verification?.account;
 }
 

@@ -19,22 +19,32 @@ export interface PersonalKeySaveInput {
   material: string;
 }
 
-/** Check access and identity inside the existing save's profile lock, before staging a key. */
+/** Check access and identity under the profile lock before storing a key. */
 export function savePersonalKey(store: EventStore, binding: Binding, memberId: string,
   dependencies: PersonalKeyDependencies, input: PersonalKeySaveInput) {
   let serverId: string | undefined;
   async function verifyIdentity(rows: StoredEvent[], material: string) {
     const policy = toolPolicyFromRows(rows);
-    if (!policy.serverId || !policy.identityTool) throw new Error('Identity check unavailable');
+    if (!policy.serverId || !policy.identityTool) {
+      throw new Error('Identity check unavailable');
+    }
     serverId = policy.serverId;
     await requirePersonalConnectionAccess(store, binding, memberId, policy.serverId);
-    return verifyBearerIdentity({ rows, material,
-      ...(dependencies.network ? { network: dependencies.network } : {}) });
+    const identityInput = {
+      rows,
+      material,
+      ...(dependencies.network ? { network: dependencies.network } : {}),
+    };
+    return verifyBearerIdentity(identityInput);
   }
   async function confirmAccess() {
-    if (!serverId) throw new Error('Connection access unavailable');
+    if (!serverId) {
+      throw new Error('Connection access unavailable');
+    }
     const fresh = await requirePersonalConnectionAccess(store, binding, memberId, serverId, true);
-    if (!fresh) throw new Error('Connection access unavailable');
+    if (!fresh) {
+      throw new Error('Connection access unavailable');
+    }
     return fresh;
   }
   personalKeyCommandSchema.shape.material.parse(input.material);

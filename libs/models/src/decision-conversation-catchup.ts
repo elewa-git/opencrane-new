@@ -22,7 +22,9 @@ export function caughtUpConversation(store: EventStore, silo: string,
     return { conversation: rows.filter(captured), sequence: Math.min(sequence, capturedPosition) };
   }
   const ready = peekStreamSummary(store, silo, subject, decisionChatSummary, latest);
-  if (ready) return snapshot(ready.summary, ready.sequence);
+  if (ready) {
+    return snapshot(ready.summary, ready.sequence);
+  }
   startCatchup(store, silo, subject);
   throw new ConversationHistoryApplying();
 }
@@ -33,7 +35,9 @@ function startCatchup(store: EventStore, silo: string, subject: string) {
     subjects = new Set();
     pending.set(store, subjects);
   }
-  if (subjects.has(subject)) return;
+  if (subjects.has(subject)) {
+    return;
+  }
   subjects.add(subject);
   const activeSubjects = subjects;
   function complete() {

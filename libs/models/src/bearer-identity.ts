@@ -13,11 +13,19 @@ export interface BearerIdentityInput {
 }
 export class BearerIdentityRefused extends Error {}
 
-const registrationSchema = z.object({ kind: z.literal('remote'), locator: z.url() });
-const identitySchema = z.object({ jsonrpc: z.literal('2.0'), id: z.string(),
-  result: z.object({ isError: z.literal(false), structuredContent: z.object({
-    subject: z.string().regex(/^[\x21-\x7e]{1,255}$/u),
-  }) }) });
+const registrationFields = { kind: z.literal('remote'), locator: z.url() };
+const registrationSchema = z.object(registrationFields);
+const identityFields = { subject: z.string().regex(/^[\x21-\x7e]{1,255}$/u) };
+const identityResultFields = {
+  isError: z.literal(false),
+  structuredContent: z.object(identityFields),
+};
+const identityReplyFields = {
+  jsonrpc: z.literal('2.0'),
+  id: z.string(),
+  result: z.object(identityResultFields),
+};
+const identitySchema = z.object(identityReplyFields);
 
 /** Check only the admin's reviewed read-only tool; never accept a tool name from a member. */
 export async function verifyBearerIdentity(input: BearerIdentityInput) {
@@ -30,7 +38,9 @@ export async function verifyBearerIdentity(input: BearerIdentityInput) {
 
 async function checkIdentity(input: BearerIdentityInput) {
   const policy = toolPolicyFromRows(input.rows);
-  if (!policy.identityTool) return undefined;
+  if (!policy.identityTool) {
+    return undefined;
+  }
   function namedIdentity(tool: { name: string }) {
     return tool.name === policy.identityTool;
   }
@@ -46,27 +56,51 @@ async function checkIdentity(input: BearerIdentityInput) {
   const source = registrationSchema.parse(registration?.event.data);
   const network = input.network ?? {};
   const signal = AbortSignal.timeout(network.deadlineMs ?? 10_000);
-  const id = randomUUID();
-  const version = '2026-07-28';
-  const raw = JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: {
-    name: policy.identityTool, arguments: {},
-    _meta: { 'io.modelcontextprotocol/protocolVersion': version },
-  } });
-  const headers = { 'content-type': 'application/json', accept: 'application/json',
-    authorization: `Bearer ${input.material}`, 'mcp-protocol-version': version,
-    'mcp-method': 'tools/call', 'mcp-name': policy.identityTool,
-    'x-opencrane-mcp-revision': policy.catalogue?.schemaDigest };
+  const request = identityRequest(policy.identityTool, policy.catalogue?.schemaDigest, input.material);
   const target = await prepareRemote(source.locator, network, signal);
-  const reply = await exchangeRemote(target, raw, headers, network, signal, 16_384);
-  const text = new TextDecoder('utf-8', { fatal: true }).decode(reply.data);
+  const reply = await exchangeRemote(target, request.raw, request.headers, network, signal, 16_384);
+  const decoderOptions = { fatal: true };
+  const decoder = new TextDecoder('utf-8', decoderOptions);
+  const text = decoder.decode(reply.data);
   losslessJson(text);
-  const parsed = identitySchema.parse(JSON.parse(text));
+  const replyBody: unknown = JSON.parse(text);
+  const parsed = identitySchema.parse(replyBody);
   const subject = parsed.result.structuredContent.subject;
   const patterns = credentialPatterns(input.material);
-  if (parsed.id !== id || containsCredentialText(subject, patterns)) {
+  if (parsed.id !== request.id || containsCredentialText(subject, patterns)) {
     throw new Error('Identity check unavailable');
   }
-  const account = { issuer: source.locator, subject, scopes: [],
-    expiresAt: Number.MAX_SAFE_INTEGER };
+  const account = {
+    issuer: source.locator,
+    subject,
+    scopes: [],
+    expiresAt: Number.MAX_SAFE_INTEGER,
+  };
   return { toolName: tool.name, toolRevision: tool.revision, account };
+}
+
+function identityRequest(toolName: string, revision: string | undefined, material: string) {
+  const id = randomUUID();
+  const version = '2026-07-28';
+  const request = {
+    jsonrpc: '2.0',
+    id,
+    method: 'tools/call',
+    params: {
+      name: toolName,
+      arguments: {},
+      _meta: { 'io.modelcontextprotocol/protocolVersion': version },
+    },
+  };
+  const raw = JSON.stringify(request);
+  const headers = {
+    'content-type': 'application/json',
+    accept: 'application/json',
+    authorization: `Bearer ${material}`,
+    'mcp-protocol-version': version,
+    'mcp-method': 'tools/call',
+    'mcp-name': toolName,
+    'x-opencrane-mcp-revision': revision,
+  };
+  return { id, raw, headers };
 }
