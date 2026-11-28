@@ -39,10 +39,12 @@ async function includesPrivateProviderStartup() {
     await rm(directory, { recursive: true, force: true });
   }
 }
-test('the real Docker context includes provider custody startup and its runtime imports',
+void test('the real Docker context includes provider custody startup and its runtime imports',
   includesPrivateProviderStartup);
 
+/** @param {string} output */
 async function checksRecursiveRuntimeImports(output) {
+  /** @type {Record<string, string>} */
   const sources = {};
   const options = { recursive: true };
   const entries = await readdir(output, options);
