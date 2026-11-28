@@ -104,11 +104,16 @@ activation, wrapping and unshared-file refusal. It left `javascript:`, `http:`,
 result JSON are beside this receipt. Startup and service logs from the failed
 separate standard journey are retained in the private task receipt on the box.
 
-The pilot was not inspected. The rebuild condition applies to an installation
-only when its conversation read tables contain publication-start records; this
-run cannot establish whether the pilot has those rows. If an operator confirms
-the pilot has affected rows, stop conversation readers and workers, set the documented
-`DATABASE_URL` and projection-reader NATS settings, then run:
+The orchestrator checked the live pilot read table read-only at 01:33 UTC on
+28 November 2026. It found **0** `agent.file_publication_started` rows and no
+`agent.file%` rows at all. The pilot needs no rebuild for this issue today.
+This check was supplied by the orchestrator; this task did not access the pilot.
+
+History reads now skip publication-start rows already saved by older workers.
+Other installations do not need a rebuild to keep these conversations readable.
+An operator may still remove stale rows with an offline rebuild. That requires
+stopping conversation readers and workers and setting the documented
+`DATABASE_URL` and projection-reader NATS settings before running:
 
 ```sh
 npm run replay -- conversations --confirm-conversations-stopped
@@ -173,3 +178,56 @@ it in the small list of development files that ship.
 
 Raw output stays in the private task receipt. No development stack was claimed
 or changed during these corrections.
+
+## Existing-install history correction, 28 November 2026
+
+Source: `240c3dc30128f534a78609e89704540e7e30c7a6`.
+Fetching `origin` confirmed that `origin/main` at `d592e9890` was already an
+ancestor of this branch. No rebase was needed.
+
+The new database fixture recreates a publication-start row saved by an older
+worker. Before the fix, all four HTTP history modes returned 503: the full read,
+`since`, tail and older-page reads. The failing tests were committed first in
+`bc805fd10`. Raw output is retained as `stale-history-red.log`.
+
+The existing shared row filter now skips that internal event before the server
+checks display data. Both forward reads and older pages use this filter, as do
+live chat reads. The response keeps the saved newest position even when the last
+row is hidden. The worker still prevents new internal rows, and the projection
+test now checks the stored table directly as well as its readable output.
+The display test still requires internal publication details to be refused.
+The HTTP tests also require an unauthorised user to receive 403.
+
+The first combined run caught interference from the new fixture: its extra chat
+changed the existing test that lists exactly 60 sessions. The new fixture now
+starts in its own test group after those existing tests. No count assertion was
+changed. Raw output is retained as `stale-history-green-1.log`.
+
+The link parser comments explain why app links stay on the current origin and
+why computer file paths use the shared-file viewer. The navigation comment
+explains why Angular needs an explicit `popstate` after `pushState`. These are
+comment changes; the existing link and navigation tests check their behaviour.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Changed server, display and projection tests, twice | PASS | 31 tests per run; 51.76 and 56.44 seconds. |
+| Link and navigation tests, twice | PASS | 14 tests per run; 12.63 and 12.48 seconds after bundling. |
+| Related HTTP, streaming and legacy replay tests | PASS | Eight tests; 38.48 seconds. |
+| Closed-chat history, paging, sockets and replay | PASS | Two selected tests; 51.76 seconds. The other 67 tests were not selected. |
+| Repository typecheck | PASS | All workspaces, package and dev-stack checks completed. |
+| Event catalogue | PASS | 175 event types agree. |
+| Knip | PASS | No unused code findings; two existing configuration hints. |
+| Changelog, read limits, recorded lint limits and package READMEs | PASS | All checks completed. |
+| Changed-file ESLint and Markdown | PASS | No ESLint warnings; Markdown checked 610 files. |
+| Public privacy and secret scans | PASS | Tracked text and the branch changes were checked before push. |
+
+The added access assertions were checked by temporarily bypassing the final
+history access check. All four tests failed at their required 403 assertion:
+without that check, the existing participation refusal became 503. The original
+source was restored without a diff, then all four tests passed again in 20.10
+seconds. Raw output is in `fix2-access-mutation.log` and `fix2-access-restored.log`.
+
+Fresh journey for this correction: **NOT RUN**. The read change removes only an
+internal record that the chat UI cannot display. It changes no displayed row,
+link, navigation or API shape. The focused fresh-stack journey above remains
+**PASS** at both widths on its recorded source. No dev stack was claimed.
