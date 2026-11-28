@@ -73,6 +73,9 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
 }
 
 async function checkAuditLogPrivacy(origin: string) {
+  // Use synthetic private text, query, conversation path and bearer markers to test
+  // log redaction without real private data. Keep all three HTTP methods below
+  // to check that different request handling paths also hide these fields.
   const canaries = [
     'p3-19-private-text-canary',
     'p3-19-query-canary',
