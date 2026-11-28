@@ -144,6 +144,7 @@ jobs:
         run: >-
           nice -n 10 node --experimental-strip-types --test
           infra/dev-stack/model-stub.test.ts infra/dev-stack/models-environment.test.ts
+          infra/dev-stack/file-sharing-model.test.ts
           infra/dev-stack/mcp-resources.test.ts infra/dev-stack/mcp-hosted-fixture.test.ts
           infra/dev-stack/provider-setup.test.ts infra/dev-stack/daily-fresh.test.ts
           infra/dev-stack/daily-fresh-isolation.test.ts infra/dev-stack/secondary-models.test.ts

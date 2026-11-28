@@ -20,10 +20,13 @@ const origin = settings['ORIGIN'];
 assert(origin);
 const output = 'docs/process/work-share-1220-s1';
 const privateOutput = join(homedir(), '.fleet', 'receipts', 'share-1220-s1');
-await mkdir(output, { recursive: true });
-await mkdir(privateOutput, { recursive: true, mode: 0o700 });
+const publicDirectoryOptions = { recursive: true };
+await mkdir(output, publicDirectoryOptions);
+const privateDirectoryOptions = { recursive: true, mode: 0o700 };
+await mkdir(privateOutput, privateDirectoryOptions);
 const config = loadAuthConfig(await authEnv());
-const browser = await chromium.launch({ headless: false, channel: 'chromium' });
+const browserOptions = { headless: false, channel: 'chromium' };
+const browser = await chromium.launch(browserOptions);
 const results: object[] = [];
 
 async function signInMembers(browser: Browser, origin: string): Promise<Page[]> {
@@ -37,7 +40,8 @@ async function signInMembers(browser: Browser, origin: string): Promise<Page[]> 
     const page = await context.newPage();
     page.setDefaultTimeout(30_000);
     await page.goto(origin);
-    const signIn = page.getByRole('button', { name: 'Continue with single sign-on', exact: true });
+    const signInOptions = { name: 'Continue with single sign-on', exact: true };
+    const signIn = page.getByRole('button', signInOptions);
     await signIn.click();
     await completeProviderSignIn(page, member.login, password, origin, config.issuerUrl);
     pages.push(page);
@@ -50,15 +54,18 @@ function nextAnimationFrame(): Promise<number> {
 }
 
 async function screenshot(page: Page, name: string, width: number): Promise<void> {
+  // Allow one frame to paint the new layout and another to finish before recording it.
   await page.evaluate(nextAnimationFrame);
   await page.evaluate(nextAnimationFrame);
   const path = `${output}/${name}-${width}.png`;
   const mask = [page.locator('.current-user')];
-  await page.screenshot({ path, fullPage: true, mask });
+  const options = { path, fullPage: true, mask };
+  await page.screenshot(options);
 }
 
 function agentReplies(page: Page): Locator {
-  return page.getByRole('article', { name: 'Agent reply', exact: true });
+  const options = { name: 'Agent reply', exact: true };
+  return page.getByRole('article', options);
 }
 
 function sharedFileCard(page: Page, name: string): Locator {
@@ -71,42 +78,54 @@ async function approvePersona(page: Page): Promise<void> {
   await page.goto(`${origin}/welcome/survey`);
   const name = page.locator('#survey-name');
   await name.fill('Sam');
-  const continueButton = page.getByRole('button', { name: 'Continue', exact: true });
+  const continueButtonOptions = { name: 'Continue', exact: true };
+  const continueButton = page.getByRole('button', continueButtonOptions);
   await continueButton.click();
   const work = page.locator('#survey-work');
   await work.fill('I prepare clear presentations.');
   await continueButton.click();
-  const warm = page.getByRole('radio', { name: 'Warm', exact: true });
+  const warmOptions = { name: 'Warm', exact: true };
+  const warm = page.getByRole('radio', warmOptions);
   await warm.click();
-  const brief = page.getByRole('radio', { name: 'Brief', exact: true });
+  const briefOptions = { name: 'Brief', exact: true };
+  const brief = page.getByRole('radio', briefOptions);
   await brief.click();
   await continueButton.click();
-  const draftDocuments = page.getByRole('button', { name: 'Draft documents', exact: true });
+  const draftDocumentsOptions = { name: 'Draft documents', exact: true };
+  const draftDocuments = page.getByRole('button', draftDocumentsOptions);
   await draftDocuments.click();
-  const review = page.getByRole('button', { name: 'Review persona', exact: true });
+  const reviewOptions = { name: 'Review persona', exact: true };
+  const review = page.getByRole('button', reviewOptions);
   await review.click();
-  const savedPersona = page.getByRole('link', { name: 'Review saved persona', exact: true });
+  const savedPersonaOptions = { name: 'Review saved persona', exact: true };
+  const savedPersona = page.getByRole('link', savedPersonaOptions);
   await savedPersona.click();
-  const edit = page.getByRole('button', { name: 'Edit', exact: true });
+  const editOptions = { name: 'Edit', exact: true };
+  const edit = page.getByRole('button', editOptions);
   await edit.click();
   const persona = 'Your name is Aster. Be clear, honest and useful. '
     + 'Use your name in introductions and in the files you make.';
-  const personaField = page.getByRole('textbox', { name: 'Persona', exact: true });
+  const personaFieldOptions = { name: 'Persona', exact: true };
+  const personaField = page.getByRole('textbox', personaFieldOptions);
   await personaField.fill(persona);
-  const save = page.getByRole('button', { name: 'Save as new revision', exact: true });
+  const saveOptions = { name: 'Save as new revision', exact: true };
+  const save = page.getByRole('button', saveOptions);
   await save.click();
-  const approve = page.getByRole('button', { name: 'Approve this version', exact: true });
+  const approveOptions = { name: 'Approve this version', exact: true };
+  const approve = page.getByRole('button', approveOptions);
   await approve.click();
-  const approved = page.getByText('Approved revision r2', { exact: true });
+  const approvedOptions = { exact: true };
+  const approved = page.getByText('Approved revision r2', approvedOptions);
   await approved.waitFor();
   await screenshot(page, 'approved-persona', page.viewportSize()!.width);
-
 }
 
 async function preparePersona(page: Page): Promise<void> {
   await page.goto(`${origin}/welcome/persona`);
-  const approved = page.getByText('Approved revision r2', { exact: true });
-  const absent = page.getByText('No persona yet. Finish the survey first.', { exact: true });
+  const approvedOptions = { exact: true };
+  const approved = page.getByText('Approved revision r2', approvedOptions);
+  const absentOptions = { exact: true };
+  const absent = page.getByText('No persona yet. Finish the survey first.', absentOptions);
   const personaState = approved.or(absent);
   await personaState.waitFor();
   if (await approved.isVisible()) {
@@ -120,19 +139,25 @@ async function preparePersona(page: Page): Promise<void> {
 }
 
 function isPdfViewer(frame: Frame): boolean {
-  return frame.url().startsWith('chrome-extension:');
+  const url = frame.url();
+  return url.startsWith('chrome-extension:');
 }
 
 function pdfPagesLoaded(): boolean {
   const viewer = document.querySelector('pdf-viewer');
-  if (!viewer) return false;
+  if (!viewer) {
+    return false;
+  }
   const check: unknown = Reflect.get(viewer, 'getLoadSucceededForTesting');
-  if (typeof check !== 'function') return false;
+  if (typeof check !== 'function') {
+    return false;
+  }
   const loaded: unknown = Reflect.apply(check, viewer, []);
   return loaded === true;
 }
 
 async function waitForPdfPages(page: Page): Promise<void> {
+  // Check Chromium's PDF viewer because a ready iframe can still show blank pages.
   const frames = page.frames();
   let viewer = frames.find(isPdfViewer);
   if (!viewer) {
@@ -147,19 +172,22 @@ async function openAndDownload(page: Page, name: string, width: number): Promise
   const open = card.getByRole('button', openOptions);
   await open.click();
   const preview = page.locator('oc-file-preview');
-  const ready = preview.getByText('Preview ready', { exact: true });
+  const readyOptions = { exact: true };
+  const ready = preview.getByText('Preview ready', readyOptions);
   await ready.waitFor();
   if (name.endsWith('.pdf')) {
     const pdfFrame = preview.locator('iframe[title="Document preview"]');
     await pdfFrame.waitFor();
     await waitForPdfPages(page);
   } else {
-    const notes = preview.getByText('Aster: clear and useful work.', { exact: true });
+    const notesOptions = { exact: true };
+    const notes = preview.getByText('Aster: clear and useful work.', notesOptions);
     await notes.waitFor();
   }
   await screenshot(page, name.endsWith('.pdf') ? 'deck-preview' : 'notes-preview', width);
   const downloaded = page.waitForEvent('download');
-  const downloadLink = preview.getByRole('link', { name: 'Download original file', exact: false });
+  const downloadLinkOptions = { name: 'Download original file', exact: false };
+  const downloadLink = preview.getByRole('link', downloadLinkOptions);
   await downloadLink.click();
   const download = await downloaded;
   assert.equal(download.suggestedFilename(), name);
@@ -175,7 +203,8 @@ async function openAndDownload(page: Page, name: string, width: number): Promise
   }
   const result = { width, file: name, bytes: bytes.length, preview: 'PASS', download: 'PASS' };
   results.push(result);
-  const close = page.getByRole('button', { name: 'Close preview', exact: true });
+  const closeOptions = { name: 'Close preview', exact: true };
+  const close = page.getByRole('button', closeOptions);
   await close.click();
 }
 
@@ -184,13 +213,16 @@ async function checkShareAction(page: Page, width: number): Promise<void> {
   await sendUploadedMessage(page, prompt, 'Aster_notes.txt');
   const replies = agentReplies(page);
   const unshared = replies.last();
-  const note = unshared.getByText('Aster_notes.txt — not shared by the agent.', { exact: true });
+  const noteOptions = { exact: true };
+  const note = unshared.getByText('Aster_notes.txt — not shared by the agent.', noteOptions);
   await note.waitFor();
-  const share = unshared.getByRole('button', { name: 'Share Aster_notes.txt', exact: true });
+  const shareOptions = { name: 'Share Aster_notes.txt', exact: true };
+  const share = unshared.getByRole('button', shareOptions);
   const box = await share.boundingBox();
   assert(box && box.height >= 44 && box.width >= 44);
   await screenshot(page, 'not-shared', width);
-  const composer = page.getByRole('textbox', { name: 'Message your agent' });
+  const composerOptions = { name: 'Message your agent' };
+  const composer = page.getByRole('textbox', composerOptions);
   await composer.fill('An unfinished question');
   assert(await share.isDisabled());
   await composer.fill('');
@@ -198,8 +230,10 @@ async function checkShareAction(page: Page, width: number): Promise<void> {
   await share.focus();
   await share.press('Enter');
   const shared = replies.nth(priorReplies);
-  const done = shared.getByText('Done', { exact: true });
-  await done.waitFor({ timeout: 120_000 });
+  const doneOptions = { exact: true };
+  const done = shared.getByText('Done', doneOptions);
+  const completionOptions = { timeout: 120_000 };
+  await done.waitFor(completionOptions);
   const card = sharedFileCard(page, 'Aster_notes.txt');
   await card.waitFor();
   await screenshot(page, 'shared-notes', width);
@@ -212,14 +246,18 @@ async function checkScanRefusal(page: Page, width: number): Promise<void> {
   const replies = agentReplies(page);
   const priorReplies = await replies.count();
   const unshared = replies.last();
-  const share = unshared.getByRole('button', { name: 'Share antivirus-test.txt', exact: true });
+  const shareOptions = { name: 'Share antivirus-test.txt', exact: true };
+  const share = unshared.getByRole('button', shareOptions);
   await share.click();
   const reply = replies.nth(priorReplies);
-  const done = reply.getByText('Done', { exact: true });
-  await done.waitFor({ timeout: 120_000 });
+  const doneOptions = { exact: true };
+  const done = reply.getByText('Done', doneOptions);
+  const completionOptions = { timeout: 120_000 };
+  await done.waitFor(completionOptions);
   const failedAction = reply.locator('oc-tool-activity-line button:has([data-state="failed"])');
   await failedAction.click();
-  const refusal = reply.getByText('File refused: malware detected.', { exact: false });
+  const refusalOptions = { exact: false };
+  const refusal = reply.getByText('File refused: malware detected.', refusalOptions);
   await refusal.waitFor();
   const card = sharedFileCard(page, 'antivirus-test.txt');
   assert.equal(await card.count(), 0);
@@ -235,17 +273,22 @@ function fitsViewport(element: HTMLElement | SVGElement): boolean {
 async function checkWidth(page: Page): Promise<void> {
   const width = page.viewportSize()!.width;
   await page.goto(`${origin}/workspace`);
-  const composer = page.getByRole('textbox', { name: 'Message your agent' });
+  const composerOptions = { name: 'Message your agent' };
+  const composer = page.getByRole('textbox', composerOptions);
   await composer.waitFor();
-  const sessionsLoaded = page.getByText('Sessions loaded', { exact: true });
-  await sessionsLoaded.waitFor({ state: 'attached' });
+  const sessionsLoadedOptions = { exact: true };
+  const sessionsLoaded = page.getByText('Sessions loaded', sessionsLoadedOptions);
+  const sessionOptions = { state: 'attached' as const };
+  await sessionsLoaded.waitFor(sessionOptions);
   await page.keyboard.press('Control+n');
-  const draft = page.getByText('Draft', { exact: true });
+  const draftOptions = { exact: true };
+  const draft = page.getByText('Draft', draftOptions);
   await draft.waitFor();
   await sendUploadedMessage(page, 'make a short slide deck introducing yourself', 'I am Aster.');
   const replies = agentReplies(page);
   const reply = replies.last();
-  assert(!(await reply.innerText()).includes('Codex'));
+  const replyText = await reply.innerText();
+  assert(!replyText.includes('Codex'));
   const deck = sharedFileCard(page, 'Meet_Aster.pdf');
   await deck.waitFor();
   await screenshot(page, 'shared-deck', width);

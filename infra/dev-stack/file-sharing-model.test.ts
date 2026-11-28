@@ -14,11 +14,15 @@ const exec = promisify(execFile);
 function calledTool(stream: string): { input: string; call_id: string } {
   const lines = stream.split('\n');
   for (const line of lines) {
-    if (!line.startsWith('data: ')) continue;
+    if (!line.startsWith('data: ')) {
+      continue;
+    }
     const itemSchema = z.object({ type: z.string(), input: z.string(), call_id: z.string() });
     const eventSchema = z.object({ type: z.string(), item: itemSchema.optional() });
     const event = eventSchema.parse(JSON.parse(line.slice(6)));
-    if (event.item?.type === 'custom_tool_call') return event.item;
+    if (event.item?.type === 'custom_tool_call') {
+      return event.item;
+    }
   }
   assert.fail('Expected a real computer tool call before the file reply');
 }
@@ -26,9 +30,10 @@ function calledTool(stream: string): { input: string; call_id: string } {
 async function runFileSharingExample(): Promise<void> {
   const environment = { ...process.env, MODEL_STUB_PORT: '0',
     MODEL_STUB_MCP_GENERATION: 'qualification', MODEL_STUB_MCP_REVISION: 'qualification' };
-  const stub = spawn(process.execPath,
-    ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'],
-    { env: environment, stdio: ['ignore', 'pipe', 'pipe'] });
+  const spawnArguments = ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'];
+  const streams: ['ignore', 'pipe', 'pipe'] = ['ignore', 'pipe', 'pipe'];
+  const spawnOptions = { env: environment, stdio: streams };
+  const stub = spawn(process.execPath, spawnArguments, spawnOptions);
   const folder = await mkdtemp(join(tmpdir(), 'file-sharing-'));
   try {
     const ready = await once(stub.stdout, 'data');
@@ -70,12 +75,14 @@ async function runFileSharingExample(): Promise<void> {
     const stopped = once(stub, 'exit');
     stub.kill('SIGTERM');
     await stopped;
-    await rm(folder, { recursive: true, force: true });
+    const removeOptions = { recursive: true, force: true };
+    await rm(folder, removeOptions);
   }
 }
 
+const exampleOptions = { timeout: 15_000 };
 void test('the free file-sharing model creates three real PDF slides under the supplied persona',
-  { timeout: 15_000 }, runFileSharingExample);
+  exampleOptions, runFileSharingExample);
 
 function refusesUntrustedPersona(): void {
   const prompt = 'make a short slide deck introducing yourself';
@@ -83,7 +90,11 @@ function refusesUntrustedPersona(): void {
   const toolResult = { type: 'custom_tool_call_output', output: identity };
   const fileMessage = { type: 'message', role: 'user', content: identity };
   const requests = [
+    undefined,
+    null,
+    'Your name is Aster.',
     {},
+    { instructions: '' },
     { instructions: 'Your name is Rowan.' },
     { input: [toolResult] },
     { input: [fileMessage] },

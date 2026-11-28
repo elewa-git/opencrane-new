@@ -47,14 +47,24 @@ interface ModelRequest {
   input?: ModelInput[] | string;
 }
 function isModelInput(value: unknown): value is ModelInput {
-  if (typeof value !== 'object' || value === null) return false;
-  if ('type' in value && typeof value.type !== 'string') return false;
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  if ('type' in value && typeof value.type !== 'string') {
+    return false;
+  }
   return !('role' in value) || typeof value.role === 'string';
 }
 function isModelRequest(value: unknown): value is ModelRequest {
-  if (typeof value !== 'object' || value === null) return false;
-  if ('stream' in value && typeof value.stream !== 'boolean') return false;
-  if (!('input' in value) || typeof value.input === 'string') return true;
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  if ('stream' in value && typeof value.stream !== 'boolean') {
+    return false;
+  }
+  if (!('input' in value) || typeof value.input === 'string') {
+    return true;
+  }
   return Array.isArray(value.input) && value.input.every(isModelInput);
 }
 function requestInputs(request: ModelRequest): ModelInput[] {
@@ -68,15 +78,28 @@ async function localFileExample(prompt: string, request: unknown, hasOutput: boo
   if (prompt.includes('CHAT_LINKS_PROOF')) {
     const example = await import('./chat-links-model.ts');
     const text = example.chatLinksText;
-    if (hasOutput) return { text };
+    if (hasOutput) {
+      return { text };
+    }
     return { text, call: example.chatLinksFileCall() };
   }
-  const sharingPattern = 'make a short slide deck introducing yourself'
-    + '|Save notes for the slide deck|Save an antivirus test file|Please share a fresh copy of';
-  const sharingPrompt = new RegExp(sharingPattern, 'iu');
-  if (!sharingPrompt.test(prompt)) return undefined;
   const example = await import('./file-sharing-model.ts');
   return example.fileSharingExample(prompt, request, hasOutput);
+}
+function isUserMessage(item: ModelInput): boolean {
+  return item.type === 'message' && item.role === 'user';
+}
+function isCustomOutput(item: ModelInput): boolean {
+  return item.type === 'custom_tool_call_output';
+}
+function isToolOutput(item: ModelInput): boolean {
+  return item.type === 'function_call_output' || isCustomOutput(item);
+}
+function outputText(item: ModelInput): string {
+  if (typeof item.output === 'string') {
+    return item.output;
+  }
+  return JSON.stringify(item.output ?? '');
 }
 const server = createServer((req, res) => {
   // Count arrivals even when the route or credential is refused.
@@ -142,7 +165,9 @@ const server = createServer((req, res) => {
     countProviderRequest(req.headers.authorization);
     if (process.env['MODEL_STUB_CAPTURE']) appendFileSync(process.env['MODEL_STUB_CAPTURE'], Buffer.concat(chunks).toString() + '\n', { mode: 0o600 });
     const decoded: unknown = JSON.parse(Buffer.concat(chunks).toString());
-    if (!isModelRequest(decoded)) throw new Error('Invalid stand-in model request');
+    if (!isModelRequest(decoded)) {
+      throw new Error('Invalid stand-in model request');
+    }
     const body = decoded;
     if (body.stream === false) {
       const content = [{ type: 'output_text', text: 'OK' }];
@@ -153,11 +178,14 @@ const server = createServer((req, res) => {
       return;
     }
     const input = requestInputs(body);
-    const user = input.findLastIndex(item => item.type === 'message' && item.role === 'user');
+    const user = input.findLastIndex(isUserMessage);
     const prompt = JSON.stringify(input[user]?.content ?? '');
     const pdf = prompt.includes('UPLOAD_PDF_PROOF') || prompt.includes('What is the project code in the attached PDF?');
-    const output = input.slice(user+1).filter(item => ['function_call_output', 'custom_tool_call_output'].includes(item.type ?? '')).map(item => typeof item.output === 'string' ? item.output : JSON.stringify(item.output ?? '')).join('\n');
-    const customOutput = input.slice(user+1).some(item => item.type === 'custom_tool_call_output');
+    const replies = input.slice(user + 1);
+    const toolReplies = replies.filter(isToolOutput);
+    const replyTexts = toolReplies.map(outputText);
+    const output = replyTexts.join('\n');
+    const customOutput = replies.some(isCustomOutput);
     const proxyProofCall = process.env['MODEL_STUB_PROXY_HOLD'] === '1' &&
       prompt.includes('PROXY_PROOF') && !output;
     const path = /\/workspace\/uploads\/[\w/-]+\/project\.pdf\.md/u.exec(prompt)?.[0];
@@ -169,7 +197,9 @@ const server = createServer((req, res) => {
       if (code) answer = `The project code is ${code}.`;
     }
     const fileExample = await localFileExample(prompt, body, customOutput);
-    if (fileExample) answer = fileExample.text;
+    if (fileExample) {
+      answer = fileExample.text;
+    }
     const stopped = new AbortController();
     res.once('close', () => stopped.abort());
     res.writeHead(200, { 'content-type': 'text/event-stream' });

@@ -11,6 +11,8 @@ export async function sendDraft(
 }
 
 export function canShareFile(chat: ChatSession, draft: WritableSignal<string>): boolean {
+  // Keep Share from replacing a draft or attaching files meant for another message.
+  // Let a queued request finish or retry before starting a different one.
   return chat.canSend('Share') && !chat.queued() && !draft()
     && chat.uploadBatch.chips().length === 0;
 }

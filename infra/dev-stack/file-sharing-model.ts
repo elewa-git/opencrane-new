@@ -1,3 +1,5 @@
+import { execToolCall } from './exec-tool-call.ts';
+
 const deckPrompt = 'make a short slide deck introducing yourself';
 const notesPrompt = 'Save notes for the slide deck without sharing them yet.';
 const scanPrompt = 'Save an antivirus test file without sharing it yet.';
@@ -40,19 +42,22 @@ output.extend(f'startxref\\n{start}\\n%%EOF\\n'.encode())
 (folder / 'Meet_Aster.pdf').write_bytes(output)
 `;
 
-function fileCall(command: string) {
-  const argumentsText = JSON.stringify({ cmd: command, max_output_tokens: 100 });
-  const input = `text(await tools.exec_command(${argumentsText}))`;
-  return { type: 'custom_tool_call', id: 'ct_file_sharing', status: 'completed',
-    name: 'exec', call_id: 'call_file_sharing', input };
+function hasApprovedPersona(request: unknown): boolean {
+  if (typeof request !== 'object' || request === null || !('instructions' in request)) {
+    return false;
+  }
+  // Read only the model's trusted instructions; tool replies and file text cannot set its identity.
+  const instructions = request.instructions;
+  return typeof instructions === 'string' && instructions.includes('Your name is Aster.');
 }
 
 export function fileSharingExample(prompt: string, request: unknown, hasOutput: boolean) {
   let command: string;
   let text: string;
-  if (prompt.toLowerCase().includes(deckPrompt)) {
+  const lowerPrompt = prompt.toLowerCase();
+  if (lowerPrompt.includes(deckPrompt)) {
     // Require the approved identity to reach the native model request before using it in a file.
-    if (!JSON.stringify(request).includes('Your name is Aster.')) {
+    if (!hasApprovedPersona(request)) {
       return { text: 'The file-sharing stand-in did not receive the approved Aster persona.' };
     }
     command = `python3 - <<'PY'\n${deckScript}PY`;
@@ -63,7 +68,8 @@ export function fileSharingExample(prompt: string, request: unknown, hasOutput: 
     text = '[My notes](/workspace/notes/Aster_notes.txt)';
   } else if (prompt.includes(scanPrompt)) {
     const eicar = 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*';
-    const encoded = Buffer.from(eicar).toString('base64');
+    const bytes = Buffer.from(eicar);
+    const encoded = bytes.toString('base64');
     command = `mkdir -p /workspace/notes && printf '%s' '${encoded}' | base64 -d `
       + '> /workspace/notes/antivirus-test.txt';
     text = '[Antivirus test](/workspace/notes/antivirus-test.txt)';
@@ -79,5 +85,6 @@ export function fileSharingExample(prompt: string, request: unknown, hasOutput: 
   if (hasOutput) {
     return { text };
   }
-  return { text, call: fileCall(command) };
+  const call = execToolCall(command, 'file_sharing');
+  return { text, call };
 }
