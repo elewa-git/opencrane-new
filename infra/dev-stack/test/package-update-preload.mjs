@@ -23,6 +23,7 @@ const computer = { metadata: { name: 'computer-one', uid: 'computer-id', resourc
       'sandbox.users.io/assistant': 'assistant-one' } },
     spec: { containers: [{ name: 'computer', image: oldImage }] },
   } }, status: { conditions: [] } };
+let desiredComputerMode = 'Running';
 const pvc = { metadata: { name: 'home-computer-one', uid: 'home-id',
   labels: { 'sandbox.users.io/computer': 'computer-one' },
   ownerReferences: [{ kind: 'Sandbox', name: 'computer-one', uid: 'computer-id', controller: true }] } };
@@ -34,7 +35,8 @@ const owner = {
 
 function snapshot() {
   writeFileSync(`${directory}/result.json`, JSON.stringify({ calls, gateway, revision,
-    computerImage: computer.spec.podTemplate.spec.containers[0].image }));
+    computerImage: computer.spec.podTemplate.spec.containers[0].image,
+    computerMode: computer.spec.operatingMode }));
 }
 
 async function execute(program, args) {
@@ -46,6 +48,7 @@ async function execute(program, args) {
       revision = args[0] === 'rollback' ? args[2] : '3';
       if (args[0] === 'rollback') values = structuredClone(previousValues);
       else values.images.computer = newImage;
+      if (args.includes('pilotUpdatePaused=false')) computer.spec.operatingMode = desiredComputerMode;
     } else if (args[0] === 'get') {
       stdout = JSON.stringify(args.includes('--revision') ? previousValues : values);
     }
@@ -98,6 +101,12 @@ async function execute(program, args) {
         } } }, status: { active: 1 } });
       }
       stdout = JSON.stringify({ items });
+    } else if (args.includes('scale') && args.includes('deployment/worker-computers') &&
+        args.includes('--replicas=1')) {
+      computer.spec.operatingMode = desiredComputerMode;
+    } else if (args.includes('--for=condition=Ready') && args.includes('pod/computer-one') &&
+        computer.spec.operatingMode === 'Suspended') {
+      throw new Error('An idle computer has no running Pod');
     } else if (args.includes('rollout') && process.env.UPDATE_FIXTURE_FAILURE === '1' && !failed) {
       failed = true;
       snapshot();
@@ -118,6 +127,10 @@ async function execute(program, args) {
       stdout = 'infra/package/chart/templates/untracked.yaml';
     }
   } else if (program === 'bash') {
+    if (process.env.UPDATE_FIXTURE_CONDITION === 'computer-idles-during-build') {
+      desiredComputerMode = 'Suspended';
+      computer.spec.operatingMode = 'Suspended';
+    }
     const recordFile = `${directory}/computer-build.json`;
     const record = { sourceRevision: 'a'.repeat(40), computer: { archive: 'image.tar',
       manifestDigest: `sha256:${'b'.repeat(64)}` } };

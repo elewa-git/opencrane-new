@@ -30,7 +30,7 @@ async function updateFixture(fail: boolean, condition = '') {
     const output = await execute(process.execPath, args, { env, timeout: 30_000 });
     const text = await readFile(join(directory, 'result.json'), 'utf8');
     const result = JSON.parse(text) as { gateway: string; revision: string;
-      computerImage: string; calls: string[][] };
+      computerImage: string; computerMode: string; calls: string[][] };
     return { ...result, output: output.stdout };
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -142,6 +142,15 @@ async function releasesLockWhenSourceChangesBeforeHelm() {
   assert.equal(result.calls.some(releasesLock), true);
 }
 
+async function leavesIdleComputerStateWithTheWorker() {
+  const result = await updateFixture(false, 'computer-idles-during-build');
+  assert.equal(result.output, '');
+  assert.equal(result.revision, '3');
+  assert.equal(result.computerMode, 'Suspended');
+  assert.equal(result.computerImage, `registry.invalid/package@sha256:${'b'.repeat(64)}`);
+  assert.equal(result.calls.some(isRollback), false);
+}
+
 test('an in-place update repairs the gateway that Helm resets', restoresGatewayAfterUpgrade);
 test('a failed update restores the recorded revision and its gateway', restoresGatewayAfterRollback);
 test('the update verifies its backup before changing the release', backsUpBeforeChangingRelease);
@@ -156,3 +165,5 @@ test('an expired scanner prevents rollback and keeps backup maintenance locked',
   retainsLockWhenRollbackCannotRestart);
 test('a source change before Helm releases the update lock without changing service',
   releasesLockWhenSourceChangesBeforeHelm);
+test('a computer that becomes idle during the build keeps its saved lifecycle state',
+  leavesIdleComputerStateWithTheWorker);
