@@ -46,6 +46,8 @@ export function checkModelSecrets(name: string, stored: SecretData,
 }
 
 function checkProviderSecrets(name: string, data: Record<string, string>, models: PackageModels) {
+  // Allow the fixed upstream so qualification can use its separate stand-in.
+  // Refuse embedded stand-in keys to keep the runtime Secrets free of fallback credentials.
   for (const key of Object.keys(data)) {
     if (key === 'MODEL_UPSTREAM' && models.qualification) {
       const upstreamBytes = Buffer.from(data[key]!, 'base64');
