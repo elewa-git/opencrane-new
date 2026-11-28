@@ -1172,7 +1172,8 @@ otherwise resets it to the chart placeholder. The command checks deployment
 readiness, server and model health, actual running computer digests and volume IDs.
 
 If applying an image or checking readiness fails, the command automatically
-returns to the recorded revision and each computer's earlier image and mode.
+returns to the recorded revision and each computer's earlier image. The restarted
+computer worker uses the saved events to decide which computers should run or sleep.
 It reapplies the gateway and checks health and the recorded identities again.
 An unconfirmed return keeps the backup lock and reports failure. Preserve the
 volumes and private logs before investigating. Never clear a retained lock until

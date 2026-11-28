@@ -76,9 +76,8 @@ export async function replaceComputerImages(owner: PackageOwner, saved: SavedCom
     podTemplate.spec.containers[0]!.image = image ?? computer.image;
     const replacement = { podTemplate };
     await patchComputer(owner, computer, replacement);
-    const resumed = { operatingMode: computer.mode };
-    await patchComputer(owner, computer, resumed);
   }
+  // Let the restarted worker choose Running or Suspended from the saved lifecycle events.
 }
 
 export async function checkComputerImages(owner: PackageOwner, saved: SavedComputer[],
@@ -88,7 +87,7 @@ export async function checkComputerImages(owner: PackageOwner, saved: SavedCompu
     if (current.spec.podTemplate.spec.containers[0]?.image !== (image ?? computer.image)) {
       throw new Error('The computer image differs from the recorded update');
     }
-    if (computer.mode === 'Running') {
+    if ((current.spec.operatingMode ?? 'Running') === 'Running') {
       await ownedKubectl(owner, ['-n', owner.namespace, 'wait', '--for=condition=Ready',
         `pod/${computer.name}`, '--timeout=120s'], 130_000);
       const actual = await ownedKubectl(owner, ['-n', owner.namespace, 'get', 'pod', computer.name,
