@@ -1,9 +1,37 @@
 # Populated pilot update and rollback
 
-Journey on a fresh dev stack: PASS
+Journey on a fresh dev stack: PARTIAL
 
-The earlier attempt failed because its rehearsal cleanup removed the package before
-the final browser checks. This rerun kept slot 1 installed until every check passed.
+The previous run passed on the earlier product code. The current fixes change
+rollback recovery, new-home checks and build cancellation, so that PASS does not
+qualify this revision. The complete fresh slot-1 journey must be repeated, including
+an operator-triggered corrupt-backup refusal before Helm and browser checks after
+refusal and rollback. Current live rerun: NOT RUN.
+
+Source tests reproduce the fleet restriction, backup race, interrupted rollback,
+new-home and build cancellation failures. After the fixes, all 42 focused update, builder and Docker permissions tests pass
+twice. The 18 focused backup tests also pass. Removing each of 14 guards independently makes its own
+negative test fail. The guard probes include both fleet entrypoints, scanner
+validity, recorded context and namespace, build source, tracked chart, selected
+rollback revision, recovery installation, backup images, computer identity,
+computer labels, home ownership and the running image digest.
+
+Own source checks: PASS for typecheck, `check:events` (175 event types), Knip,
+changelog, Markdown, README checks and public privacy and secret scans. Scoped
+ESLint passes for the builder files. The repository excludes infrastructure from
+ESLint; a separate ESLint check applied the function-size, parameter, complexity,
+depth and brace rules to the changed update modules, fixture and tests. It passed
+with no warnings. Full root suite: NOT RUN, as requested.
+
+The host admission check samples every 30 seconds. Slot 1 is free, but the load has
+not yet stayed below 6 for five minutes. No stack has been claimed for this rerun.
+The current task also has the fleet marker. The operator process for the disposable
+rehearsal needs separate authorisation; fleet commands must continue to refuse.
+
+## Previous run
+
+The earlier interrupted attempt was repeated before these fixes. That run kept
+slot 1 installed until every check below passed. Its result is historical evidence.
 
 ## Run details
 

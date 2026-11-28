@@ -10,8 +10,10 @@ const slot = process.env.DEV_STACK_ID;
 const directory = process.env.UPDATE_FIXTURE_DIRECTORY;
 const oldImage = `registry.invalid/package@sha256:${'a'.repeat(64)}`;
 const newImage = `registry.invalid/package@sha256:${'b'.repeat(64)}`;
+const reviewText = readFileSync('infra/package/reviewed-images.json', 'utf8');
+const review = JSON.parse(reviewText);
 const previousValues = {
-  chartVersion: JSON.parse(readFileSync('infra/package/reviewed-images.json')).chartVersion,
+  chartVersion: review.chartVersion,
   exposure: { public: { enabled: true } },
   images: { server: oldImage, web: oldImage, scanner: oldImage, computer: oldImage },
   scanner: { approvedSha: 'a'.repeat(64) },
@@ -171,7 +173,7 @@ function runLockScript(args) {
   return output;
 }
 
-function kubectlRead(args) {
+function clusterResource(args) {
   if (args.includes('namespace')) {
     const annotations = { 'opencrane.dev/worktree': owner.worktree, 'opencrane.dev/slot': slot };
     const result = { metadata: { uid: owner.namespaceUid, annotations } };
@@ -186,6 +188,14 @@ function kubectlRead(args) {
   }
   if (args.includes('secret')) {
     return secret();
+  }
+  return undefined;
+}
+
+function kubectlRead(args) {
+  const cluster = clusterResource(args);
+  if (cluster !== undefined) {
+    return cluster;
   }
   if (args.includes('sandboxes')) {
     if (condition === 'computer-labels') {
@@ -204,6 +214,10 @@ function kubectlRead(args) {
     }
     return JSON.stringify(result);
   }
+  return workloadRead(args);
+}
+
+function workloadRead(args) {
   if (args.includes('jobs')) {
     return jobs();
   }
@@ -254,6 +268,14 @@ function kubectl(args) {
       args.includes('--replicas=1')) {
     computer.spec.operatingMode = desiredComputerMode;
   }
+  checkWorkloadOutcome(args);
+  if (args.includes('delete') && args.includes(lockPod)) {
+    lockPod = '';
+  }
+  return kubectlRead(args);
+}
+
+function checkWorkloadOutcome(args) {
   if (args.includes('--for=condition=Ready') && args.includes('pod/computer-one') &&
       computer.spec.operatingMode === 'Suspended') {
     throw new Error('An idle computer has no running Pod');
@@ -262,10 +284,6 @@ function kubectl(args) {
     failed = true;
     throw new Error('Fixture rollout failed');
   }
-  if (args.includes('delete') && args.includes(lockPod)) {
-    lockPod = '';
-  }
-  return kubectlRead(args);
 }
 
 function git(args) {
@@ -345,7 +363,9 @@ function load(url, context, nextLoad) {
   }
   if (url.endsWith('/infra/package/publish-approved-images.mjs')) {
     return replacementModule(`
-      export function publishComputerImage() { return ${JSON.stringify(newImage)}; }
+      export function publishComputerImage() {
+        return ${JSON.stringify(newImage)};
+      }
       export function publishApprovedApplication() {
         return { image: ${JSON.stringify(newImage)}, runId: 'fixture' };
       }
@@ -355,8 +375,13 @@ function load(url, context, nextLoad) {
       }`);
   }
   if (url.endsWith('/infra/dev-stack/package-hosts.ts')) {
-    return replacementModule(`export async function checkPackageHosts() { return {}; }
-      export function publicHostRefusal() { return undefined; }`);
+    return replacementModule(`
+      export async function checkPackageHosts() {
+        return {};
+      }
+      export function publicHostRefusal() {
+        return undefined;
+      }`);
   }
   if (url.endsWith('/infra/package/scheduled-backup.ts')) {
     return replacementModule(`export async function showBackup() {
@@ -364,7 +389,9 @@ function load(url, context, nextLoad) {
         throw new Error('Backup bytes differ');
       }
       const images = ${JSON.stringify(previousValues.images)};
-      if (process.env.UPDATE_FIXTURE_CONDITION === 'backup-image') images.server = 'wrong-image';
+      if (process.env.UPDATE_FIXTURE_CONDITION === 'backup-image') {
+        images.server = 'wrong-image';
+      }
       return { images };
     }`);
   }
@@ -374,8 +401,12 @@ function load(url, context, nextLoad) {
   }
   if (url.endsWith('/infra/dev-stack/target.ts')) {
     return replacementModule(`
-      export async function targetConnection() { return { context: 'fixture' }; }
-      export async function targetRecorded() { return false; }`);
+      export async function targetConnection() {
+        return { context: 'fixture' };
+      }
+      export async function targetRecorded() {
+        return false;
+      }`);
   }
   const result = nextLoad(url, context);
   if (url.endsWith('/infra/dev-stack/packaged.ts')) {

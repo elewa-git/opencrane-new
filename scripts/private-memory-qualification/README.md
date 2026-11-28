@@ -140,6 +140,8 @@ helper stays open until both process reads and the live scan finish. A lost requ
 changed image or unreadable store leaves the result unfinished. A confirmed write
 remains a failure. One clean attempt is still only partial evidence; the full
 fresh-install journeys remain separate.
+Image builds stop their child processes when cancelled. A five-second grace period
+ends with forced termination if a child ignores the stop signal.
 Other tests use simulated observations and disposable containers to check refusal and cleanup.
 They do not qualify a deployment or enable memory.
 

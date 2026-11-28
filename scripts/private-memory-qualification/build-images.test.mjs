@@ -176,7 +176,7 @@ async function fixtureBuildImage() {
         + '\n    await new Promise(setImmediate);');
   } else if (signalPoint === 'after-write') {
     source = replaceFixtureCall(source,
-      "    if (signal.aborted) throw new Error('Image build cancelled');",
+      "    if (signal.aborted) {\n      throw new Error('Image build cancelled');\n    }",
       "    cancelBuild();\n"
         + "    if (signal.aborted) throw new Error('Image build cancelled');");
   }
@@ -336,6 +336,20 @@ function runningProcess(pid) {
   }
 }
 
+function killFixtureProcess(path) {
+  if (!existsSync(path)) {
+    return;
+  }
+  const pid = Number(readFileSync(path, 'utf8'));
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch (error) {
+    if (error.code !== 'ESRCH') {
+      throw error;
+    }
+  }
+}
+
 async function timeoutKillsNonCooperativeBuildTree() {
   const command = `trap '' TERM
 sh -c 'trap "" TERM; echo $$ > "$FAKE_DOCKER_LOG.grandchild"; exec sleep 60' &
@@ -367,17 +381,7 @@ wait`;
     clearTimeout(watchdog);
     // Clean up the deliberately uncooperative fixture even when the regression returns.
     for (const suffix of ['child', 'grandchild']) {
-      const path = `${fixture.dockerLog}.${suffix}`;
-      if (existsSync(path)) {
-        const pid = Number(readFileSync(path, 'utf8'));
-        try {
-          process.kill(pid, 'SIGKILL');
-        } catch (error) {
-          if (error.code !== 'ESRCH') {
-            throw error;
-          }
-        }
-      }
+      killFixtureProcess(`${fixture.dockerLog}.${suffix}`);
     }
     await build.catch(function expectedCancellation() {});
     rmSync(fixture.home, { recursive: true, force: true });

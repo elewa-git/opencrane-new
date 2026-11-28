@@ -610,18 +610,29 @@ async function createUpgradeSecret(owner: PackageOwner, secret: unknown) {
   }
 }
 
+function requirePilotOperator() {
+  if (process.env['OPENCRANE_FLEET_TASK'] !== undefined) {
+    throw new Error('Fleet tasks cannot update or roll back a pilot');
+  }
+}
+
 export async function upgradePackage() {
+  requirePilotOperator();
   const { publishApprovedApplication } = await import('../package/publish-approved-images.mjs');
   const owner = await checkedRelease();
   const { bootstrapImage, scannerSecret, serverImage } = await pilotUpgradeValues(owner);
   const conditions = await bootstrapConditions(owner);
-  if (!conditions.some(completed)) throw new Error('The original setup Job must be complete');
+  if (!conditions.some(completed)) {
+    throw new Error('The original setup Job must be complete');
+  }
   const revision = await command('git', ['rev-parse', 'HEAD']);
   const { requireUpdateSource } = await import('./pilot-update.ts');
   await requireUpdateSource(revision);
   const approvals = resolve(directory, 'release-approvals', revision);
   const approval = await publishApprovedApplication(approvals);
-  if (approval.image === serverImage) throw new Error('This application image is already installed');
+  if (approval.image === serverImage) {
+    throw new Error('This application image is already installed');
+  }
   await recordHostPreflight(owner, approval.image);
   await checkLiveExposure(owner);
   const scanner = await prepareUpgradeScanner(owner, scannerSecret, approvals);
@@ -640,7 +651,10 @@ async function applyPilotUpdate(owner: PackageOwner, previous: string, settings:
 }
 
 export async function rollbackPackage(revision: string) {
-  if (!/^[1-9][0-9]*$/u.test(revision)) throw new Error('Select a recorded Helm revision');
+  requirePilotOperator();
+  if (!/^[1-9][0-9]*$/u.test(revision)) {
+    throw new Error('Select a recorded Helm revision');
+  }
   const owner = await checkedRelease();
   const { rollbackPilot } = await import('./pilot-update.ts');
   await rollbackPilot(owner, revision);

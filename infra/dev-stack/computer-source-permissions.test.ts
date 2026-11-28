@@ -39,7 +39,9 @@ async function sourceRemainsReadableAfterPrivateExtraction() {
     await writeFile(join(directory, 'Dockerfile'), dockerfile);
     await execute('docker', ['build', '--quiet', '-t', tag, directory], { timeout: 120_000 });
     const script = `const fs = require('node:fs');
-      for (const file of ${JSON.stringify(files)}) fs.readFileSync('/' + file);`;
+      for (const file of ${JSON.stringify(files)}) {
+        fs.readFileSync('/' + file);
+      }`;
     const args = ['run', '--rm', '--network', 'none', '--read-only', '--user', '1000:1000',
       '--entrypoint', 'node', tag, '-e', script];
     await execute('docker', args, { timeout: 30_000 });

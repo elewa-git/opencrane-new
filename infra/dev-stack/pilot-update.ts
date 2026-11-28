@@ -32,7 +32,9 @@ async function volumeIds(owner: PackageOwner) {
   const output = await ownedKubectl(owner, ['-n', owner.namespace, 'get', 'pvc', '-o', 'json']);
   const list = JSON.parse(output) as { items: Array<{ metadata: { name: string; uid: string } }> };
   const result: Record<string, string> = {};
-  for (const item of list.items) result[item.metadata.name] = item.metadata.uid;
+  for (const item of list.items) {
+    result[item.metadata.name] = item.metadata.uid;
+  }
   return result;
 }
 
@@ -51,14 +53,18 @@ async function checkScanner(owner: PackageOwner, revision: string, margin = 0) {
   await mkdir(destination, { recursive: true, mode: 0o700 });
   for (const file of ['signatures.json', 'release.json']) {
     const encoded = secret.data[file];
-    if (!encoded) throw new Error('The recorded scanner files are missing');
+    if (!encoded) {
+      throw new Error('The recorded scanner files are missing');
+    }
     await writeFile(join(destination, file), Buffer.from(encoded, 'base64'), { mode: 0o600 });
   }
   const settings = { image: values.images['scanner'], approvedSha: values.scanner.approvedSha,
     manifestPath: join(destination, 'signatures.json'), releasePath: join(destination, 'release.json') };
   await readApprovedRelease(settings, Date.now());
   // Keep a full maintenance hour available before the old scanner approval expires.
-  if (margin) await readApprovedRelease(settings, Date.now() + margin);
+  if (margin) {
+    await readApprovedRelease(settings, Date.now() + margin);
+  }
 }
 
 async function recordUpdate(owner: PackageOwner, revision: string,
@@ -75,7 +81,9 @@ async function recordUpdate(owner: PackageOwner, revision: string,
 }
 
 function recordDirectory(record: UpdateRecord) {
-  if (!/^[a-f0-9-]{36}$/u.test(record.id)) throw new Error('The update record ID is invalid');
+  if (!/^[a-f0-9-]{36}$/u.test(record.id)) {
+    throw new Error('The update record ID is invalid');
+  }
   return join(directory, `pilot-update-${record.id}`);
 }
 
@@ -92,8 +100,12 @@ async function checkRecordedTarget(owner: PackageOwner, record: UpdateRecord) {
       record.namespaceUid !== owner.namespaceUid || record.releaseSecretUid !== owner.releaseSecretUid) {
     throw new Error('The update record belongs to another installation');
   }
-  if (!isDeepStrictEqual(await volumeIds(owner), record.volumes)) {
-    throw new Error('The pilot volumes differ from the recorded update');
+  const currentVolumes = await volumeIds(owner);
+  // Protect the recorded claims while keeping homes created after services restart.
+  for (const [name, uid] of Object.entries(record.volumes)) {
+    if (currentVolumes[name] !== uid) {
+      throw new Error('The pilot volumes differ from the recorded update');
+    }
   }
 }
 
@@ -110,11 +122,15 @@ async function buildComputer(record: UpdateRecord) {
   const trimmed = output.trim();
   const lines = trimmed.split('\n');
   const filename = lines.at(-1);
-  if (!filename) throw new Error('The computer build did not return its checked record');
+  if (!filename) {
+    throw new Error('The computer build did not return its checked record');
+  }
   const result = await readBoundedJson(filename) as {
     sourceRevision: string; computer: { archive: string; manifestDigest: string };
   };
-  if (result.sourceRevision !== revision) throw new Error('The computer source revision differs');
+  if (result.sourceRevision !== revision) {
+    throw new Error('The computer source revision differs');
+  }
   const image = await publishComputerImage(result.computer);
   await writeFile(join(recordDirectory(record), 'computer-image'), `${image}\n`, { mode: 0o600 });
   return image;
@@ -125,7 +141,9 @@ async function checkPilotHealth(owner: PackageOwner) {
   const script = `for (const url of ['http://127.0.0.1:8080/healthz',
     'http://127.0.0.1:43002/healthz/ready']) {
       const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-      if (!response.ok) throw new Error('Pilot health failed');
+      if (!response.ok) {
+        throw new Error('Pilot health failed');
+      }
     }`;
   await ownedKubectl(owner, ['-n', owner.namespace, 'exec', 'deployment/server', '-c', 'server',
     '--', 'node', '--input-type=module', '-e', script]);
@@ -152,10 +170,28 @@ async function restoreRelease(owner: PackageOwner, record: UpdateRecord) {
 
 export async function requireUpdateSource(revision: string) {
   const current = await command('git', ['rev-parse', 'HEAD']);
-  if (current !== revision) throw new Error('The approved source revision changed');
+  if (current !== revision) {
+    throw new Error('The approved source revision changed');
+  }
   await command('git', ['diff', '--quiet', 'HEAD', '--', 'infra/package/chart']);
   const untracked = await command('git', ['ls-files', '--others', '--', 'infra/package/chart']);
-  if (untracked) throw new Error('The chart contains untracked files');
+  if (untracked) {
+    throw new Error('The chart contains untracked files');
+  }
+}
+
+async function applyUpdateImages(owner: PackageOwner, record: UpdateRecord,
+  args: string[], image: string) {
+  await releaseCommand(owner, [...args, '--set', 'pilotUpdatePaused=true'], 180_000);
+  await ownedKubectl(owner, ['-n', owner.namespace, 'wait', '--for=delete', 'pod',
+    '-l', 'app in (server,worker-dispatcher,worker-computers)', '--timeout=60s'], 70_000);
+  await configureComputerGateway(owner);
+  await replaceComputerImages(owner, record.computers, image);
+  await releaseCommand(owner, [...args, '--set', 'pilotUpdatePaused=false'], 180_000);
+  await configureComputerGateway(owner);
+  await checkPilotHealth(owner);
+  await checkComputerImages(owner, record.computers, image);
+  await checkRecordedTarget(owner, record);
 }
 
 export async function updatePilot(owner: PackageOwner, previous: string, settings: string[],
@@ -180,19 +216,12 @@ export async function updatePilot(owner: PackageOwner, previous: string, setting
     const chart = resolve(root, 'infra/package/chart');
     const args = ['upgrade', owner.release, chart, '--reuse-values',
       '--history-max', '0', '--wait=false', '--set-string', `images.computer=${image}`];
-    for (const setting of settings) args.push('--set-string', setting);
+    for (const setting of settings) {
+      args.push('--set-string', setting);
+    }
     try {
       releaseBackupLock = false;
-      await releaseCommand(owner, [...args, '--set', 'pilotUpdatePaused=true'], 180_000);
-      await ownedKubectl(owner, ['-n', owner.namespace, 'wait', '--for=delete', 'pod',
-        '-l', 'app in (server,worker-dispatcher,worker-computers)', '--timeout=60s'], 70_000);
-      await configureComputerGateway(owner);
-      await replaceComputerImages(owner, record.computers, image);
-      await releaseCommand(owner, [...args, '--set', 'pilotUpdatePaused=false'], 180_000);
-      await configureComputerGateway(owner);
-      await checkPilotHealth(owner);
-      await checkComputerImages(owner, record.computers, image);
-      await checkRecordedTarget(owner, record);
+      await applyUpdateImages(owner, record, args, image);
       releaseBackupLock = true;
     } catch (cause) {
       logger.error({ err: cause }, 'Pilot update failed; restoring the recorded release');
@@ -206,7 +235,9 @@ export async function updatePilot(owner: PackageOwner, previous: string, setting
     }
   } finally {
     // Retain the backup lock if neither the update nor rollback could restore service.
-    if (releaseBackupLock) await updateBackupLock(owner, record.id, true);
+    if (releaseBackupLock) {
+      await updateBackupLock(owner, record.id, true);
+    }
   }
 }
 
@@ -224,11 +255,15 @@ async function readUpdateRecord() {
 
 export async function rollbackPilot(owner: PackageOwner, revision: string) {
   const record = await readUpdateRecord();
-  if (record.revision !== revision) throw new Error('Select the revision saved by this update');
+  if (record.revision !== revision) {
+    throw new Error('Select the revision saved by this update');
+  }
   const values = await installedValues(owner);
-  if (values.pilotRestore?.enabled) throw new Error('Rollback refuses a recovery installation');
+  if (values.pilotRestore?.enabled) {
+    throw new Error('Rollback refuses a recovery installation');
+  }
   await checkRecordedTarget(owner, record);
-  await requireIdleBackup(owner);
+  await requireIdleBackup(owner, record.id);
   await updateBackupLock(owner, record.id);
   await restoreRelease(owner, record);
   await updateBackupLock(owner, record.id, true);

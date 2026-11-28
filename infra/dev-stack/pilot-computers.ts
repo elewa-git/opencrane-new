@@ -14,7 +14,9 @@ async function readComputer(owner: PackageOwner, saved: SavedComputer) {
   const text = await ownedKubectl(owner, ['-n', owner.namespace, 'get', 'sandbox', saved.name,
     '-o', 'json']);
   const computer = JSON.parse(text) as Computer;
-  if (computer.metadata.uid !== saved.uid) throw new Error('The computer identity changed');
+  if (computer.metadata.uid !== saved.uid) {
+    throw new Error('The computer identity changed');
+  }
   return computer;
 }
 
@@ -52,7 +54,9 @@ async function suspendedComputer(owner: PackageOwner, saved: SavedComputer) {
     const computer = await readComputer(owner, saved);
     const pod = await ownedKubectl(owner, ['-n', owner.namespace, 'get', 'pod', saved.name,
       '--ignore-not-found', '-o', 'name']);
-    if (isFullySuspended(computer) && !pod) return computer;
+    if (isFullySuspended(computer) && !pod) {
+      return computer;
+    }
     await delay(500);
   }
   throw new Error('The computer did not stop before its image update');
@@ -93,7 +97,9 @@ export async function checkComputerImages(owner: PackageOwner, saved: SavedCompu
       const actual = await ownedKubectl(owner, ['-n', owner.namespace, 'get', 'pod', computer.name,
         '-o', 'jsonpath={.status.containerStatuses[0].imageID}']);
       const expected = (image ?? computer.image).split('@')[1];
-      if (!expected || !actual.endsWith(expected)) throw new Error('The running computer image differs');
+      if (!expected || !actual.endsWith(expected)) {
+        throw new Error('The running computer image differs');
+      }
     }
   }
 }

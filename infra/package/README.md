@@ -101,7 +101,9 @@ Not built yet:
    after verification. Workers and effects remain stopped.
 9. **An operator updates a pilot.** A new verified backup comes first. The approved
    images replace the running images and restart computers with their saved files.
-   A failed health check restores the previous images. Storage and sign-in stay in place.
+   A failed health check restores the previous images. An operator can resume an interrupted
+   rollback using the saved update record. New computer homes are kept. Fleet tasks cannot
+   run either command. Storage and sign-in stay in place.
 10. **A developer checks or removes an install.** Fresh-install checks use new storage
    and verify chat, its spending limit and unauthenticated refusal. Cleanup checks ownership before
    removing only that stack's package.

@@ -1128,15 +1128,19 @@ retaining its evidence.
 
 ## Update the running pilot
 
-The complete fresh-installation journey is not yet qualified. The update passed,
-but rehearsal cleanup interrupted the final browser checks after rollback.
-This command is not yet for a live installation. The
-[journey receipt](../../docs/process/work-pilot-1167-s3/journey.md) records what passed
-and what remains.
+The previous fresh-installation journey passed update, manual rollback and
+automatic rollback, including saved chats, file bytes and new replies at both
+screen widths. The current recovery fixes need that journey repeated, with an
+operator-triggered unsafe-update refusal before Helm changes. The
+[journey receipt](../../docs/process/work-pilot-1167-s3/journey.md) is the current
+account of qualification and remaining checks. The live pilot has not been changed.
 
 `package-upgrade` updates a populated pilot on the same chart version. It keeps
 its volumes, sign-in settings, provider credentials and saved route. The operator
-uses the worktree and slot that installed it. A maintenance window keeps people
+uses the worktree and slot that installed it. Both update and rollback refuse
+fleet tasks whenever `OPENCRANE_FLEET_TASK` is set, including an empty value.
+An operator without that marker can use either owned secondary slot.
+A maintenance window keeps people
 out of chat until the command finishes. Computer homes are retained but are not
 part of the backup.
 
@@ -1150,7 +1154,9 @@ Both CI image approvals must cover the exact checkout and still have their
 artifacts. Tracked changes and any untracked chart file refuse the update. The
 computer builder uses that clean commit, checks its image identity and runtime
 licences, and checks that its non-root user can read the source. Its checked
-archive is published by digest. The original scanner approval must remain valid
+archive is published by digest. The build has a 30-minute limit. Cancellation
+stops its child process group, then forces it to stop after a five-second grace
+period if needed. The original scanner approval must remain valid
 for another hour so there is time to return to it.
 
 Save the live slot separately from `DEV_STACK_ID` before any recovery drill:
@@ -1174,19 +1180,24 @@ in the slot's private `qualification-images` directory.
 
 The command checks scheduled and manual backup Jobs. It then holds the backup
 volume's exclusive lock so a new manual or scheduled backup cannot overlap Helm.
+A Job that starts while this update holds the lock cannot capture data and does
+not block recovery. A real capture or another operation's lock still refuses it.
 The first Helm update keeps the server and workers stopped. Computers stop,
 receive the new image and retain their home volume. The second Helm update starts
 services. Both updates reapply the private computer gateway address, because Helm
 otherwise resets it to the chart placeholder. The command checks deployment
-readiness, server and model health, actual running computer digests and volume IDs.
+readiness, server and model health, actual running computer digests and the IDs
+of every recorded volume. New computer homes created after restart are retained
+and do not change the recorded installation.
 
 If applying an image or checking readiness fails, the command automatically
 returns to the recorded revision and each computer's earlier image. The restarted
 computer worker uses the saved events to decide which computers should run or sleep.
 It reapplies the gateway and checks health and the recorded identities again.
 An unconfirmed return keeps the backup lock and reports failure. Preserve the
-volumes and private logs before investigating. Never clear a retained lock until
-an operator has checked the workloads and unfinished backup Jobs.
+volumes and private logs before investigating. The same recorded rollback can
+resume after an interrupted command. It checks the installation and reuses only
+its own retained lock and separate lock Pod. It never clears another operation's lock.
 
 A later sign-in, chat or file check can request the same recorded rollback:
 
@@ -1195,7 +1206,8 @@ infra/dev-stack/run.sh package-rollback --id "$PILOT_SLOT" --revision "$PREVIOUS
 ```
 
 `PREVIOUS_REVISION` is the `revision` in that pilot's private `pilot-update.json`.
-Rollback refuses another namespace, another release Secret, different volumes,
+Rollback refuses another namespace, another release Secret, missing or replaced
+recorded volumes,
 a recovery installation, an unrecorded revision, an active backup or an expired
 scanner approval. Reusing a revision number from a recovery slot is insufficient.
 After either command, sign in as an existing member, open the saved chat and file,

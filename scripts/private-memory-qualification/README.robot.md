@@ -22,7 +22,10 @@ full notice checker; the package uses the non-promoting candidate licence gate.
 The build checks Codex, the protection helper, native imports without
 source mounts, and the package layers. It never pushes, moves release tags, changes
 `sandbox-template.json`, starts a stack or approves deployment. Failure or
-cancellation leaves no `images.json`. The notice collector, licence checkers,
+cancellation leaves no `images.json`. A cancellation signal stops the active
+child's process group. After five seconds, forced termination stops children that
+ignored the signal. The pilot update applies a 30-minute build timeout.
+The notice collector, licence checkers,
 reviewed inventories and package layer test all come from the archived commit.
 The final record appears only after its complete contents have been written.
 

@@ -1,0 +1,65 @@
+{
+  "verdict": "PARTIAL",
+  "nodeTests": 42,
+  "nodeTestPasses": 2,
+  "backupTests": 18,
+  "guardProbes": [
+    {
+      "guard": "scanner-margin",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "context",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "namespace",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "computer-source",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "tracked-chart",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "rollback-revision",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "rollback-recovery",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "backup-image",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "computer-uid",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "computer-labels",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "home-owner",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "running-image",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "fleet-update",
+      "testFailsWithoutGuard": true
+    },
+    {
+      "guard": "fleet-rollback",
+      "testFailsWithoutGuard": true
+    }
+  ],
+  "liveRerun": "NOT RUN"
+}

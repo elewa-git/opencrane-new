@@ -45,7 +45,8 @@ flowchart LR
   The free file-sharing example creates a slide deck and checks sharing a file on request.
 - Check the claimed stack and protected target before private memory collection.
 - Check package hosts and require the free stand-in for fleet tasks. Record any explicit
-  local host-risk exception. Back up before updates and return failed updates to the saved images.
+  local host-risk exception. Back up before operator updates, return failed updates to the
+  saved images and let the operator resume an interrupted rollback. Refuse fleet maintenance.
 - Provide guarded demo checks and a daily fresh-stack check.
 
 Not built yet:
