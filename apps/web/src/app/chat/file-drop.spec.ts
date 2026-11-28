@@ -1,6 +1,4 @@
-import { TestBed } from '@angular/core/testing';
-import { SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
-import { Workspace } from './workspace';
+import { mountWorkspaceFixture } from '../../../test/support/workspace-fixture';
 
 const requests: { request: XMLHttpRequest; file: unknown }[] = [];
 const uploadKeys: string[] = [];
@@ -29,16 +27,8 @@ function fetchWorkspace(input: RequestInfo | URL) {
   return Promise.resolve(new Response(JSON.stringify(body)));
 }
 
-function createSocket(): SocketLike {
-  return {
-    readyState: 1, onopen: null, onclose: null, onerror: null, onmessage: null,
-    send: vi.fn(), close: vi.fn(),
-  };
-}
-
 async function renderWorkspace(width = 1280) {
   vi.stubGlobal('innerWidth', width);
-  vi.spyOn(globalThis, 'fetch').mockImplementation(fetchWorkspace);
   function ignoreRequest() {}
   function captureRequest(this: XMLHttpRequest, file: unknown) {
     requests.push({ request: this, file });
@@ -49,14 +39,7 @@ async function renderWorkspace(width = 1280) {
   vi.spyOn(XMLHttpRequest.prototype, 'open').mockImplementation(ignoreRequest);
   vi.spyOn(XMLHttpRequest.prototype, 'send').mockImplementation(captureRequest);
   vi.spyOn(XMLHttpRequest.prototype, 'setRequestHeader').mockImplementation(captureHeader);
-  history.replaceState({}, '', '/workspace?conversation=chat');
-  const provider = { provide: SOCKET_FACTORY, useValue: createSocket };
-  TestBed.configureTestingModule({ providers: [provider] });
-  const fixture = TestBed.createComponent(Workspace);
-  await fixture.whenStable();
-  const value: unknown = fixture.nativeElement;
-  if (!(value instanceof HTMLElement)) throw new Error('Missing workspace');
-  const root = value;
+  const { fixture, root } = await mountWorkspaceFixture(fetchWorkspace);
   function expectReady() {
     expect(root.querySelector('[aria-label="Attach"]')).not.toBeNull();
   }

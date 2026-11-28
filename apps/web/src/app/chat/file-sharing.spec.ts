@@ -1,6 +1,4 @@
-import { TestBed } from '@angular/core/testing';
-import { SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
-import { Workspace } from './workspace';
+import { mountWorkspaceFixture } from '../../../test/support/workspace-fixture';
 
 const time = '2026-11-28T05:00:00Z';
 const conversation = {
@@ -21,13 +19,6 @@ const question = {
   data: { authorId: 'me', text: 'Make slides introducing yourself' },
 };
 
-function createSocket(): SocketLike {
-  return {
-    readyState: 1, onopen: null, onclose: null, onerror: null, onmessage: null,
-    send: vi.fn(), close: vi.fn(),
-  };
-}
-
 async function mountWorkspace() {
   const posted: unknown[] = [];
   let responseStatus = 200;
@@ -35,37 +26,40 @@ async function mountWorkspace() {
     const url = input instanceof Request ? input.url : String(input);
     const path = new URL(url, location.origin).pathname;
     let body: object = {};
-    if (path === '/auth/me') body = { authenticated: true, user: { name: 'Sam' } };
-    if (path === '/api/chat') body = { memberId: 'me', assistantId: 'assistant' };
-    if (path === '/api/conversations') body = { rows: [conversation] };
+    if (path === '/auth/me') {
+      body = { authenticated: true, user: { name: 'Sam' } };
+    }
+    if (path === '/api/chat') {
+      body = { memberId: 'me', assistantId: 'assistant' };
+    }
+    if (path === '/api/conversations') {
+      body = { rows: [conversation] };
+    }
     if (path.includes('/changes/')) {
-      const missing = new Response('{}', { status: 404 });
+      const options = { status: 404 };
+      const missing = new Response('{}', options);
       return Promise.resolve(missing);
     }
     if (path.includes('/messages')) {
       if (init?.method === 'POST') {
-        if (typeof init.body !== 'string') throw new Error('Expected a JSON message');
+        if (typeof init.body !== 'string') {
+          throw new Error('Expected a JSON message');
+        }
         posted.push(JSON.parse(init.body) as unknown);
-        return Promise.resolve(new Response('{}', { status: responseStatus }));
+        const options = { status: responseStatus };
+        const response = new Response('{}', options);
+        return Promise.resolve(response);
       }
       body = { rows: [question, reply, completed], position: 3,
         generation: 1, computerState: 'ready' };
     }
-    return Promise.resolve(new Response(JSON.stringify(body)));
+    const response = new Response(JSON.stringify(body));
+    return Promise.resolve(response);
   }
   function setResponseStatus(status: number) {
     responseStatus = status;
   }
-  vi.spyOn(globalThis, 'fetch').mockImplementation(readRequest);
-  history.replaceState({}, '', '/workspace?conversation=chat');
-  const provider = { provide: SOCKET_FACTORY, useValue: createSocket };
-  TestBed.configureTestingModule({ providers: [provider] });
-  const fixture = TestBed.createComponent(Workspace);
-  await fixture.whenStable();
-  fixture.detectChanges();
-  const element: unknown = fixture.nativeElement;
-  if (!(element instanceof HTMLElement)) throw new Error('Missing workspace');
-  const root = element;
+  const { fixture, root } = await mountWorkspaceFixture(readRequest);
   function replyLoaded() {
     fixture.detectChanges();
     expect(root.querySelector('.workspace-file-note')?.textContent)
@@ -73,8 +67,11 @@ async function mountWorkspace() {
   }
   await vi.waitFor(replyLoaded);
   const share = root.querySelector<HTMLButtonElement>('.workspace-file-share');
-  expect(share?.textContent?.trim()).toBe('Share');
-  if (!share) throw new Error('Missing Share action');
+  const shareLabel = share?.textContent;
+  expect(shareLabel?.trim()).toBe('Share');
+  if (!share) {
+    throw new Error('Missing Share action');
+  }
   return { fixture, root, share, posted, setResponseStatus };
 }
 
@@ -94,9 +91,8 @@ async function requestsFileInOneStep() {
   expect(context.posted).toHaveLength(1);
   expect(context.fixture.componentInstance['draft']()).toBe('');
   expect(context.fixture.componentInstance['chat'].error()).toBe('');
-  expect(context.posted[0]).toMatchObject({
-    text: `Please share a fresh copy of "${filePath}" in this chat.`,
-  });
+  const request = { text: `Please share a fresh copy of "${filePath}" in this chat.` };
+  expect(context.posted[0]).toMatchObject(request);
   expect(context.root.querySelector('oc-conversation-file-card')).toBeNull();
   context.fixture.destroy();
 }
@@ -142,12 +138,9 @@ async function blocksUnavailableSessions() {
   chat.computer.set('ready');
   expect(chat.canSend('Share')).toBe(true);
   const rows = chat.rows();
-  function closeSession() {
-    const closed = { id: 'close', position: 4, type: 'conversation.closed' as const, time,
-      data: { conversationId: 'chat', closedBy: 'me' } };
-    return [...rows, closed];
-  }
-  chat.rows.update(closeSession);
+  const closed = { id: 'close', position: 4, type: 'conversation.closed' as const, time,
+    data: { conversationId: 'chat', closedBy: 'me' } };
+  chat.rows.set([...rows, closed]);
   expect(chat.canSend('Share')).toBe(false);
   expect(await chat.send('Share')).toBe(false);
   expect(context.posted).toHaveLength(0);
@@ -169,7 +162,7 @@ async function keepsRefusedRequestVisible() {
   expect(context.posted).toHaveLength(1);
   expect(chat.denied()).toBe(true);
   expect(chat.busy()).toBe(false);
-  expect(chat.active()).toBe(false);
+  expect(chat.active()).toBeUndefined();
   expect(chat.canSend('Share')).toBe(false);
   expect(await chat.send('Share')).toBe(false);
   expect(context.posted).toHaveLength(1);
@@ -210,3 +203,18 @@ async function retriesTheSameShareRequest() {
 
 it('keeps a failed Share request visible and retries the original message once',
   retriesTheSameShareRequest);
+
+async function blocksDeniedSessionBeforeSending() {
+  const context = await mountWorkspace();
+  const chat = context.fixture.componentInstance['chat'];
+  expect(chat.canSend('Share')).toBe(true);
+  // Keep the loaded assistant so this proves the access guard independently of refusal cleanup.
+  chat.denied.set(true);
+  expect(chat.canSend('Share')).toBe(false);
+  expect(await chat.send('Share')).toBe(false);
+  expect(context.posted).toHaveLength(0);
+  context.fixture.destroy();
+}
+
+it('refuses a direct send once access is denied, even with a loaded assistant',
+  blocksDeniedSessionBeforeSending);
