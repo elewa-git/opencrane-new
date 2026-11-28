@@ -1,0 +1,91 @@
+{
+  "productCommit": "e5feab8a6e7bd7a3bd2a6701e868e257ed79887f",
+  "journey": "PASS",
+  "slot": 1,
+  "pilotSlotExcluded": true,
+  "startedAt": "2026-11-28T11:49:10.525348+00:00",
+  "endedAt": "2026-11-28T12:05:16.336568+00:00",
+  "quietSecondsBeforeClaim": 328,
+  "loadBeforeClaim": 3.90771484375,
+  "startupExit": 0,
+  "teardownExit": 0,
+  "slotAfterTeardown": "free",
+  "startupPassLines": 3,
+  "corePassLines": 34,
+  "totalPassLines": 37,
+  "healthyEndpoints": 5,
+  "runningServices": 14,
+  "viewports": [
+    1280,
+    390
+  ],
+  "selectedScreenshots": 8,
+  "shippedCodeLines": 732,
+  "checks": {
+    "focused": {
+      "result": "PASS",
+      "tests": 82
+    },
+    "changedTestsSecond": {
+      "result": "PASS",
+      "tests": 10
+    },
+    "restoredAfterMutation": {
+      "result": "PASS",
+      "tests": 10
+    },
+    "mutationRejectedWrongCents": "PASS",
+    "packageNode": {
+      "result": "PASS",
+      "files": 37,
+      "tests": 1716
+    },
+    "packageVitestInitial": {
+      "result": "FAIL",
+      "passed": 259,
+      "failed": 1
+    },
+    "backupIsolated": {
+      "result": "PASS",
+      "tests": 24
+    },
+    "packageVitestSerial": {
+      "result": "PASS",
+      "files": 20,
+      "tests": 260
+    },
+    "typecheck": "PASS",
+    "events": "PASS",
+    "eventTypes": 175,
+    "knip": "PASS",
+    "changelog": "PASS",
+    "markdown": "PASS",
+    "privacy": "PASS",
+    "secrets": "PASS",
+    "supplementalEslintModules": 13,
+    "repositoryEslint": "PARTIAL: infrastructure is excluded",
+    "existingLintFindings": {
+      "coreDriverBefore": 5,
+      "coreDriverAfter": 5,
+      "testBefore": 25,
+      "testAfter": 25
+    }
+  },
+  "ci": {
+    "run": 46138382905,
+    "result": "PASS"
+  },
+  "applicationApproval": {
+    "run": 46138382638,
+    "result": "PASS",
+    "artifactsPresent": true
+  },
+  "scannerApproval": {
+    "run": 46138385145,
+    "result": "PASS",
+    "artifactsPresent": true
+  },
+  "optionalLongChatApprovalJourney": "NOT RUN",
+  "packagedBrowserInstall": "NOT RUN",
+  "independentReview": "NOT RUN"
+}

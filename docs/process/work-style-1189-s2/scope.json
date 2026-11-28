@@ -151,5 +151,9 @@
   "remainingSectionsInChangedFiles": [
     "browser-budgets.ts: budget editor and failure captures",
     "journey.ts: only the audit and budget call arguments change; the rest remains for another part"
-  ]
+  ],
+  "reviewedWithoutChanges": [
+    "infra/dev-stack/Dockerfile.stage-b: only an OpenSSL version pin changed"
+  ],
+  "shippedCodeLines": 732
 }
