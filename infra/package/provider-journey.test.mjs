@@ -16,7 +16,8 @@ import { finishBrowserReplies, navigateWithReplies, runShutdownStep, waitForBrow
 import { assertNoBrowserDisclosure, checkProviderArtifacts } from './provider-disclosure.ts';
 import { providerJourneyCoverage } from './provider-journey-coverage.ts';
 import { providerFailure, writeShutdownFailure } from './provider-failure.ts';
-import { providerEventDisclosureScript, qualificationRequestCountScript, withBudgetQualification,
+import { providerEventDisclosureScript, providerKeyModesScript, qualificationRequestCountScript,
+  withBudgetQualification,
   wrongKeyStatusScript }
   from './provider-probe.ts';
 import { createProviderConnection, finishSelectingProviderModels, providerSetup, saveProviderKey,
@@ -50,19 +51,28 @@ const recordShutdownFailure = writeShutdownFailure.bind(
   undefined, `${directory}/browser-shutdown.log`, secrets);
 
 async function kube(args) {
-  const result = await execute('kubectl', [...connection.args, '-n', owner.namespace, ...args],
-    { env: connection.environment, timeout: 180_000, maxBuffer: 4 * 1024 * 1024 });
+  const commandArgs = [...connection.args, '-n', owner.namespace, ...args];
+  const options = {
+    env: connection.environment,
+    timeout: 180_000,
+    maxBuffer: 4 * 1024 * 1024,
+  };
+  const result = await execute('kubectl', commandArgs, options);
   return result.stdout;
 }
 
 async function privateScript(script, input) {
   const args = [...connection.args, '-n', owner.namespace, 'exec', '-i', 'deployment/server',
     '-c', 'server', '--', 'node', '--input-type=module', '-e', script];
-  const child = execFile('kubectl', args, { env: connection.environment, timeout: 30_000 });
+  const options = { env: connection.environment, timeout: 30_000 };
+  const child = execFile('kubectl', args, options);
   const finished = once(child, 'exit');
-  child.stdin.end(JSON.stringify(input));
+  const serialisedInput = JSON.stringify(input);
+  child.stdin.end(serialisedInput);
   let result = '';
-  for await (const chunk of child.stdout) result += chunk.toString();
+  for await (const chunk of child.stdout) {
+    result += chunk.toString();
+  }
   const [exit] = await finished;
   assert.equal(exit, 0, 'Private inspection must finish without disclosing a key');
   return JSON.parse(result);
@@ -71,19 +81,27 @@ async function privateScript(script, input) {
 async function wrongKeyStatus() {
   const result = await privateScript(wrongKeyStatusScript, wrongCredential);
   assert.equal(result.status, 401, 'The same wrong credential receives HTTP 401 upstream');
-  outcomes.push({ check: 'wrong credential receives HTTP 401 from the separate stand-in',
-    result: 'PASS', status: result.status });
+  const outcome = {
+    check: 'wrong credential receives HTTP 401 from the separate stand-in',
+    result: 'PASS',
+    status: result.status,
+  };
+  outcomes.push(outcome);
 }
 
 async function login(role) {
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const viewport = { width: 1280, height: 900 };
+  const contextOptions = { viewport };
+  const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
   await watchBrowserReplies(page, origin, responses, inspectBrowserBody);
   page.setDefaultTimeout(30_000);
   const user = setup.users[role];
   assert(user, 'The claimed slot must have this separate test identity');
   await navigateWithReplies(page, origin, responses);
-  await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).click();
+  const signInOptions = { name: 'Continue with single sign-on', exact: true };
+  const signIn = page.getByRole('button', signInOptions);
+  await signIn.click();
   const password = await readFile(user.passwordFile, 'utf8');
   secrets.push(password.trim());
   await completeProviderSignIn(page, user.login, password, origin, setup.issuer);
@@ -91,23 +109,36 @@ async function login(role) {
 }
 
 async function capture(page, name, width) {
-  await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-  const body = await page.locator('body').innerText();
-  for (const secret of secrets) assert(!body.includes(secret), 'Visible text disclosed a key');
+  const viewport = { width, height: width === 390 ? 844 : 900 };
+  await page.setViewportSize(viewport);
+  const bodyLocator = page.locator('body');
+  const body = await bodyLocator.innerText();
+  for (const secret of secrets) {
+    assert(!body.includes(secret), 'Visible text disclosed a key');
+  }
   const fields = page.locator('input[type=password], input[type=email]');
   const addresses = page.getByText(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu);
-  await page.screenshot({ path: `${output}/${name}-${width}.png`, fullPage: true,
-    mask: [fields, addresses] });
+  const options = {
+    path: `${output}/${name}-${width}.png`,
+    fullPage: true,
+    mask: [fields, addresses],
+  };
+  await page.screenshot(options);
 }
 
 async function screenshots(page, name) {
-  for (const width of [1280, 390]) await capture(page, name, width);
-  await page.setViewportSize({ width: 1280, height: 900 });
+  for (const width of [1280, 390]) {
+    await capture(page, name, width);
+  }
+  const viewport = { width: 1280, height: 900 };
+  await page.setViewportSize(viewport);
 }
 
 async function invite(ownerPage, role, membershipRole) {
   const memberId = randomUUID();
-  const userName = setup.users[role].login.split('@')[0];
+  const user = setup.users[role];
+  const loginParts = user.login.split('@');
+  const userName = loginParts[0];
   const email = `${userName}@example.test`;
   const data = { commandId: randomUUID(), memberId, email, role: membershipRole,
     personalAssistant: 'provision', expectedSequence: 0 };
@@ -125,7 +156,8 @@ async function invite(ownerPage, role, membershipRole) {
     displayName: membershipRole === 'admin' ? 'Package admin' : 'Package member' };
   const joined = await postJourneyCommand(page, origin, '/members/join', join);
   assert.equal(joined.status(), 200, 'The separately signed-in person can accept');
-  assert.equal((await joined.json()).status, 'joined');
+  const joinedResult = await joined.json();
+  assert.equal(joinedResult.status, 'joined');
   return { page, memberId };
 }
 
@@ -144,94 +176,139 @@ async function waitForModels(page, providerId) {
   throw new Error('The selected models did not finish applying');
 }
 
-async function connect(admin) {
+async function openProviderSettings(admin) {
   step('open Settings', 'The person setting up the provider must reach Models & providers.');
   await navigateWithReplies(admin, `${origin}/workspace`, responses);
-  await admin.getByRole('link', { name: 'Settings', exact: true }).click();
-  await admin.getByRole('link', { name: /Models/ }).click();
-  await admin.getByRole('heading', { name: 'Models & providers', exact: true }).waitFor();
+  const settingsOptions = { name: 'Settings', exact: true };
+  const settings = admin.getByRole('link', settingsOptions);
+  await settings.click();
+  const modelsOptions = { name: /Models/ };
+  const models = admin.getByRole('link', modelsOptions);
+  await models.click();
+  const headingOptions = { name: 'Models & providers', exact: true };
+  const heading = admin.getByRole('heading', headingOptions);
+  await heading.waitFor();
   await screenshots(admin, budget ? 'owner-settings' : 'admin-settings');
+}
+
+async function checkNewKeyEntry(admin) {
   step('create provider connection', 'The saved connection must advance to its Key step.');
   await createProviderConnection(admin, 'Package free provider');
   const setup = providerSetup(admin);
   for (const width of [1280, 390]) {
     step(`new-key field at ${width}px`, 'Setup must offer one visible new-key field.');
-    await admin.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-    const key = setup.getByLabel('API key Required', { exact: true });
+    const viewport = { width, height: width === 390 ? 844 : 900 };
+    await admin.setViewportSize(viewport);
+    const keyOptions = { exact: true };
+    const key = setup.getByLabel('API key Required', keyOptions);
     assert.equal(await key.count(), 1, 'Setup offers exactly one new-key field');
     assert.equal(await key.isVisible(), true, 'A person can enter a new key');
     await capture(admin, 'new-key-entry', width);
   }
-  await admin.setViewportSize({ width: 1280, height: 900 });
+  const viewport = { width: 1280, height: 900 };
+  await admin.setViewportSize(viewport);
+}
+
+async function checkWrongProviderKey(admin) {
   step('save wrong synthetic key', 'Saving the key must advance to the Verify step.');
   await saveProviderKey(admin, wrongCredential);
-  await admin.getByRole('button', { name: 'Check provider reachability', exact: true }).waitFor();
+  const reachabilityOptions = { name: 'Check provider reachability', exact: true };
+  const reachability = admin.getByRole('button', reachabilityOptions);
+  await reachability.waitFor();
   const inventory = await readJourneyApi(admin, `${origin}/api/org/providers`);
-  const providerId = (await inventory.json()).rows[0].providerId;
+  const providers = await inventory.json();
+  const providerId = providers.rows[0].providerId;
   const providerUrl = `${origin}/api/org/providers/${providerId}`;
   step('wrong-key reachability', 'Verification must report failed reachability for the wrong key.');
   await verifyProvider(admin, providerUrl, 'Check provider reachability', 'fail');
-  const facts = setup.getByRole('region', { name: 'Provider verification facts', exact: true });
-  await facts.getByText('The test failed. Nothing else changed.', { exact: true }).waitFor();
+  const setup = providerSetup(admin);
+  const factsOptions = { name: 'Provider verification facts', exact: true };
+  const facts = setup.getByRole('region', factsOptions);
+  const failureOptions = { exact: true };
+  const failure = facts.getByText('The test failed. Nothing else changed.', failureOptions);
+  await failure.waitFor();
   await screenshots(admin, 'wrong-key-refused');
   step('wrong-key HTTP refusal', 'The private wrong-key probe must complete and return HTTP 401.');
   await wrongKeyStatus();
-  outcomes.push({ check: 'wrong key refused without disclosure', result: 'PASS' });
-  await setup.locator('footer').getByRole('button', { name: 'Back', exact: true }).click();
+  const outcome = { check: 'wrong key refused without disclosure', result: 'PASS' };
+  outcomes.push(outcome);
+  return { providerId, providerUrl, facts };
+}
+
+async function checkRightProviderKey(admin, providerUrl, facts) {
+  const setup = providerSetup(admin);
+  const footer = setup.locator('footer');
+  const backOptions = { name: 'Back', exact: true };
+  const back = footer.getByRole('button', backOptions);
+  await back.click();
   step('save right synthetic key', 'Saving the replacement must advance to the Verify step.');
   await saveProviderKey(admin, credential);
   step('right-key reachability', 'Verification must report successful provider reachability.');
   await verifyProvider(admin, providerUrl, 'Check provider reachability', 'pass');
   step('quoted model test', 'The agreed quoted test must produce a successful model answer.');
-  await admin.getByRole('button', { name: 'Read current price', exact: true }).click();
-  await admin.getByRole('checkbox', { name: /I agree to one priced test request/ }).check();
+  const priceOptions = { name: 'Read current price', exact: true };
+  const price = admin.getByRole('button', priceOptions);
+  await price.click();
+  const agreementOptions = { name: /I agree to one priced test request/ };
+  const agreement = admin.getByRole('checkbox', agreementOptions);
+  await agreement.check();
   await screenshots(admin, 'quoted-test');
   await verifyProvider(admin, providerUrl, 'Run priced test', 'pass');
-  await facts.getByText(/ answered$/u).waitFor();
+  const answer = facts.getByText(/ answered$/u);
+  await answer.waitFor();
   await screenshots(admin, 'model-test-passed');
-  await admin.getByRole('button', { name: 'Next', exact: true }).click();
+}
+
+async function selectProviderModels(admin, providerId) {
+  const nextOptions = { name: 'Next', exact: true };
+  const next = admin.getByRole('button', nextOptions);
+  await next.click();
   step('model selection', 'The selected chat models must finish applying.');
-  await admin.getByRole('checkbox', { name: /gpt-6\.1-sol/ }).check();
-  await admin.getByRole('checkbox', { name: /gpt-6-luna/ }).check();
-  await admin.getByRole('button', { name: 'Next', exact: true }).click();
+  const solOptions = { name: /gpt-6\.1-sol/ };
+  const sol = admin.getByRole('checkbox', solOptions);
+  await sol.check();
+  const lunaOptions = { name: /gpt-6-luna/ };
+  const luna = admin.getByRole('checkbox', lunaOptions);
+  await luna.check();
+  await next.click();
   await waitForModels(admin, providerId);
-  await admin.getByRole('button', { name: 'Next', exact: true }).click();
-  await admin.getByRole('button', { name: 'Go to Models', exact: true }).click();
+  await next.click();
+  const modelsOptions = { name: 'Go to Models', exact: true };
+  const models = admin.getByRole('button', modelsOptions);
+  await models.click();
+}
+
+async function switchOnProviderChats(admin, providerId) {
   step('select chat default', 'Selecting the chat default must save its model binding.');
   const chat = await selectChatDefault(admin, origin, providerId, 'gpt-6.1-sol');
   step('switch on member chats', 'Drained provider admission must allow member chats to switch on.');
-  await chat.getByRole('button', { name: 'Pause new calls', exact: true }).click();
-  await chat.getByRole('button', { name: 'Switch on member chats', exact: true }).click();
-  await chat.getByText('Member chats switched on', { exact: true }).waitFor();
+  const pauseOptions = { name: 'Pause new calls', exact: true };
+  const pause = chat.getByRole('button', pauseOptions);
+  await pause.click();
+  const switchOnOptions = { name: 'Switch on member chats', exact: true };
+  const switchOn = chat.getByRole('button', switchOnOptions);
+  await switchOn.click();
+  const statusOptions = { exact: true };
+  const status = chat.getByText('Member chats switched on', statusOptions);
+  await status.waitFor();
   await screenshots(admin, 'provider-switched-on');
-  outcomes.push({ check: 'Settings connects, tests, selects and switches on', result: 'PASS' });
+  const outcome = { check: 'Settings connects, tests, selects and switches on', result: 'PASS' };
+  outcomes.push(outcome);
 }
 
-const modeScript = `
-import { lstat, readdir, readFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
-const directory = '/var/lib/opencrane/provider-secrets/keys';
-const folder = await lstat(directory);
-const keys = [];
-for (const name of await readdir(directory)) {
-  const file = directory + '/' + name;
-  const details = await lstat(file);
-  const bytes = await readFile(file);
-  const hash = createHash('sha256');
-  hash.update(bytes);
-  keys.push({ mode: details.mode & 0o7777, uid: details.uid, digest: hash.digest('hex') });
+async function connect(admin) {
+  await openProviderSettings(admin);
+  await checkNewKeyEntry(admin);
+  const verification = await checkWrongProviderKey(admin);
+  await checkRightProviderKey(admin, verification.providerUrl, verification.facts);
+  await selectProviderModels(admin, verification.providerId);
+  await switchOnProviderChats(admin, verification.providerId);
 }
-function byDigest(first, second) {
-  return first.digest.localeCompare(second.digest);
-}
-keys.sort(byDigest);
-const state = { directoryMode: folder.mode & 0o7777, uid: folder.uid, keys };
-console.log(JSON.stringify(state));`;
-
 
 async function privateModes() {
-  const output = await kube(['exec', 'deployment/server', '-c', 'server', '--', 'node',
-    '--input-type=module', '-e', modeScript]);
+  const args = ['exec', 'deployment/server', '-c', 'server', '--', 'node',
+    '--input-type=module', '-e', providerKeyModesScript];
+  const output = await kube(args);
   const state = JSON.parse(output);
   assert.equal(state.directoryMode, 0o700);
   assert.equal(state.uid, 1000);
@@ -247,43 +324,69 @@ async function recreateProviderPod() {
   step('private modes before recreation',
     'Custody must have one uid 1000 key with 0600 files and a 0700 folder.');
   const before = await privateModes();
-  const pod = JSON.parse(await kube(['get', 'pods', '-l', 'app=server', '-o', 'json']));
+  const podArgs = ['get', 'pods', '-l', 'app=server', '-o', 'json'];
+  const podJson = await kube(podArgs);
+  const pod = JSON.parse(podJson);
   const oldUid = pod.items[0].metadata.uid;
-  const logs = await kube(['logs', pod.items[0].metadata.name, '--all-containers=true',
-    '--prefix=true', '--tail=-1']);
-  for (const secret of secrets) assert(!logs.includes(secret), 'Setup logs disclosed a key');
+  const logArgs = ['logs', pod.items[0].metadata.name, '--all-containers=true',
+    '--prefix=true', '--tail=-1'];
+  const logs = await kube(logArgs);
+  for (const secret of secrets) {
+    assert(!logs.includes(secret), 'Setup logs disclosed a key');
+  }
   const logOptions = { mode: 0o600 };
   await writeFile(`${directory}/provider-before-recreation.log`, logs, logOptions);
-  outcomes.push({ check: 'setup logs checked before Pod recreation', result: 'PASS' });
+  const logOutcome = { check: 'setup logs checked before Pod recreation', result: 'PASS' };
+  outcomes.push(logOutcome);
   step('recreate provider Pod', 'The replacement server Pod must become ready.');
-  await kube(['delete', 'pod', pod.items[0].metadata.name, '--wait=true']);
-  await kube(['rollout', 'status', 'deployment/server', '--timeout=180s']);
-  const replaced = JSON.parse(await kube(['get', 'pods', '-l', 'app=server', '-o', 'json']));
+  const deleteArgs = ['delete', 'pod', pod.items[0].metadata.name, '--wait=true'];
+  await kube(deleteArgs);
+  const rolloutArgs = ['rollout', 'status', 'deployment/server', '--timeout=180s'];
+  await kube(rolloutArgs);
+  const replacedJson = await kube(podArgs);
+  const replaced = JSON.parse(replacedJson);
   assert.notEqual(replaced.items[0].metadata.uid, oldUid);
   step('private modes after recreation', 'Recreation must preserve private modes and credential bytes.');
   const after = await privateModes();
   assert.deepEqual(after, before, 'Private modes and synthetic credential bytes survive recreation');
-  outcomes.push({ check: 'Pod recreation preserves synthetic credential bytes and modes', result: 'PASS',
-    directoryModeBefore: '0700', directoryModeAfter: '0700', fileModeBefore: '0600',
-    fileModeAfter: '0600', keys: after.keys.length });
+  const outcome = {
+    check: 'Pod recreation preserves synthetic credential bytes and modes',
+    result: 'PASS',
+    directoryModeBefore: '0700',
+    directoryModeAfter: '0700',
+    fileModeBefore: '0600',
+    fileModeAfter: '0600',
+    keys: after.keys.length,
+  };
+  outcomes.push(outcome);
 }
 
 async function memberChats(member) {
   for (const width of [1280, 390]) {
     step(`member chat at ${width}px`, 'A member message must receive the expected free-provider reply.');
-    await member.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    const viewport = { width, height: width === 390 ? 844 : 900 };
+    await member.setViewportSize(viewport);
     await navigateWithReplies(member, `${origin}/workspace`, responses);
-    const composer = member.getByRole('textbox', { name: 'Message your agent' });
-    await composer.waitFor({ timeout: 120_000 });
+    const composerOptions = { name: 'Message your agent' };
+    const composer = member.getByRole('textbox', composerOptions);
+    const waitOptions = { timeout: 120_000 };
+    await composer.waitFor(waitOptions);
     await member.keyboard.press('Control+n');
-    await member.getByText('Draft', { exact: true }).waitFor();
+    const draftOptions = { exact: true };
+    const draft = member.getByText('Draft', draftOptions);
+    await draft.waitFor();
     await composer.fill('Say hello briefly.');
     await composer.press('Enter');
-    const reply = member.getByRole('article', { name: 'Agent reply', exact: true });
-    await reply.getByText('Done', { exact: true }).waitFor({ timeout: 120_000 });
-    assert.equal(await reply.locator('.prose').innerText(), 'Hello from your computer.');
+    const replyOptions = { name: 'Agent reply', exact: true };
+    const reply = member.getByRole('article', replyOptions);
+    const doneOptions = { exact: true };
+    const done = reply.getByText('Done', doneOptions);
+    await done.waitFor(waitOptions);
+    const content = reply.locator('.prose');
+    assert.equal(await content.innerText(), 'Hello from your computer.');
     await capture(member, 'member-chat', width);
-    outcomes.push({ check: `member chat at ${width}px`, result: 'PASS' });
+    const outcome = { check: `member chat at ${width}px`, result: 'PASS' };
+    outcomes.push(outcome);
   }
 }
 
@@ -317,16 +420,25 @@ async function checkDisclosure() {
   async function readInstalledValues() {
     const args = ['get', 'values', owner.release, '--all', '-o', 'json',
       '--kube-context', owner.context, '-n', owner.namespace];
-    const result = await execute('helm', args, { env: connection.environment, timeout: 30_000,
-      maxBuffer: 4 * 1024 * 1024 });
+    const options = {
+      env: connection.environment,
+      timeout: 30_000,
+      maxBuffer: 4 * 1024 * 1024,
+    };
+    const result = await execute('helm', args, options);
     return result.stdout;
   }
   const reader = { kube, readLocalValues, readInstalledValues };
   const logs = await checkProviderArtifacts(reader, secrets);
   const inspected = await privateScript(providerEventDisclosureScript, secrets);
   assert(inspected.checkedEvents > 0);
-  outcomes.push({ check: 'keys absent from local and installed values, manifests, logs and events',
-    result: 'PASS', ...logs, checkedEvents: inspected.checkedEvents });
+  const outcome = {
+    check: 'keys absent from local and installed values, manifests, logs and events',
+    result: 'PASS',
+    ...logs,
+    checkedEvents: inspected.checkedEvents,
+  };
+  outcomes.push(outcome);
 }
 
 async function runProviderJourney() {
@@ -342,7 +454,8 @@ async function runProviderJourney() {
   const privateFileOptions = { mode: 0o600 };
   await writeFile(`${directory}/model-qualification-wrong-key`, wrongCredential, privateFileOptions);
   step('browser launch', 'Chromium must launch for the packaged journey.');
-  browser = await chromium.launch({ headless: true, channel: 'chromium' });
+  const browserOptions = { headless: true, channel: 'chromium' };
+  browser = await chromium.launch(browserOptions);
   step('owner sign-in', 'The owner must finish single sign-on into the fresh installation.');
   const ownerPage = await login('owner');
   step('admin invitation and sign-in', 'The separate admin must accept the owner invitation.');
@@ -362,16 +475,26 @@ async function runProviderJourney() {
   const browserDisclosure = { check: stage.check, result: 'PASS',
     checkedReplies: responses.length };
   outcomes.push(browserDisclosure);
-  const git = await execute('git', ['rev-parse', 'HEAD'], { cwd: root });
-  await writeFile(`${output}/result.json`, JSON.stringify({ status: 'PASS', source: git.stdout.trim(),
-    outcomes, paidCalls: 0, paidCents: 0 }, null, 2) + '\n');
+  const gitArgs = ['rev-parse', 'HEAD'];
+  const gitOptions = { cwd: root };
+  const git = await execute('git', gitArgs, gitOptions);
+  const result = {
+    status: 'PASS',
+    source: git.stdout.trim(),
+    outcomes,
+    paidCalls: 0,
+    paidCents: 0,
+  };
+  const serialisedResult = JSON.stringify(result, null, 2) + '\n';
+  await writeFile(`${output}/result.json`, serialisedResult);
   const completion = budget ? 'provider setup, charged turns and budget refusals'
     : 'provider Settings, refusal, private restart and member chats';
   console.log(`PASS packaged ${completion} at 1280/390`);
 }
 
 try {
-  await mkdir(output, { recursive: true });
+  const directoryOptions = { recursive: true };
+  await mkdir(output, directoryOptions);
   if (budget) {
     step('verify qualification', 'The separate free stand-in must be reachable before setup.');
     await withBudgetQualification(kube, readRequestCount, runProviderJourney);
@@ -381,7 +504,9 @@ try {
 } catch (error) {
   const failure = providerFailure(stage, error);
   outcomes.push(failure);
-  const git = await execute('git', ['rev-parse', 'HEAD'], { cwd: root });
+  const gitArgs = ['rev-parse', 'HEAD'];
+  const gitOptions = { cwd: root };
+  const git = await execute('git', gitArgs, gitOptions);
   const result = { status: 'FAIL', source: git.stdout.trim(), outcomes, paidCalls: 0, paidCents: 0 };
   const serialisedResult = JSON.stringify(result, null, 2) + '\n';
   await writeFile(`${output}/result.json`, serialisedResult);

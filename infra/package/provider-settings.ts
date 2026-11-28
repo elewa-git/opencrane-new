@@ -11,18 +11,25 @@ const verificationFacts = {
 } as const;
 type VerificationAction = keyof typeof verificationFacts;
 type VerificationOutcome = 'pass' | 'fail';
-const factSchema = z.object({ outcome: z.string() });
-const verificationStatus = z.object({
-  rows: z.array(z.object({ reachable: factSchema.optional(), modelAnswer: factSchema.optional() })),
-});
+const factFields = { outcome: z.string() };
+const factSchema = z.object(factFields);
+const verificationFields = {
+  reachable: factSchema.optional(),
+  modelAnswer: factSchema.optional(),
+};
+const verificationRow = z.object(verificationFields);
+const statusFields = { rows: z.array(verificationRow) };
+const verificationStatus = z.object(statusFields);
 
 export function providerSetup(page: Page): Locator {
-  return page.getByRole('dialog', { name: 'Connect a provider', exact: true });
+  const options = { name: 'Connect a provider', exact: true };
+  return page.getByRole('dialog', options);
 }
 
 export async function checkProviderStatus(page: Page): Promise<void> {
   const setup = providerSetup(page);
-  const check = setup.getByRole('button', { name: 'Check status', exact: true });
+  const options = { name: 'Check status', exact: true };
+  const check = setup.getByRole('button', options);
   if (await check.isVisible()) {
     await check.click();
   }
@@ -32,12 +39,17 @@ export async function verifyProvider(
   page: Page, providerUrl: string, action: VerificationAction, outcome: VerificationOutcome,
 ): Promise<void> {
   const setup = providerSetup(page);
-  const submit = setup.getByRole('button', { name: action, exact: true });
+  const options = { name: action, exact: true };
+  const submit = setup.getByRole('button', options);
   const verificationUrl = `${providerUrl}/verify`;
   function isSubmission(response: Response): boolean {
-    return response.url() === verificationUrl && response.request().method() === 'POST';
+    if (response.url() !== verificationUrl) {
+      return false;
+    }
+    const request = response.request();
+    return request.method() === 'POST';
   }
-  // Clicking starts the command. Wait for its reply before checking the saved outcome.
+  // Start the command with the click. Wait for its reply before checking the saved outcome.
   const submitted = page.waitForResponse(isSubmission);
   const [response] = await Promise.all([submitted, submit.click()]);
   assert.equal(response.status(), 200, 'Provider verification submission failed');
@@ -52,8 +64,11 @@ async function waitForVerificationFact(
   while (Date.now() < deadline) {
     const response = await readJourneyApi(page, providerUrl);
     assert.equal(response.status(), 200, 'Provider status read failed');
-    const result = verificationStatus.parse(await response.json());
-    if (result.rows[0]?.[fact]?.outcome === outcome) return;
+    const body = await response.json();
+    const result = verificationStatus.parse(body);
+    if (result.rows[0]?.[fact]?.outcome === outcome) {
+      return;
+    }
     await delay(100);
   }
   throw new Error('Provider verification did not reach the expected terminal outcome');
@@ -85,17 +100,25 @@ export async function selectChatDefault(page: Page, origin: string, providerId: 
 
 export async function createProviderConnection(page: Page, name: string): Promise<void> {
   const actions = page.locator('.page-actions');
-  await actions.getByRole('button', { name: 'Connect a provider', exact: true }).click();
+  const connectOptions = { name: 'Connect a provider', exact: true };
+  const connect = actions.getByRole('button', connectOptions);
+  await connect.click();
   const setup = providerSetup(page);
-  await setup.getByLabel('Connection name Required', { exact: true }).fill(name);
-  await setup.getByRole('button', { name: 'Next', exact: true }).click();
+  const nameOptions = { exact: true };
+  const nameField = setup.getByLabel('Connection name Required', nameOptions);
+  await nameField.fill(name);
+  const nextOptions = { name: 'Next', exact: true };
+  const next = setup.getByRole('button', nextOptions);
+  await next.click();
   await waitForProviderStep(page, 'Step 2 of 6 · Key');
 }
 
 async function waitForProviderStep(page: Page, title: string): Promise<void> {
   const setup = providerSetup(page);
-  const nextStep = setup.getByRole('heading', { name: title, exact: true });
-  const statusButton = setup.getByRole('button', { name: 'Check status', exact: true });
+  const headingOptions = { name: title, exact: true };
+  const nextStep = setup.getByRole('heading', headingOptions);
+  const statusOptions = { name: 'Check status', exact: true };
+  const statusButton = setup.getByRole('button', statusOptions);
   const enabledButtons = setup.locator('button:enabled');
   const check = statusButton.and(enabledButtons);
   const progress = nextStep.or(check);
@@ -103,7 +126,9 @@ async function waitForProviderStep(page: Page, title: string): Promise<void> {
   // Read the pending change through the control offered to the person; never resend it.
   while (Date.now() < deadline) {
     await progress.waitFor();
-    if (await nextStep.isVisible()) return;
+    if (await nextStep.isVisible()) {
+      return;
+    }
     // Keep the heading as a harmless click target if advancement removes Check status
     // while Playwright moves to it. Waiting only for the old button would miss that step.
     await progress.click();
@@ -113,13 +138,19 @@ async function waitForProviderStep(page: Page, title: string): Promise<void> {
 
 export async function enterProviderKey(page: Page, credential: string): Promise<void> {
   const setup = providerSetup(page);
-  await setup.getByRole('heading', { name: 'Step 2 of 6 · Key', exact: true }).waitFor();
-  await setup.getByLabel('API key Required', { exact: true }).fill(credential);
+  const headingOptions = { name: 'Step 2 of 6 · Key', exact: true };
+  const heading = setup.getByRole('heading', headingOptions);
+  await heading.waitFor();
+  const fieldOptions = { exact: true };
+  const field = setup.getByLabel('API key Required', fieldOptions);
+  await field.fill(credential);
 }
 
 export async function saveProviderKey(page: Page, credential: string): Promise<void> {
   await enterProviderKey(page, credential);
   const setup = providerSetup(page);
-  await setup.getByRole('button', { name: 'Save key', exact: true }).click();
+  const options = { name: 'Save key', exact: true };
+  const save = setup.getByRole('button', options);
+  await save.click();
   await waitForProviderStep(page, 'Step 3 of 6 · Verify');
 }

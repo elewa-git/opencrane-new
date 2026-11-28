@@ -10,10 +10,15 @@ import { pilotProjectionNames } from './pilot-projections.ts';
 import type { PilotRestoreOptions } from './pilot-restore.ts';
 
 const storeReference = descriptorSchema.shape.attempt.refine(isBoundStore);
-export const pilotDatabaseDetailsSchema = z.object({ databases: z.array(z.string()),
+const accessFields = { storeId: storeReference, modelId: storeReference };
+const accessObject = z.object(accessFields);
+const databaseFields = {
+  databases: z.array(z.string()),
   lsn: manifestSchema.shape.point.shape.lsn,
-  access: z.object({ storeId: storeReference, modelId: storeReference }).strict(),
-}).strict();
+  access: accessObject.strict(),
+};
+const databaseObject = z.object(databaseFields);
+export const pilotDatabaseDetailsSchema = databaseObject.strict();
 
 function isBoundStore(value: string) {
   return value !== 'pending';
@@ -30,14 +35,20 @@ export type CheckedPilotBackup = {
 };
 
 function validatePositions(manifest: CheckedPilotBackup['manifest'], providerMode?: boolean) {
-  const actualNames = Object.keys(manifest.point.checkpoints).sort();
+  const actualNames = Object.keys(manifest.point.checkpoints);
+  actualNames.sort();
   const expectedNames = pilotProjectionNames(providerMode);
-  const names = [...expectedNames, 'dispatcher'].sort();
-  if (!isDeepStrictEqual(actualNames, names)) throw new Error('Checkpoint inventory differs');
+  const names = [...expectedNames, 'dispatcher'];
+  names.sort();
+  if (!isDeepStrictEqual(actualNames, names)) {
+    throw new Error('Checkpoint inventory differs');
+  }
   const start = Date.parse(manifest.startedAt);
   const stop = Date.parse(manifest.stoppedAt);
   const complete = Date.parse(manifest.completedAt);
-  if (start > stop || stop > complete) throw new Error('Backup dates differ');
+  if (start > stop || stop > complete) {
+    throw new Error('Backup dates differ');
+  }
   for (const part of Object.values(manifest.parts)) {
     if (Date.parse(part.startedAt) < stop || Date.parse(part.finishedAt) > complete ||
         Date.parse(part.startedAt) > Date.parse(part.finishedAt)) {
@@ -49,9 +60,13 @@ function validatePositions(manifest: CheckedPilotBackup['manifest'], providerMod
 export async function checkPilotBackup(options: PilotRestoreOptions): Promise<CheckedPilotBackup> {
   const manifest = await showBackup(options.directory, options.id);
   if (manifest.silo !== options.silo || !isDeepStrictEqual(manifest.images, options.images) ||
-      Object.keys(options.images).length !== 8) throw new Error('Package version differs');
+      Object.keys(options.images).length !== 8) {
+    throw new Error('Package version differs');
+  }
   for (const image of Object.values(manifest.images)) {
-    if (!/@sha256:[a-f0-9]{64}$/u.test(image)) throw new Error('Image pin refused');
+    if (!/@sha256:[a-f0-9]{64}$/u.test(image)) {
+      throw new Error('Image pin refused');
+    }
   }
   validatePositions(manifest, options.providerMode);
   const events = descriptorSchema.parse(manifest.parts.events.details);
@@ -59,9 +74,12 @@ export async function checkPilotBackup(options: PilotRestoreOptions): Promise<Ch
       events.lastSequence !== manifest.point.sequence || events.config['num_replicas'] !== 1 ||
       !isDeepStrictEqual(events.config['subjects'], ['ev.>']) ||
       events.sha256 !== manifest.parts.events.sha256 ||
-      events.byteCount !== manifest.parts.events.byteCount) throw new Error('Event point differs');
+      events.byteCount !== manifest.parts.events.byteCount) {
+    throw new Error('Event point differs');
+  }
   const database = pilotDatabaseDetailsSchema.parse(manifest.parts.database.details);
-  const databases = [...database.databases].sort();
+  const databases = [...database.databases];
+  databases.sort();
   if (database.lsn !== manifest.point.lsn ||
       !isDeepStrictEqual(databases, ['handlers', 'openfga', 'postgres', 'projections'])) {
     throw new Error('Database inventory differs');
@@ -73,27 +91,42 @@ export async function checkPilotBackup(options: PilotRestoreOptions): Promise<Ch
     database: checkedPart(directory, manifest.parts.database),
     files: checkedPart(directory, manifest.parts.files),
   };
-  const manifestBytes = readPrivateFile(join(directory, 'manifest.json'), maximumManifestBytes);
-  const reread = manifestSchema.parse(JSON.parse(manifestBytes.toString('utf8')));
-  if (!isDeepStrictEqual(reread, manifest)) throw new Error('Manifest changed');
+  const manifestPath = join(directory, 'manifest.json');
+  const manifestBytes = readPrivateFile(manifestPath, maximumManifestBytes);
+  const manifestText = manifestBytes.toString('utf8');
+  const savedManifest = JSON.parse(manifestText);
+  const reread = manifestSchema.parse(savedManifest);
+  if (!isDeepStrictEqual(reread, manifest)) {
+    throw new Error('Manifest changed');
+  }
   const manifestDigest = hashBackupBytes(manifestBytes);
   const objects = decodeFiles(files, bytes.files);
   return { manifest, manifestDigest, events, files, database, bytes, objects };
 }
 
 function decodeFiles(details: CheckedPilotBackup['files'], bytes: Buffer) {
-  const entrySchema = pilotFileEntrySchema.extend({ data: z.string().max(90 * 1024 * 1024) });
+  const entryFields = { data: z.string().max(90 * 1024 * 1024) };
+  const entrySchema = pilotFileEntrySchema.extend(entryFields);
   const inventory = new Map<string, z.infer<typeof pilotFileEntrySchema>>();
   for (const entry of details.objects) {
-    if (inventory.has(entry.key)) throw new Error('Duplicate object inventory');
+    if (inventory.has(entry.key)) {
+      throw new Error('Duplicate object inventory');
+    }
     inventory.set(entry.key, entry);
   }
   const objects = new Map<string, Buffer>();
-  const lines = bytes.length ? bytes.toString('utf8').split('\n') : [];
-  if (lines.length !== inventory.size) throw new Error('Object inventory differs');
+  let lines: string[] = [];
+  if (bytes.length) {
+    const content = bytes.toString('utf8');
+    lines = content.split('\n');
+  }
+  if (lines.length !== inventory.size) {
+    throw new Error('Object inventory differs');
+  }
   let total = 0;
   for (const line of lines) {
-    const entry = entrySchema.parse(JSON.parse(line));
+    const value = JSON.parse(line);
+    const entry = entrySchema.parse(value);
     const { data, ...metadata } = entry;
     if (objects.has(entry.key) || !isDeepStrictEqual(metadata, inventory.get(entry.key))) {
       throw new Error('Object reference differs');
@@ -110,7 +143,8 @@ function decodeFiles(details: CheckedPilotBackup['files'], bytes: Buffer) {
 }
 
 function checkedPart(directory: string, part: CheckedPilotBackup['manifest']['parts']['events']) {
-  const bytes = readPrivateFile(join(directory, part.path), 128 * 1024 * 1024);
+  const path = join(directory, part.path);
+  const bytes = readPrivateFile(path, 128 * 1024 * 1024);
   if (bytes.length !== part.byteCount || hashBackupBytes(bytes) !== part.sha256) {
     throw new Error('Backup changed');
   }

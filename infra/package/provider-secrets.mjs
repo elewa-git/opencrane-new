@@ -46,7 +46,8 @@ async function verifyMemberKey(directory, entry, refusal) {
 async function prepareMemberKeys(root) {
   const refusal = 'Key custody must use a private directory and owner-only files';
   const directory = await prepareKeys(root, refusal);
-  for (const entry of await readdir(directory)) {
+  const entries = await readdir(directory);
+  for (const entry of entries) {
     // Check both names when Memory briefly links a complete key before removing its old name.
     await verifyMemberKey(directory, entry, refusal);
   }
@@ -67,7 +68,9 @@ if (root === '--directory-only') {
   }
   const refusal = 'Provider custody must contain only private directories and files';
   const directory = await prepareKeys(root, refusal);
-  for (const entry of await readdir(directory)) {
-    await makePrivate(join(directory, entry), false, refusal);
+  const entries = await readdir(directory);
+  for (const entry of entries) {
+    const path = join(directory, entry);
+    await makePrivate(path, false, refusal);
   }
 }
