@@ -57,6 +57,17 @@ function validatePositions(manifest: CheckedPilotBackup['manifest'], providerMod
   }
 }
 
+function validateEventPoint(events: CheckedPilotBackup['events'],
+  manifest: CheckedPilotBackup['manifest']): void {
+  if (events.silo !== manifest.silo || events.attempt !== manifest.id ||
+      events.lastSequence !== manifest.point.sequence || events.config['num_replicas'] !== 1 ||
+      !isDeepStrictEqual(events.config['subjects'], ['ev.>']) ||
+      events.sha256 !== manifest.parts.events.sha256 ||
+      events.byteCount !== manifest.parts.events.byteCount) {
+    throw new Error('Event point differs');
+  }
+}
+
 export async function checkPilotBackup(options: PilotRestoreOptions): Promise<CheckedPilotBackup> {
   const manifest = await showBackup(options.directory, options.id);
   if (manifest.silo !== options.silo || !isDeepStrictEqual(manifest.images, options.images) ||
@@ -70,13 +81,7 @@ export async function checkPilotBackup(options: PilotRestoreOptions): Promise<Ch
   }
   validatePositions(manifest, options.providerMode);
   const events = descriptorSchema.parse(manifest.parts.events.details);
-  if (events.silo !== manifest.silo || events.attempt !== manifest.id ||
-      events.lastSequence !== manifest.point.sequence || events.config['num_replicas'] !== 1 ||
-      !isDeepStrictEqual(events.config['subjects'], ['ev.>']) ||
-      events.sha256 !== manifest.parts.events.sha256 ||
-      events.byteCount !== manifest.parts.events.byteCount) {
-    throw new Error('Event point differs');
-  }
+  validateEventPoint(events, manifest);
   const database = pilotDatabaseDetailsSchema.parse(manifest.parts.database.details);
   const databases = [...database.databases];
   databases.sort();
