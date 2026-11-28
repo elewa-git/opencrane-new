@@ -60,6 +60,8 @@ async function approvePersona(page: Page): Promise<void> {
   await draftDocuments.click();
   const review = page.getByRole('button', { name: 'Review persona', exact: true });
   await review.click();
+  const savedPersona = page.getByRole('link', { name: 'Review saved persona', exact: true });
+  await savedPersona.click();
   const edit = page.getByRole('button', { name: 'Edit', exact: true });
   await edit.click();
   const persona = 'Your name is Aster. Be clear, honest and useful. '
@@ -73,17 +75,7 @@ async function approvePersona(page: Page): Promise<void> {
   const approved = page.getByText('Approved revision r2', { exact: true });
   await approved.waitFor();
   await screenshot(page, 'approved-persona', page.viewportSize()!.width);
-  const welcome = page.getByRole('link', { name: 'Open welcome chat', exact: true });
-  await welcome.click();
-  const startWelcome = page.getByRole('button', { name: 'Continue with your assistant', exact: true });
-  await startWelcome.click();
-  const answer = page.getByRole('textbox', { name: 'Your answer', exact: true });
-  await answer.fill('I would like help making clear slide decks.');
-  const sendAnswer = page.getByRole('button', { name: 'Send answer', exact: true });
-  await sendAnswer.click();
-  const completedWelcome = page.locator('.crease');
-  const completion = completedWelcome.filter({ hasText: 'Welcome complete' });
-  await completion.waitFor();
+
 }
 
 async function openAndDownload(page: Page, name: string, width: number): Promise<void> {

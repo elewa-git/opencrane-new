@@ -44,7 +44,7 @@ interface ModelInput {
 }
 interface ModelRequest {
   stream?: boolean;
-  input?: ModelInput[];
+  input?: ModelInput[] | string;
 }
 function isModelInput(value: unknown): value is ModelInput {
   if (typeof value !== 'object' || value === null) return false;
@@ -54,8 +54,15 @@ function isModelInput(value: unknown): value is ModelInput {
 function isModelRequest(value: unknown): value is ModelRequest {
   if (typeof value !== 'object' || value === null) return false;
   if ('stream' in value && typeof value.stream !== 'boolean') return false;
-  if (!('input' in value)) return true;
+  if (!('input' in value) || typeof value.input === 'string') return true;
   return Array.isArray(value.input) && value.input.every(isModelInput);
+}
+function requestInputs(request: ModelRequest): ModelInput[] {
+  if (typeof request.input === 'string') {
+    const message = { type: 'message', role: 'user', content: request.input };
+    return [message];
+  }
+  return request.input ?? [];
 }
 async function localFileExample(prompt: string, request: unknown, hasOutput: boolean) {
   if (prompt.includes('CHAT_LINKS_PROOF')) {
@@ -145,7 +152,7 @@ const server = createServer((req, res) => {
       res.end(JSON.stringify({ status: 'completed', output, usage }));
       return;
     }
-    const input = body.input ?? [];
+    const input = requestInputs(body);
     const user = input.findLastIndex(item => item.type === 'message' && item.role === 'user');
     const prompt = JSON.stringify(input[user]?.content ?? '');
     const pdf = prompt.includes('UPLOAD_PDF_PROOF') || prompt.includes('What is the project code in the attached PDF?');
