@@ -210,8 +210,20 @@ export async function updatePilot(owner: PackageOwner, previous: string, setting
   }
 }
 
+async function readUpdateRecord() {
+  try {
+    return await readBoundedJson(join(directory, 'pilot-update.json')) as UpdateRecord;
+  } catch (cause) {
+    if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT') {
+      logger.error({ err: cause }, 'The rollback record is missing');
+      throw new Error('Rollback needs the update record from this installation', { cause });
+    }
+    throw cause;
+  }
+}
+
 export async function rollbackPilot(owner: PackageOwner, revision: string) {
-  const record = await readBoundedJson(join(directory, 'pilot-update.json')) as UpdateRecord;
+  const record = await readUpdateRecord();
   if (record.revision !== revision) throw new Error('Select the revision saved by this update');
   const values = await installedValues(owner);
   if (values.pilotRestore?.enabled) throw new Error('Rollback refuses a recovery installation');

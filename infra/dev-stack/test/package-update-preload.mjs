@@ -173,8 +173,7 @@ function load(url, context, nextLoad) {
   }
   if (url.endsWith('/infra/dev-stack/config.ts')) {
     const source = `export const root = ${JSON.stringify(process.cwd())};
-      export const directory = ${JSON.stringify(directory)};
-      export { existsSync as exists } from 'node:fs';`;
+      export const directory = ${JSON.stringify(directory)};`;
     return { format: 'module', source, shortCircuit: true };
   }
   if (url.endsWith('/infra/dev-stack/target.ts')) {
