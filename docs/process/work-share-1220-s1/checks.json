@@ -1,0 +1,66 @@
+{
+  "sourceCommit": "3de77755d7bc642d5706aac6dc033016aecd39ba",
+  "shippedCodeLines": 496,
+  "checks": {
+    "typecheck": "PASS",
+    "events": {
+      "result": "PASS",
+      "types": 175
+    },
+    "focusedWeb": {
+      "result": "PASS",
+      "tests": 48,
+      "runs": 2
+    },
+    "allWeb": {
+      "result": "PASS",
+      "files": 93,
+      "tests": 1695
+    },
+    "filePublication": {
+      "result": "PASS",
+      "tests": 4
+    },
+    "standIn": {
+      "result": "PASS",
+      "tests": 10,
+      "runs": 2
+    },
+    "webBuild": "PASS",
+    "eslint": "PASS",
+    "knip": "PASS",
+    "changelog": "PASS",
+    "markdown": "PASS"
+  },
+  "paidSpendCents": 0,
+  "journey": "PASS",
+  "startupAttempts": [
+    {
+      "result": "FAIL",
+      "reason": "Stand-in refused a valid text provider probe",
+      "retainedServiceLogs": 14,
+      "down": "PASS"
+    },
+    {
+      "result": "PASS",
+      "passLines": 37,
+      "longChatApprovals": "NOT RUN"
+    }
+  ],
+  "viewports": [
+    1280,
+    390
+  ],
+  "slotReleased": true,
+  "browserAttempts": [
+    "PARTIAL",
+    "PARTIAL",
+    "PASS"
+  ],
+  "retainedFinalLogs": {
+    "applications": 16,
+    "containers": 8,
+    "computers": 3,
+    "withheld": 1
+  }
+}
