@@ -238,7 +238,7 @@ async function checkWidth(page: Page): Promise<void> {
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   await composer.waitFor();
   const sessionsLoaded = page.getByText('Sessions loaded', { exact: true });
-  await sessionsLoaded.waitFor();
+  await sessionsLoaded.waitFor({ state: 'attached' });
   await page.keyboard.press('Control+n');
   const draft = page.getByText('Draft', { exact: true });
   await draft.waitFor();
