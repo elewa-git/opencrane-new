@@ -134,6 +134,9 @@ async function scenario(browser, broadcast) {
     fixture.send(question);
     fixture.send(started);
     fixture.send(reply);
+    const memberMessage = tabA.getByRole('article', { name: 'Your message', exact: true });
+    const memberMarkdown = memberMessage.locator('oc-assistant-markdown');
+    await memberMarkdown.getByText('Show a plan.', { exact: true }).waitFor();
     // Playwright serialises one function at a time, so supply its helper explicitly.
     await tabA.waitForFunction(`(${privateText})() === 'Synthetic private reply'`);
     const tabB = await context.newPage();

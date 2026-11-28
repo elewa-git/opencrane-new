@@ -187,6 +187,10 @@ try {
   const textOptions = { exact: true };
   const ordinaryReply = reply.getByText('Ordinary reply', textOptions);
   await ordinaryReply.waitFor();
+  const memberMessage = page.getByRole('article', { name: 'Your message', exact: true });
+  const memberMarkdown = memberMessage.locator('oc-assistant-markdown');
+  assert.equal(await memberMarkdown.textContent(), 'Draw a route');
+  assert.equal(await memberMarkdown.getByRole('img').count(), 0);
   await page.waitForLoadState('networkidle');
   assert.equal(scripts.some(containsMermaid), false, 'Ordinary replies must not load Mermaid');
 
