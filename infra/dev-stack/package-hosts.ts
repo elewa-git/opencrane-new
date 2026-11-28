@@ -50,18 +50,31 @@ function probePod(node: string, options: HostCheckOptions, source: string) {
   }
   const script = source + '\nconsole.log(JSON.stringify(collectHost("/host")));';
   return {
-    apiVersion: 'v1', kind: 'Pod',
+    apiVersion: 'v1',
+    kind: 'Pod',
     spec: {
-      nodeName: node, restartPolicy: 'Never', activeDeadlineSeconds: 90,
+      nodeName: node,
+      restartPolicy: 'Never',
+      activeDeadlineSeconds: 90,
       tolerations: [{ operator: 'Exists' }],
       automountServiceAccountToken: false,
-      containers: [{ name: 'probe', image: options.image,
-        command: ['node', '--input-type=module', '-e', script], volumeMounts,
-        resources: { requests: { cpu: '10m', memory: '32Mi' },
-          limits: { cpu: '100m', memory: '128Mi' } },
-        securityContext: { runAsUser: 0, readOnlyRootFilesystem: true,
-          allowPrivilegeEscalation: false, capabilities: { drop: ['ALL'] } },
-      }], volumes,
+      containers: [{
+        name: 'probe',
+        image: options.image,
+        command: ['node', '--input-type=module', '-e', script],
+        volumeMounts,
+        resources: {
+          requests: { cpu: '10m', memory: '32Mi' },
+          limits: { cpu: '100m', memory: '128Mi' },
+        },
+        securityContext: {
+          runAsUser: 0,
+          readOnlyRootFilesystem: true,
+          allowPrivilegeEscalation: false,
+          capabilities: { drop: ['ALL'] },
+        },
+      }],
+      volumes,
     },
   };
 }
@@ -70,15 +83,18 @@ async function probeNode(node: string, options: HostCheckOptions, source: string
   const name = `host-preflight-${randomUUID()}`;
   const prefix = ['-n', options.namespace];
   const pod = probePod(node, options, source);
+  const startArguments = [...prefix, 'run', name, '--image', options.image,
+    '--restart=Never', '--overrides', JSON.stringify(pod)];
+  const waitArguments = [...prefix, 'wait', `pod/${name}`,
+    '--for=jsonpath={.status.phase}=Succeeded', '--timeout=100s'];
+  const deleteArguments = [...prefix, 'delete', 'pod', name, '--ignore-not-found', '--wait=true'];
   try {
-    await options.command([...prefix, 'run', name, '--image', options.image,
-      '--restart=Never', '--overrides', JSON.stringify(pod)]);
-    await options.command([...prefix, 'wait', `pod/${name}`,
-      '--for=jsonpath={.status.phase}=Succeeded', '--timeout=100s']);
+    await options.command(startArguments);
+    await options.command(waitArguments);
     const output = await options.command([...prefix, 'logs', name]);
     return JSON.parse(output) as HostState;
   } finally {
-    await options.command([...prefix, 'delete', 'pod', name, '--ignore-not-found', '--wait=true']);
+    await options.command(deleteArguments);
   }
 }
 
@@ -129,14 +145,18 @@ async function requireLocalContainer(node: NodeList['items'][number], command: L
 async function localHost(nodes: NodeList, options: HostCheckOptions, source: string) {
   let local = false;
   for (const node of nodes.items) {
-    if (node.metadata.name.startsWith('k3d-')) local = true;
+    if (node.metadata.name.startsWith('k3d-')) {
+      local = true;
+    }
   }
-  if (!local) return undefined;
+  if (!local) {
+    return undefined;
+  }
   if (!options.localCommand) {
     throw new HostCheckRefused('unverifiable_host', 'Cannot verify the underlying k3d host');
   }
   await requireLocalDocker(options.localCommand);
-  // A k3d node shares the Docker host's memory and swap, outside its filesystem.
+  // Check the Docker host too: k3d nodes share its memory and swap.
   for (const node of nodes.items) {
     await requireLocalContainer(node, options.localCommand);
   }
@@ -153,23 +173,31 @@ function requireSameNodes(before: NodeList, after: NodeList) {
     let matched = false;
     for (const current of after.items) {
       if (original.metadata.name === current.metadata.name &&
-          original.metadata.uid === current.metadata.uid) matched = true;
+          original.metadata.uid === current.metadata.uid) {
+        matched = true;
+      }
     }
-    if (!matched) throw new HostCheckRefused('unverifiable_host', 'Installation nodes changed');
+    if (!matched) {
+      throw new HostCheckRefused('unverifiable_host', 'Installation nodes changed');
+    }
   }
 }
 
 function requireHostResults(record: HostCheckRecord, override: string | undefined) {
   const messages = [];
   for (const node of record.nodes) {
-    for (const failure of node.failures) messages.push(`${node.name}: ${failure}`);
+    for (const failure of node.failures) {
+      messages.push(`${node.name}: ${failure}`);
+    }
   }
   if (override === 'accepted-dev-box-366') {
     record.override = override;
     console.warn('HOST RISK OVERRIDE: accepted-dev-box-366; dev-box exception of 12 October 2026');
-    for (const message of messages) console.warn(message);
+    for (const message of messages) {
+      console.warn(message);
+    }
   } else if (messages.length > 0) {
-    // Only these hostFailures messages are safe to show to the operator.
+    // Show only the safe messages returned by hostFailures to the operator.
     throw new HostCheckRefused('unsafe_settings', messages.join('\n'));
   }
 }

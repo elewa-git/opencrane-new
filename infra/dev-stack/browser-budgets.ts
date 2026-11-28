@@ -13,9 +13,77 @@ import { postJourneyCommand, readJourneyApi } from './browser-api.ts';
 import { directory, root } from './config.ts';
 import type { BeforePageNavigation } from './browser-signin.ts';
 
-/** Real owner edits and member refusals against the secondary stack's stub provider. */
+export type BudgetJourneyInput = { silo: string; assistantId: string; groupId: string };
+
+/** Check owner budget edits and member refusals with the spare stack's test model. */
 export async function browserBudgetJourney(owner: Page, members: Page[], origin: string,
-  store: EventStore, silo: string, assistantId: string, groupId: string) {
+  store: EventStore, input: BudgetJourneyInput) {
+  const { silo, assistantId, groupId } = input;
+  await requireSharedAssistant(store, silo, assistantId);
+  const output = `${root}/docs/process/p3-13-live`;
+  await mkdir(output, { recursive: true });
+  const run = await checkBudgetMigration(store, silo, output);
+  await owner.goto(`${origin}/org/spending`);
+  await owner.getByText('Spending loaded', { exact: true }).waitFor();
+  const starting = await readBudgetSummary(owner, origin);
+  const defaultPayingGroupId = starting.defaultPayingGroupId;
+  assert(defaultPayingGroupId);
+  if (run === 'repeat') {
+    assertRepeatCeilings(starting, assistantId, groupId);
+  }
+  const groupLimit: JourneyBudgetCeiling = {
+    scope: 'paying_group', scopeId: groupId, cents: 20000,
+  };
+  const assistantLimit: JourneyBudgetCeiling = {
+    scope: 'assistant', scopeId: assistantId, cents: 20000,
+  };
+  for (const width of [1280, 390]) {
+    const viewport = { width, height: width === 390 ? 844 : 900 };
+    await owner.setViewportSize(viewport);
+    function matchesWidth(page: Page) {
+      return page.viewportSize()?.width === width;
+    }
+    const member = members.find(matchesWidth);
+    assert(member);
+    for (const scope of ['paying_group', 'assistant'] as const) {
+      await saveBudgetCeiling(owner, origin, groupLimit);
+      await saveBudgetCeiling(owner, origin, assistantLimit);
+      const scopeId = scope === 'assistant' ? assistantId : groupId;
+      const target = { scope, scopeId };
+      const refusalLimit = { scope, scopeId, cents: 0 };
+      try {
+        await saveBudgetCeiling(owner, origin, refusalLimit);
+        const savedScreenshot = {
+          path: `${output}/${run}-${scope}-${width}.png`, fullPage: true,
+        };
+        await owner.screenshot(savedScreenshot);
+        const prompt = `Ceiling refusal: ${scope} at ${width}px.`;
+        await assertBudgetRefusal(member, store, silo, prompt);
+        const refusalScreenshot = {
+          path: `${output}/${run}-${scope}-refusal-${width}.png`, fullPage: true,
+        };
+        await member.screenshot(refusalScreenshot);
+        console.log(`PASS ${run} ${width}px: owner saves ${scope} ceiling in UI; ` +
+          'over-ceiling test-model call refused and retained after reload');
+      } finally {
+        // Restore through the API even when the Spending page cannot load.
+        await restoreBudgetCeiling(owner, origin, store, silo, target);
+      }
+    }
+  }
+  if (run === 'fresh') {
+    // Leave room for a restart: Stop keeps reservations without confirmed usage.
+    await saveBudgetCeiling(owner, origin, groupLimit);
+    await saveBudgetCeiling(owner, origin, assistantLimit);
+    const globalLimit: JourneyBudgetCeiling = { scope: 'global', dailyCents: 5000, cents: 20000 };
+    const global = await saveBudgetCeiling(owner, origin, globalLimit);
+    assert.equal(global.defaultPayingGroupId, defaultPayingGroupId);
+    const screenshot = { path: `${output}/fresh-repeat-headroom-390.png`, fullPage: true };
+    await owner.screenshot(screenshot);
+  }
+}
+
+async function requireSharedAssistant(store: EventStore, silo: string, assistantId: string) {
   const assistantRows = await history(store, `assistant-${assistantId}`, silo);
   function isSharedAssistant(row: StoredEvent) {
     const data = row.event.data as { kind?: string };
@@ -23,92 +91,88 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
   }
   assert(assistantRows.some(isSharedAssistant),
     'Budget notices must use a shared assistant that the owner can choose in Spending');
-  const output = `${root}/docs/process/p3-13-live`;
-  await mkdir(output, { recursive: true });
-  const ceilings = async () => (await history(store, `budget-${silo}`, silo)).filter(row => row.event.type === 'budget.ceiling_set');
-  const before = await ceilings();
-  const run = before.some(row => !['installation', 'dev-only-stub-journey'].includes((row.event.data as { setBy: string }).setBy)) ? 'repeat' : 'fresh';
-  for (const width of [1280, 390]) await copyFile(`${directory}/workspace-${width}.png`, `${output}/${run}-stub-chat-${width}.png`);
-  assert.equal(before.filter(row => (row.event.data as { setBy: string }).setBy === 'installation').length, 1, 'Startup seeds the installation default exactly once');
-  await migrateBudgetDefault(store, silo, 'must-not-replace-default');
-  await migrateBudgetDefault(store, silo, 'must-not-replace-default');
-  assert.deepEqual(await ceilings(), before, 'Repeated migration preserves all ceilings and the default without appending');
-  console.log(`PASS ${run}: default paying group migration is idempotent; one installation event, existing ceilings preserved`);
-  async function summary() {
-    return readBudgetSummary(owner, origin);
-  }
-  await owner.goto(`${origin}/org/spending`);
-  await owner.getByText('Spending loaded', { exact: true }).waitFor();
-  const starting = await summary();
-  const defaultPayingGroupId = starting.defaultPayingGroupId;
-  assert(defaultPayingGroupId);
-  if (run === 'repeat') {
-    assert.equal(starting.dailyCeilingCents, 5000, 'Plain startup preserves the owner daily cap');
-    for (const scope of ['paying_group', 'assistant'] as const) assert.equal(starting.ceilings.find(row => row.scope === scope && row.scopeId === (scope === 'assistant' ? assistantId : groupId))?.ceilingCents, 20000, 'Plain startup preserves the owner monthly ceilings');
-  }
+}
+
+async function readCeilings(store: EventStore, silo: string) {
+  const rows = await history(store, `budget-${silo}`, silo);
+  return rows.filter(isCeiling);
+}
+
+function isCeiling(row: StoredEvent) {
+  return row.event.type === 'budget.ceiling_set';
+}
+
+function isInstallationCeiling(row: StoredEvent) {
+  const data = row.event.data as { setBy: string };
+  return data.setBy === 'installation';
+}
+
+function isOwnerCeiling(row: StoredEvent) {
+  const data = row.event.data as { setBy: string };
+  return !['installation', 'dev-only-stub-journey'].includes(data.setBy);
+}
+
+async function checkBudgetMigration(store: EventStore, silo: string, output: string) {
+  const before = await readCeilings(store, silo);
+  const run = before.some(isOwnerCeiling) ? 'repeat' : 'fresh';
   for (const width of [1280, 390]) {
-    await owner.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-    const member = members.find(page => page.viewportSize()?.width === width);
-    assert(member);
-    for (const scope of ['paying_group', 'assistant'] as const) {
-      await saveBudgetCeiling(owner, origin, { scope: 'paying_group', scopeId: groupId, cents: 20000 });
-      await saveBudgetCeiling(owner, origin, { scope: 'assistant', scopeId: assistantId, cents: 20000 });
-      const scopeId = scope === 'assistant' ? assistantId : groupId;
-      try {
-        await saveBudgetCeiling(owner, origin, { scope, scopeId, cents: 0 });
-        await owner.screenshot({ path: `${output}/${run}-${scope}-${width}.png`, fullPage: true });
-        const conversationId = new URL(member.url()).searchParams.get('conversation');
-        assert(conversationId);
-        const head = await store.head();
-        const budgetBefore = await history(store, `budget-${silo}`, silo);
-        const reservations = budgetBefore.filter(isReservation).length;
-        const prompt = `Ceiling refusal: ${scope} at ${width}px.`;
-        await member.getByRole('textbox', { name: 'Message your agent' }).fill(prompt);
-        await member.getByRole('button', { name: 'Send message', exact: true }).click();
-        const notice = await findBudgetNoticeForPrompt(member, prompt);
-        await waitForBudgetNoticeToSettle(notice);
-        await assertSavedBudgetNotice(notice);
-        await member.reload();
-        const reloadedNotice = await findBudgetNoticeForPrompt(member, prompt);
-        await waitForBudgetNoticeToSettle(reloadedNotice);
-        await assertSavedBudgetNotice(reloadedNotice);
-        const rows = [];
-        const after = await store.head();
-        for await (const row of readEvents(store, head + 1, after)) {
-          rows.push(row.event);
-        }
-        function isBudgetRefusal(event: EventEnvelope) {
-          if (event.type !== 'decision.recorded') {
-            return false;
-          }
-          const data = event.data as { reason: string; conversationId: string };
-          return data.reason === 'budget_exhausted' && data.conversationId === conversationId;
-        }
-        assert(rows.some(isBudgetRefusal), 'New call has a durable budget refusal');
-        const budgetAfter = await history(store, `budget-${silo}`, silo);
-        const reservationsAfter = budgetAfter.filter(isReservation).length;
-        assert.equal(reservationsAfter, reservations, 'Refused call reserves no money');
-        const refusalScreenshot = {
-          path: `${output}/${run}-${scope}-refusal-${width}.png`, fullPage: true,
-        };
-        await member.screenshot(refusalScreenshot);
-        const savedMessage = `PASS ${run} ${width}px: owner saves ${scope} ceiling in UI; `;
-        console.log(`${savedMessage}over-ceiling stub call refused and retained after reload`);
-      } finally {
-        // Restore through the API even when the Spending page cannot load.
-        await restoreBudgetCeiling(owner, origin, store, silo, scope, scopeId);
-      }
+    await copyFile(`${directory}/workspace-${width}.png`, `${output}/${run}-stub-chat-${width}.png`);
+  }
+  const installationCeilings = before.filter(isInstallationCeiling);
+  assert.equal(installationCeilings.length, 1, 'Startup seeds the installation default exactly once');
+  await migrateBudgetDefault(store, silo, 'must-not-replace-default');
+  await migrateBudgetDefault(store, silo, 'must-not-replace-default');
+  const after = await readCeilings(store, silo);
+  assert.deepEqual(after, before,
+    'Repeated migration preserves all ceilings and the default without appending');
+  console.log(`PASS ${run}: default paying group migration is idempotent; ` +
+    'one installation event, existing ceilings preserved');
+  return run;
+}
+
+function assertRepeatCeilings(starting: BudgetSummary, assistantId: string, groupId: string) {
+  assert.equal(starting.dailyCeilingCents, 5000, 'Plain startup preserves the owner daily cap');
+  for (const scope of ['paying_group', 'assistant'] as const) {
+    const scopeId = scope === 'assistant' ? assistantId : groupId;
+    const ceiling = findScopedBudget(starting, scope, scopeId);
+    assert.equal(ceiling?.ceilingCents, 20000, 'Plain startup preserves the owner monthly ceilings');
+  }
+}
+
+async function assertBudgetRefusal(member: Page, store: EventStore, silo: string, prompt: string) {
+  const location = new URL(member.url());
+  const conversationId = location.searchParams.get('conversation');
+  assert(conversationId);
+  const head = await store.head();
+  const budgetBefore = await history(store, `budget-${silo}`, silo);
+  const reservations = budgetBefore.filter(isReservation);
+  const composer = member.getByRole('textbox', { name: 'Message your agent' });
+  await composer.fill(prompt);
+  const send = member.getByRole('button', { name: 'Send message', exact: true });
+  await send.click();
+  const notice = await findBudgetNoticeForPrompt(member, prompt);
+  await waitForBudgetNoticeToSettle(notice);
+  await assertSavedBudgetNotice(notice);
+  await member.reload();
+  const reloadedNotice = await findBudgetNoticeForPrompt(member, prompt);
+  await waitForBudgetNoticeToSettle(reloadedNotice);
+  await assertSavedBudgetNotice(reloadedNotice);
+  const rows = [];
+  const after = await store.head();
+  for await (const row of readEvents(store, head + 1, after)) {
+    rows.push(row.event);
+  }
+  function isBudgetRefusal(event: EventEnvelope) {
+    if (event.type !== 'decision.recorded') {
+      return false;
     }
+    const data = event.data as { reason: string; conversationId: string };
+    return data.reason === 'budget_exhausted' && data.conversationId === conversationId;
   }
-  if (run === 'fresh') {
-    // Stop retains unconfirmed reservations; leave enough headroom for plain startup.
-    await saveBudgetCeiling(owner, origin, { scope: 'paying_group', scopeId: groupId, cents: 20000 });
-    await saveBudgetCeiling(owner, origin, { scope: 'assistant', scopeId: assistantId, cents: 20000 });
-    const global = await saveBudgetCeiling(owner, origin,
-      { scope: 'global', dailyCents: 5000, cents: 20000 });
-    assert.equal(global.defaultPayingGroupId, defaultPayingGroupId);
-    await owner.screenshot({ path: `${output}/fresh-repeat-headroom-390.png`, fullPage: true });
-  }
+  assert(rows.some(isBudgetRefusal), 'New call has a durable budget refusal');
+  const budgetAfter = await history(store, `budget-${silo}`, silo);
+  const reservationsAfter = budgetAfter.filter(isReservation);
+  assert.equal(reservationsAfter.length, reservations.length, 'Refused call reserves no money');
 }
 
 export type JourneyBudgetCeiling = { scope: 'global'; cents: number; dailyCents: number }
@@ -116,12 +180,17 @@ export type JourneyBudgetCeiling = { scope: 'global'; cents: number; dailyCents:
 
 export function scopedBudget(budget: BudgetSummary,
   scope: 'paying_group' | 'assistant', scopeId: string) {
+  const ceiling = findScopedBudget(budget, scope, scopeId);
+  assert(ceiling, 'The saved spending scope is present');
+  return ceiling;
+}
+
+function findScopedBudget(budget: BudgetSummary,
+  scope: 'paying_group' | 'assistant', scopeId: string) {
   function matchesScope(row: BudgetSummary['ceilings'][number]) {
     return row.scope === scope && row.scopeId === scopeId;
   }
-  const ceiling = budget.ceilings.find(matchesScope);
-  assert(ceiling, 'The saved spending scope is present');
-  return ceiling;
+  return budget.ceilings.find(matchesScope);
 }
 
 export async function saveBudgetCeiling(owner: Page, origin: string, limit: JourneyBudgetCeiling,
@@ -221,8 +290,14 @@ async function captureBudgetEditorFailure(owner: Page, captureDirectory: string)
   await writeFile(`${captureDirectory}/budget-editor-failure.png`, picture, { mode: 0o600 });
 }
 
+export type BudgetCeilingTarget = {
+  scope: 'global' | 'paying_group' | 'assistant';
+  scopeId: string;
+};
+
 async function restoreBudgetCeiling(owner: Page, origin: string, store: EventStore,
-  silo: string, scope: 'global' | 'paying_group' | 'assistant', scopeId: string) {
+  silo: string, target: BudgetCeilingTarget) {
+  const { scope, scopeId } = target;
   const command = {
     commandId: randomUUID(), expectedSequence: await store.head(`budget-${silo}`),
     scope, ceilingCents: 20000,
@@ -257,16 +332,17 @@ async function budgetFromResponse(response: Pick<Response, 'status' | 'json'>) {
 }
 
 export async function restoreBudgetCeilings(owner: Page, origin: string, store: EventStore,
-  silo: string, assistantId: string, groupId: string) {
+  input: BudgetJourneyInput) {
+  const { silo, assistantId, groupId } = input;
   const scopes = [
     { scope: 'paying_group' as const, scopeId: groupId },
     { scope: 'assistant' as const, scopeId: assistantId },
     { scope: 'global' as const, scopeId: groupId },
   ];
   const failures: unknown[] = [];
-  for (const { scope, scopeId } of scopes) {
+  for (const target of scopes) {
     try {
-      await restoreBudgetCeiling(owner, origin, store, silo, scope, scopeId);
+      await restoreBudgetCeiling(owner, origin, store, silo, target);
     } catch (error) {
       failures.push(error);
     }

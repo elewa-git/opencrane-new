@@ -1,0 +1,155 @@
+{
+  "windowStart": "4ac3e85ea",
+  "windowEnd": "39e13a8d9cb5a8d9b23628232e5d97e7a9f7ed55",
+  "changedCode": [
+    "infra/dev-stack/browser-audit.ts",
+    "infra/dev-stack/browser-budgets.ts",
+    "infra/dev-stack/browser-target.ts",
+    "infra/dev-stack/browser-upload-delivery.ts",
+    "infra/dev-stack/browser-upload-status.ts",
+    "infra/dev-stack/budget-fixture.ts",
+    "infra/dev-stack/charged-budget-journey.ts",
+    "infra/dev-stack/connection-custody-bridge.ts",
+    "infra/dev-stack/connection-custody-setup.ts",
+    "infra/dev-stack/journey.ts",
+    "infra/dev-stack/package-hosts.ts",
+    "infra/dev-stack/provider-default.ts",
+    "infra/dev-stack/record-demo-calls.ts",
+    "infra/dev-stack/zitadel-api.ts"
+  ],
+  "remainingCode": [
+    "infra/dev-stack/approval-cards.ts",
+    "infra/dev-stack/approval-history.ts",
+    "infra/dev-stack/approval-journey.ts",
+    "infra/dev-stack/approval-native.ts",
+    "infra/dev-stack/approval-stop.ts",
+    "infra/dev-stack/approval-tool.ts",
+    "infra/dev-stack/bootstrap-journey.ts",
+    "infra/dev-stack/browser-api.ts",
+    "infra/dev-stack/browser-signin.ts",
+    "infra/dev-stack/browser-upload-message.ts",
+    "infra/dev-stack/browser-upload.ts",
+    "infra/dev-stack/compose.secondary.yaml",
+    "infra/dev-stack/config.ts",
+    "infra/dev-stack/connection-custody-proxy.ts",
+    "infra/dev-stack/connection-custody-rbac.yaml",
+    "infra/dev-stack/identity.ts",
+    "infra/dev-stack/journey-guard.ts",
+    "infra/dev-stack/journey-tool-policy.ts",
+    "infra/dev-stack/mcp-journey.ts",
+    "infra/dev-stack/memory-personal-live.ts",
+    "infra/dev-stack/model-stub.ts",
+    "infra/dev-stack/owner-bootstrap.ts",
+    "infra/dev-stack/package-error.ts",
+    "infra/dev-stack/package-review.ts",
+    "infra/dev-stack/packaged.ts",
+    "infra/dev-stack/private-directories.ts",
+    "infra/dev-stack/provider-setup.ts",
+    "infra/dev-stack/real-model-journey.ts",
+    "infra/dev-stack/run.sh",
+    "infra/dev-stack/scanner-service.mjs",
+    "infra/dev-stack/screenshot-journey.ts",
+    "infra/dev-stack/secondary-models.ts",
+    "infra/dev-stack/stack.ts",
+    "infra/dev-stack/stage-b-launch.ts",
+    "infra/dev-stack/stage-b-live.ts",
+    "infra/dev-stack/stage-b-model.ts",
+    "infra/dev-stack/wake-latency.ts",
+    "infra/dev-stack/web-development.mjs",
+    "infra/dev-stack/web-server.mjs",
+    "infra/dev-stack/workspace-journey.ts",
+    "infra/dev-stack/zitadel-setup.ts"
+  ],
+  "skippedForOpenPullRequests": {
+    "infra/dev-stack/README.md": [
+      1229,
+      1202,
+      1122
+    ],
+    "infra/dev-stack/README.robot.md": [
+      1229,
+      1202,
+      1122
+    ],
+    "infra/dev-stack/computer-source-permissions.test.ts": [
+      1229
+    ],
+    "infra/dev-stack/package-update.test.ts": [
+      1229
+    ],
+    "infra/dev-stack/packaged.ts": [
+      1229,
+      1202
+    ],
+    "infra/dev-stack/pilot-computers.ts": [
+      1229
+    ],
+    "infra/dev-stack/pilot-update-backup.ts": [
+      1229
+    ],
+    "infra/dev-stack/pilot-update.ts": [
+      1229
+    ],
+    "infra/dev-stack/test/package-update-preload.mjs": [
+      1229
+    ],
+    "infra/dev-stack/claim.test.ts": [
+      1202
+    ],
+    "infra/dev-stack/install-scanner-refresh-timer.sh": [
+      1202
+    ],
+    "infra/dev-stack/package-error.ts": [
+      1202
+    ],
+    "infra/dev-stack/refresh-scanner.ts": [
+      1202
+    ],
+    "infra/dev-stack/run.sh": [
+      1202
+    ],
+    "infra/dev-stack/scanner-settings.ts": [
+      1202
+    ],
+    "infra/dev-stack/stack.ts": [
+      1202
+    ],
+    "infra/dev-stack/systemd/README.md": [
+      1202
+    ],
+    "infra/dev-stack/systemd/opencrane-scanner-refresh@.service": [
+      1202
+    ],
+    "infra/dev-stack/systemd/opencrane-scanner-refresh@.timer": [
+      1202
+    ],
+    "infra/dev-stack/journey-tool-policy.ts": [
+      1122
+    ],
+    "infra/dev-stack/private-settings.test.ts": [
+      1122
+    ],
+    "infra/dev-stack/stage-b-evidence.ts": [
+      1122
+    ],
+    "infra/dev-stack/stage-b-live.ts": [
+      1122
+    ],
+    "infra/dev-stack/stage-b-model.test.ts": [
+      1122
+    ],
+    "infra/dev-stack/stage-b-model.ts": [
+      1122
+    ],
+    "infra/dev-stack/test/ordinary-demo.mjs": [
+      1122
+    ],
+    "infra/dev-stack/test/ordinary-evidence.mjs": [
+      1122
+    ]
+  },
+  "remainingSectionsInChangedFiles": [
+    "browser-budgets.ts: budget editor and failure captures",
+    "journey.ts: only the audit and budget call arguments change; the rest remains for another part"
+  ]
+}

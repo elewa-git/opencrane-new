@@ -1,7 +1,7 @@
 import { appendFileSync, writeFileSync } from 'node:fs';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-/** Keep synthetic writes for the journey's byte and dispatch-count assertions. */
+/** Keep test writes so the journey can check the request bytes and number of calls. */
 export function recordDemoCalls(demo: FastifyInstance, file: string) {
   writeFileSync(file, '', { mode: 0o600 });
   demo.addHook('onRequest', recordRequest);
@@ -13,7 +13,8 @@ export function recordDemoCalls(demo: FastifyInstance, file: string) {
         chunks.push(chunk);
       }
       function finished() {
-        const body = Buffer.concat(chunks).toString();
+        const bytes = Buffer.concat(chunks);
+        const body = bytes.toString();
         const record = { body };
         appendFileSync(file, `${JSON.stringify(record)}\n`, { mode: 0o600 });
       }

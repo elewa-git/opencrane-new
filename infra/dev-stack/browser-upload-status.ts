@@ -17,12 +17,14 @@ export async function waitForUpload(
   const expectedStatus = status.filter({ hasText: expected });
   const terminal = expectedStatus.or(retry);
   const completed = terminal.first();
-  // A refused chip shows both its reason and Retry; either confirms completion.
-  // The transport has its own 120-second timeout. A terminal refusal must be visible too.
+  // Accept either the refusal reason or Retry as a completed upload.
+  // Allow the upload's own 120-second timeout to finish before checking the refusal.
   for (let attempt = 0; attempt < 3; attempt++) {
     await completed.waitFor({ timeout: 130_000 });
     const message = await status.innerText();
-    if (message.includes(expected)) return attempt;
+    if (message.includes(expected)) {
+      return attempt;
+    }
     assert(message.includes('Upload unavailable')
       || message.includes('Upload acknowledgement unavailable'), message);
     assert(attempt < 2, 'Upload stayed unavailable after two retries');
