@@ -110,7 +110,8 @@ export async function checkPilotBackup(options: PilotRestoreOptions): Promise<Ch
 }
 
 function decodeFiles(details: CheckedPilotBackup['files'], bytes: Buffer) {
-  const entryFields = { data: z.string().max(90 * 1024 * 1024) };
+  const fileDataSchema = z.string();
+  const entryFields = { data: fileDataSchema.max(90 * 1024 * 1024) };
   const entrySchema = pilotFileEntrySchema.extend(entryFields);
   const inventory = new Map<string, z.infer<typeof pilotFileEntrySchema>>();
   for (const entry of details.objects) {
