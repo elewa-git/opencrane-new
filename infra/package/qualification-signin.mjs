@@ -26,7 +26,9 @@ const signin = await import(pathToFileURL(join(root, 'infra/dev-stack/browser-si
 const provider = await import(pathToFileURL(join(root, 'infra/dev-stack/zitadel-api.ts')));
 const { chromium } = await import(pathToFileURL(join(root, 'node_modules/playwright/index.mjs')));
 let inputBytes = '';
-for await (const bytes of process.stdin) inputBytes += bytes.toString();
+for await (const bytes of process.stdin) {
+  inputBytes += bytes.toString();
+}
 const input = JSON.parse(inputBytes);
 const output = process.env.JOURNEY_RECEIPT_DIR;
 const port = 25000 + Number(slot) * 100;
@@ -34,7 +36,9 @@ const applicationPort = port + 6;
 const authenticationPort = port + 56;
 const tlsPort = port + 54;
 const proxyPort = port + 55;
-const setup = JSON.parse(await readFile(join(configuration.directory, 'zitadel.json'), 'utf8'));
+const setupFile = join(configuration.directory, 'zitadel.json');
+const savedSetup = await readFile(setupFile, 'utf8');
+const setup = JSON.parse(savedSetup);
 const outcomes = [];
 const sockets = new Set();
 let browser;
@@ -43,23 +47,29 @@ let failureCaptured = false;
 let chatRequests = [];
 
 async function retainFailure(error, context) {
-  if (failureCaptured) return;
+  if (failureCaptured) {
+    return;
+  }
   failureCaptured = true;
-  const page = context?.pages().at(-1);
-  const failure = await captureJourneyFailure(page, error, { step: stage,
-    path: join(output, `failed-${input.phase}.png`) });
+  const pages = context?.pages();
+  const page = pages?.at(-1);
+  const options = { step: stage, path: join(output, `failed-${input.phase}.png`) };
+  const failure = await captureJourneyFailure(page, error, options);
   failure.chatRequests = chatRequests;
   outcomes.push(failure);
   console.log(`FAIL ${failure.step}; code=${failure.code}; screenshot=${failure.screenshot}`);
 }
 
 function record(name) {
-  outcomes.push({ step: name, result: 'PASS' });
+  const outcome = { step: name, result: 'PASS' };
+  outcomes.push(outcome);
   console.log(`PASS ${name}`);
 }
 
 function trackSocket(socket) {
-  if (sockets.has(socket)) return;
+  if (sockets.has(socket)) {
+    return;
+  }
   sockets.add(socket);
   function closed() {
     sockets.delete(socket);
@@ -77,9 +87,17 @@ function proxyRequest(incoming, response) {
   }
   const authentication = incoming.url === '/auth' || incoming.url.startsWith('/auth/');
   let targetPort = applicationPort;
-  if (input.phase === 'wrong-org' && authentication) targetPort = authenticationPort;
-  const upstream = request({ hostname: '127.0.0.1', port: targetPort,
-    path: incoming.url, method: incoming.method, headers: incoming.headers }, received);
+  if (input.phase === 'wrong-org' && authentication) {
+    targetPort = authenticationPort;
+  }
+  const options = {
+    hostname: '127.0.0.1',
+    port: targetPort,
+    path: incoming.url,
+    method: incoming.method,
+    headers: incoming.headers,
+  };
+  const upstream = request(options, received);
   upstream.on('error', failed);
   upstream.on('socket', trackSocket);
   incoming.pipe(upstream);
@@ -90,9 +108,16 @@ function websocket(incoming, socket, head) {
   trackSocket(upstream);
   function connected() {
     const headers = [];
-    for (const [name, value] of Object.entries(incoming.headers)) headers.push(`${name}: ${value}`);
-    upstream.write(`${incoming.method} ${incoming.url} HTTP/1.1\r\n${headers.join('\r\n')}\r\n\r\n`);
-    if (head.length) upstream.write(head);
+    const headerEntries = Object.entries(incoming.headers);
+    for (const [name, value] of headerEntries) {
+      headers.push(`${name}: ${value}`);
+    }
+    const headerText = headers.join('\r\n');
+    const upgradeRequest = `${incoming.method} ${incoming.url} HTTP/1.1\r\n${headerText}\r\n\r\n`;
+    upstream.write(upgradeRequest);
+    if (head.length) {
+      upstream.write(head);
+    }
     socket.pipe(upstream);
     upstream.pipe(socket);
   }
@@ -113,7 +138,9 @@ function tunnel(incoming, socket, head) {
   trackSocket(upstream);
   function connected() {
     socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
-    if (head.length) upstream.write(head);
+    if (head.length) {
+      upstream.write(head);
+    }
     socket.pipe(upstream);
     upstream.pipe(socket);
   }
@@ -134,8 +161,11 @@ async function listen(server, port) {
   await new Promise(listening);
 }
 
-const tls = httpsServer({ key: await readFile(input.key),
-  cert: await readFile(input.certificate) }, proxyRequest);
+const tlsOptions = {
+  key: await readFile(input.key),
+  cert: await readFile(input.certificate),
+};
+const tls = httpsServer(tlsOptions, proxyRequest);
 tls.on('upgrade', websocket);
 tls.on('connection', trackSocket);
 const proxy = httpServer();
@@ -145,9 +175,13 @@ proxy.on('connection', trackSocket);
 async function signIn(page, user, path = '/') {
   await page.goto(`${input.origin}${path}`);
   if (path === '/claim') {
-    await page.getByRole('link', { name: 'Sign in to claim', exact: true }).click();
+    const options = { name: 'Sign in to claim', exact: true };
+    const signIn = page.getByRole('link', options);
+    await signIn.click();
   } else {
-    await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).click();
+    const options = { name: 'Continue with single sign-on', exact: true };
+    const signIn = page.getByRole('button', options);
+    await signIn.click();
   }
   const password = await readFile(user.passwordFile, 'utf8');
   await signin.completeProviderSignIn(page, user.login, password, input.origin, setup.issuer);
@@ -159,7 +193,8 @@ async function session(page, user) {
   const body = await response.json();
   assert.equal(body.authenticated, true, 'Real sign-in did not authenticate');
   assert.equal(body.user.sub, user.id, 'Another account signed in');
-  const cookies = await page.context().cookies(input.origin);
+  const context = page.context();
+  const cookies = await context.cookies(input.origin);
   function sessionCookie(value) {
     return value.name === `oc_session_${slot}`;
   }
@@ -170,14 +205,21 @@ async function session(page, user) {
 }
 
 async function submitClaim(page, token) {
-  await page.getByLabel('Display name', { exact: true }).fill('Installation owner');
-  await page.getByLabel('Contact email', { exact: true }).fill('installer@example.test');
-  await page.getByLabel('Bootstrap token', { exact: true }).fill(token);
+  const fieldOptions = { exact: true };
+  const displayName = page.getByLabel('Display name', fieldOptions);
+  await displayName.fill('Installation owner');
+  const email = page.getByLabel('Contact email', fieldOptions);
+  await email.fill('installer@example.test');
+  const tokenField = page.getByLabel('Bootstrap token', fieldOptions);
+  await tokenField.fill(token);
   function claimResponse(response) {
-    return new URL(response.url()).pathname === '/api/silo/claim';
+    const url = new URL(response.url());
+    return url.pathname === '/api/silo/claim';
   }
   const pending = page.waitForResponse(claimResponse);
-  await page.getByRole('button', { name: 'Claim this silo', exact: true }).click();
+  const claimOptions = { name: 'Claim this silo', exact: true };
+  const claim = page.getByRole('button', claimOptions);
+  await claim.click();
   const response = await pending;
   return { status: response.status(), body: await response.json() };
 }

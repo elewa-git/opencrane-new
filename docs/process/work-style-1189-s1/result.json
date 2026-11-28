@@ -1,0 +1,136 @@
+{
+  "productCommit": "67bb3d397f49531fd89abccfaeb7d8277c627205",
+  "previousProductCommit": "df2043c7548a60d196db61861c7f148714eeed46",
+  "latestJourney": {
+    "status": "PASS",
+    "head": "67bb3d397f49531fd89abccfaeb7d8277c627205",
+    "slot": 1,
+    "freshInstall": true,
+    "command": "infra/dev-stack/up.sh --fresh --id 1",
+    "exitCode": 0,
+    "passingChecks": 37,
+    "browserWidths": [390, 1280],
+    "uploadRetries": {
+      "390": 1,
+      "1280": 1,
+      "previewRetries": 0
+    },
+    "optionalLongChatApprovals": "NOT RUN",
+    "teardown": {
+      "status": "PASS",
+      "exitCode": 0,
+      "slotStatus": "free"
+    },
+    "quietWindow": {
+      "seconds": 300,
+      "sampleIntervalSeconds": 30,
+      "samples": 10,
+      "minimumLoad": 2.98,
+      "maximumLoad": 4.95
+    },
+    "checks": {
+      "typecheck": "PASS",
+      "eventCatalogue": "PASS: 175 event types agree",
+      "knip": "PASS; two configuration hints",
+      "changelog": "PASS",
+      "markdownlint": "PASS: 612 files, no issues"
+    }
+  },
+  "previousJourney": {
+    "status": "PASS",
+    "slot": 1,
+    "freshInstall": true,
+    "initialLauncher": {
+      "status": "PARTIAL",
+      "exitCode": 143,
+      "signalSender": "unknown",
+      "startupChecksPassed": 3
+    },
+    "coreContinuation": {
+      "status": "PASS",
+      "exitCode": 0,
+      "passingChecks": 34
+    },
+    "beforeTeardown": {
+      "runningServices": 14,
+      "healthyEndpoints": 5,
+      "unavailableEndpoints": 0
+    },
+    "teardown": {
+      "status": "PASS",
+      "exitCode": 0,
+      "slotStatus": "free"
+    },
+    "quietWindow": {
+      "seconds": 300,
+      "sampleIntervalSeconds": 30,
+      "startedAt": "2026-11-28T04:28:05Z",
+      "finishedAt": "2026-11-28T04:33:05Z",
+      "minimumLoad": 2.48,
+      "maximumLoad": 4.99
+    },
+    "uploadRetries": {
+      "390": 1,
+      "1280": 1,
+      "previewRetries": 0
+    },
+    "optionalLongChatApprovals": "NOT RUN"
+  },
+  "checksProductCommit": "df2043c7548a60d196db61861c7f148714eeed46",
+  "checks": {
+    "focusedNode": {
+      "status": "PASS",
+      "runs": [
+        91,
+        91
+      ]
+    },
+    "focusedBackup": {
+      "status": "PASS",
+      "runs": [
+        23,
+        23
+      ]
+    },
+    "packageVitest": {
+      "status": "PASS",
+      "files": 20,
+      "passed": 260
+    },
+    "packageNodeInitial": {
+      "status": "FAIL",
+      "passed": 1705,
+      "failed": 1,
+      "reason": "Unchanged NATS preparation fixture exceeded its existing process deadline"
+    },
+    "packageNodeIsolatedConfirmation": {
+      "status": "PASS",
+      "passed": 19,
+      "codeOrTimeoutChanged": false
+    },
+    "typecheck": "PASS",
+    "finalPackageTypecheck": "PASS",
+    "eventCatalogue": "PASS",
+    "knip": "PASS",
+    "scopedEslintWithExtraLocalConfig": "PASS",
+    "repositoryEslintInfraExclusion": "PARTIAL",
+    "markdownlint": "PASS",
+    "changelog": "PASS",
+    "privacy": "PASS",
+    "secretScan": "PASS",
+    "webSpecificGates": "NOT RUN: no web source changed"
+  },
+  "ci": {
+    "status": "PASS",
+    "run": 46104421269
+  },
+  "imageApprovals": {
+    "status": "PASS",
+    "productCommit": "df2043c7548a60d196db61861c7f148714eeed46",
+    "applicationRun": 46104457905,
+    "scannerRun": 46104460348,
+    "artifactsPresentAndUnexpired": true
+  },
+  "shippedCodeChangedLines": 780,
+  "includesExecutableJourneyDriver": true
+}

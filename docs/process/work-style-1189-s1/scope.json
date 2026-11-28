@@ -1,0 +1,100 @@
+{
+  "window": {
+    "from": "4ac3e85ea",
+    "through": "2e24538b0e944935f9a3a613693b1b14bc41eec1"
+  },
+  "overlapSkipped": {
+    "1223": [
+      "infra/package/Dockerfile",
+      "infra/package/README.md",
+      "infra/package/README.robot.md",
+      "infra/package/bootstrap-runtime-fixture.mjs",
+      "infra/package/check-licences.py",
+      "infra/package/image-layers.test.py",
+      "infra/package/licence-inventory.json",
+      "infra/package/licences.test.py",
+      "infra/package/native-runtime-inventory.json",
+      "infra/package/reviewed-images.json"
+    ],
+    "1202": [
+      "infra/package/PILOT.md",
+      "infra/package/README.md",
+      "infra/package/README.robot.md",
+      "infra/package/chart-render.test.mjs",
+      "infra/package/chart/README.md",
+      "infra/package/chart/templates/README.md",
+      "infra/package/chart/templates/apps.yaml",
+      "infra/package/chart/templates/files.yaml",
+      "infra/package/cnpg-install.test.mjs",
+      "infra/package/file-services.test.mjs",
+      "infra/package/packaged-fixture.ts",
+      "infra/package/prepare.ts"
+    ]
+  },
+  "remainingSourceFilesToCheck": [
+    "infra/package/application-approval.mjs",
+    "infra/package/approve-application.sh",
+    "infra/package/backup-bytes.ts",
+    "infra/package/backup-capture.ts",
+    "infra/package/bootstrap-imports.mjs",
+    "infra/package/bootstrap.ts",
+    "infra/package/capture.mjs",
+    "infra/package/check-application.py",
+    "infra/package/cnpg-install-preload.mjs",
+    "infra/package/debian-main.py",
+    "infra/package/event-backup.ts",
+    "infra/package/event-restore.ts",
+    "infra/package/forward.ts",
+    "infra/package/join-handoff.mjs",
+    "infra/package/object-backup.ts",
+    "infra/package/object-credentials.mjs",
+    "infra/package/object-lease-ready.mjs",
+    "infra/package/package-database.ts",
+    "infra/package/pilot-archive-import.ts",
+    "infra/package/pilot-projections.ts",
+    "infra/package/pilot-restore-database.ts",
+    "infra/package/pilot-restore-run.ts",
+    "infra/package/pilot-restore-target.ts",
+    "infra/package/pilot-restore.ts",
+    "infra/package/pilot-route.ts",
+    "infra/package/pilot-storage.ts",
+    "infra/package/preflight.mjs",
+    "infra/package/prepare-object-notices.py",
+    "infra/package/prepare-scanner.mjs",
+    "infra/package/provider-failure.ts",
+    "infra/package/provider-navigation.ts",
+    "infra/package/public-settings.mjs",
+    "infra/package/publish-image.py",
+    "infra/package/qualification-token.mjs",
+    "infra/package/scanner.mjs",
+    "infra/package/scheduled-backup-run.ts",
+    "infra/package/scheduled-backup-source.ts",
+    "infra/package/scheduled-backup.ts",
+    "infra/package/tls-cleanup.mjs",
+    "infra/package/web-page.mjs",
+    "infra/package/web.mjs"
+  ],
+  "partlyCleaned": [
+    "infra/package/qualification-signin.mjs"
+  ],
+  "replacedAfterWindow": [
+    "infra/package/provider-navigation.ts"
+  ],
+  "newHelpersAfterWindowLeftUnchanged": [
+    "infra/package/provider-failure.ts#writeShutdownFailure",
+    "infra/package/provider-settings.ts#selectChatDefault"
+  ],
+  "cleanedFiles": [
+    "infra/package/host-preflight.mjs",
+    "infra/package/model-settings.ts",
+    "infra/package/pilot-backup-contract.ts",
+    "infra/package/pilot-restore-kube.ts",
+    "infra/package/provider-probe.ts",
+    "infra/package/provider-secrets.mjs",
+    "infra/package/provider-settings.ts",
+    "infra/package/qualification-failure.mjs",
+    "infra/package/qualification-signin.mjs",
+    "infra/package/provider-journey.test.mjs"
+  ],
+  "cleanedJourneyDriver": "infra/package/provider-journey.test.mjs"
+}

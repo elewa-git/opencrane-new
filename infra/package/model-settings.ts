@@ -39,27 +39,42 @@ export function checkModelSecrets(name: string, stored: SecretData,
   }
   const data = stored.data ?? {};
   if (models?.mode === 'provider') {
-    for (const key of Object.keys(data)) {
-      if (key === 'MODEL_UPSTREAM' && models.qualification) {
-        const upstreamBytes = Buffer.from(data[key]!, 'base64');
-        const upstream = upstreamBytes.toString('utf8');
-        if (upstream === qualificationUpstream) continue;
-      }
-      if (key === 'MODEL_UPSTREAM' || key === 'MODEL_KEY_FILE' ||
-          key.startsWith('MODEL_STUB_') || key === 'model-stub-key' ||
-          key === 'model-qualification-key') {
-        throw new Error('Provider mode refuses stand-in settings');
-      }
-    }
-    if (name === 'runtime' && models.qualification) {
-      requirePackageProviderDestination({
-        PACKAGE_PROVIDER_MODE: '1', PACKAGE_PROVIDER_QUALIFICATION: '1',
-        MODEL_UPSTREAM: Buffer.from(data['MODEL_UPSTREAM'] ?? '', 'base64').toString('utf8'),
-        DEV_REAL_PROVIDER: data['DEV_REAL_PROVIDER'],
-      });
-    }
+    checkProviderSecrets(name, data, models);
     return;
   }
+  checkStubSecrets(name, data);
+}
+
+function checkProviderSecrets(name: string, data: Record<string, string>, models: PackageModels) {
+  // Allow the fixed upstream so qualification can use its separate stand-in.
+  // Refuse embedded stand-in keys to keep the runtime Secrets free of fallback credentials.
+  for (const key of Object.keys(data)) {
+    if (key === 'MODEL_UPSTREAM' && models.qualification) {
+      const upstreamBytes = Buffer.from(data[key]!, 'base64');
+      const upstream = upstreamBytes.toString('utf8');
+      if (upstream === qualificationUpstream) {
+        continue;
+      }
+    }
+    if (key === 'MODEL_UPSTREAM' || key === 'MODEL_KEY_FILE' ||
+        key.startsWith('MODEL_STUB_') || key === 'model-stub-key' ||
+        key === 'model-qualification-key') {
+      throw new Error('Provider mode refuses stand-in settings');
+    }
+  }
+  if (name === 'runtime' && models.qualification) {
+    const upstreamBytes = Buffer.from(data['MODEL_UPSTREAM'] ?? '', 'base64');
+    const destination = {
+      PACKAGE_PROVIDER_MODE: '1',
+      PACKAGE_PROVIDER_QUALIFICATION: '1',
+      MODEL_UPSTREAM: upstreamBytes.toString('utf8'),
+      DEV_REAL_PROVIDER: data['DEV_REAL_PROVIDER'],
+    };
+    requirePackageProviderDestination(destination);
+  }
+}
+
+function checkStubSecrets(name: string, data: Record<string, string>) {
   const requiredKeys = name === 'runtime' ? ['MODEL_UPSTREAM', 'MODEL_KEY_FILE'] : ['model-stub-key'];
   for (const key of requiredKeys) {
     if (!data[key]) {
@@ -67,7 +82,8 @@ export function checkModelSecrets(name: string, stored: SecretData,
     }
   }
   if (name === 'runtime') {
-    const upstream = Buffer.from(data['MODEL_UPSTREAM']!, 'base64').toString('utf8');
+    const upstreamBytes = Buffer.from(data['MODEL_UPSTREAM']!, 'base64');
+    const upstream = upstreamBytes.toString('utf8');
     if (upstream !== '127.0.0.1:43003') {
       throw new Error('The package model must use its local stub');
     }
@@ -75,7 +91,9 @@ export function checkModelSecrets(name: string, stored: SecretData,
 }
 
 export function requirePackageProviderDestination(environment: NodeJS.ProcessEnv) {
-  if (environment['PACKAGE_PROVIDER_QUALIFICATION'] !== '1') return;
+  if (environment['PACKAGE_PROVIDER_QUALIFICATION'] !== '1') {
+    return;
+  }
   if (environment['PACKAGE_PROVIDER_MODE'] !== '1' ||
       environment['MODEL_UPSTREAM'] !== qualificationUpstream ||
       environment['MODEL_KEY_FILE'] !== undefined || environment['DEV_REAL_PROVIDER'] !== undefined) {

@@ -5,9 +5,13 @@ const safeStep = new RegExp(`^(${roleAndWidth}${operation}|browser launch)$`, 'u
 
 export function journeyFailure(step, error) {
   let code = 'BROWSER_ERROR';
-  if (error?.name === 'TimeoutError') code = 'BROWSER_TIMEOUT';
-  else if (error?.code === 'ERR_ASSERTION') code = 'ASSERTION_FAILED';
-  else if (/net::ERR_[A-Z_]+/u.test(error?.message ?? '')) code = 'BROWSER_NETWORK_ERROR';
+  if (error?.name === 'TimeoutError') {
+    code = 'BROWSER_TIMEOUT';
+  } else if (error?.code === 'ERR_ASSERTION') {
+    code = 'ASSERTION_FAILED';
+  } else if (/net::ERR_[A-Z_]+/u.test(error?.message ?? '')) {
+    code = 'BROWSER_NETWORK_ERROR';
+  }
   return { step: safeStep.test(step) ? step : 'unknown step', result: 'FAIL', code };
 }
 
@@ -16,7 +20,8 @@ export async function captureJourneyFailure(page, error, options) {
   try {
     // Mask form values even when the failed step is on the external sign-in page.
     const fields = page.locator('input, textarea');
-    await page.screenshot({ path: options.path, fullPage: true, mask: [fields] });
+    const screenshotOptions = { path: options.path, fullPage: true, mask: [fields] };
+    await page.screenshot(screenshotOptions);
     return { ...failure, screenshot: 'PASS' };
   } catch {
     // Preserve the original failure and report missing evidence explicitly.
