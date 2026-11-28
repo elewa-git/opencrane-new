@@ -45,8 +45,19 @@ the new digest. Each licence scan accepted all 394 components and collected all
 pins, installed-source checksums and the application template checksum now match.
 The previous pin was rejected before refresh because the source had changed.
 
-Pushed product commit, GitHub approval artifacts and CI results will be recorded
-after they finish. The PR remains draft.
+**PASS — GitHub package approvals.** The pushed product commit is
+`a02dc5a6b1d998843a856173d10c83f573e9ab8c`.
+[Application approval 46097191421](https://github.com/elewa-git/opencrane-new/actions/runs/46097191421)
+and [scanner approval 46097191379](https://github.com/elewa-git/opencrane-new/actions/runs/46097191379)
+both passed for that exact commit. All four approval/image artifacts were present
+and unexpired when checked on 28 November 2026. Their expiry is 29 November 2026.
+The CI image fixture job also passed.
+
+**PENDING at writing — full hosted CI.** The final hosted result is recorded on
+PR #1223 after the receipt push. Local gates above are complete. Public privacy
+and secret scans passed before the product push and run again before this receipt
+push. The PR remains draft. A packaged operator rerun must use the approved product
+commit while the branch ends in this receipt-only update.
 
 ## Run 3 — PARTIAL
 
