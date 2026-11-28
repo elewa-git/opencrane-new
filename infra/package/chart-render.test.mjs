@@ -82,6 +82,22 @@ function upgradeKeepsTheFinishedBootstrapImage() {
 test('an application update keeps the finished bootstrap Job on its original image',
   upgradeKeepsTheFinishedBootstrapImage);
 
+function updateStopsWritersBeforeRestartingComputers() {
+  const values = chartValues();
+  values.pilotUpdatePaused = true;
+  const resources = renderedResources(values, ['--is-upgrade']);
+  for (const [name, resource] of resources) {
+    if (name === 'Deployment/server' || name.startsWith('Deployment/worker-')) {
+      assert.equal(resource.spec.replicas, 0, `${name} stays stopped during computer replacement`);
+    }
+  }
+  assert.equal(resources.get('Deployment/web').spec.replicas, 1);
+  assert.equal(resources.get('StatefulSet/postgres').spec.replicas, 1);
+}
+
+test('the update keeps writers stopped while replacing computer images',
+  updateStopsWritersBeforeRestartingComputers);
+
 function cnpgValues() {
   const values = chartValues();
   values.postgres = {
