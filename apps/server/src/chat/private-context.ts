@@ -12,18 +12,26 @@ export const PRIVATE_CONTEXT_LIMIT_BYTES = 24 * 1024;
 
 function eventData(row: StoredEvent) {
   const data = row.event.data;
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return {};
-  return z.record(z.string(), z.unknown()).parse(data);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return {};
+  }
+  const recordSchema = z.record(z.string(), z.unknown());
+  return recordSchema.parse(data);
 }
 
 function recordMemoryTurn(row: StoredEvent, turnIds: Set<string>) {
-  if (row.event.type !== 'agent.memory_context_recorded') return;
+  if (row.event.type !== 'agent.memory_context_recorded') {
+    return;
+  }
   const turnId = eventData(row)['turnId'];
-  if (typeof turnId === 'string') turnIds.add(turnId);
+  if (typeof turnId === 'string') {
+    turnIds.add(turnId);
+  }
 }
 
 // Read replies across the stream. An earlier turn can finish after the next message is posted.
-export function privateContext(rows: StoredEvent[], message: StoredEvent, requesterId: string): PrivateContext | undefined {
+export function privateContext(rows: StoredEvent[], message: StoredEvent,
+  requesterId: string): PrivateContext | undefined {
   const messages: StoredEvent[] = [];
   const completed = new Set<string>();
   const lost = new Set<string>();
@@ -42,9 +50,15 @@ export function privateContext(rows: StoredEvent[], message: StoredEvent, reques
       continue;
     }
     const turnId = eventData(row)['turnId'];
-    if (typeof turnId !== 'string' || turnId === message.event.id) continue;
-    if (type === 'agent.turn_completed') completed.add(turnId);
-    if (type === 'agent.output_lost') lost.add(turnId);
+    if (typeof turnId !== 'string' || turnId === message.event.id) {
+      continue;
+    }
+    if (type === 'agent.turn_completed') {
+      completed.add(turnId);
+    }
+    if (type === 'agent.output_lost') {
+      lost.add(turnId);
+    }
     if (type === 'agent.message_completed') {
       const texts = replies.get(turnId) ?? [];
       texts.push(row);
@@ -52,10 +66,15 @@ export function privateContext(rows: StoredEvent[], message: StoredEvent, reques
     }
   }
   // Exclude the whole turn before reading prose, including replies saved before its first recall.
-  for (const turnId of memoryTurns) replies.delete(turnId);
-  if (!messages.length) return undefined;
+  for (const turnId of memoryTurns) {
+    replies.delete(turnId);
+  }
+  if (!messages.length) {
+    return undefined;
+  }
   const result: PrivateContext = { exchanges: [], omittedExchanges: messages.length };
-  for (const earlier of messages.reverse()) {
+  const newestFirst = messages.reverse();
+  for (const earlier of newestFirst) {
     const exchange = exchangeFor(earlier, completed, lost, replies);
     result.exchanges.unshift(exchange);
     result.omittedExchanges--;
@@ -76,7 +95,10 @@ function exchangeFor(message: StoredEvent, completed: Set<string>, lost: Set<str
     return { at, outcome: 'not_completed' as const };
   }
   const assistant: string[] = [];
-  for (const reply of replies.get(turnId) ?? []) assistant.push(readConversationProse(reply.event.data));
+  for (const reply of replies.get(turnId) ?? []) {
+    const text = readConversationProse(reply.event.data);
+    assistant.push(text);
+  }
   return { at, member: readConversationProse(message.event.data), assistant };
 }
 

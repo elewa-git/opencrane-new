@@ -8,7 +8,10 @@ import { z } from 'zod';
 
 export class ParticipationRefused extends Error {}
 export class ParticipationApplying extends Error {}
-const participant = z.object({ participantId: z.string() });
+const participantFields = { participantId: z.string() };
+const participant = z.object(participantFields);
+const readerIdentityFields = [z.string(), z.string()] as const;
+const readerIdentity = z.tuple(readerIdentityFields);
 // Keep the first join of each period and remember removals that replace an older period.
 type Change = { row: StoredEvent; hasRemoval: boolean; position: number };
 type Changes = Map<string, Change>;
@@ -28,11 +31,15 @@ function addChange(changes: Changes, row: StoredEvent) {
   conversationEventId(event);
   const memberId = participant.parse(event.data).participantId;
   const previous = changes.get(memberId);
-  let start = row;
+  let changeRow = row;
   let hasRemoval = previous?.hasRemoval ?? false;
-  if (event.type === 'participant.removed') hasRemoval = true;
-  else if (previous?.row.event.type === 'participant.added') start = previous.row;
-  changes.set(memberId, { row: start, hasRemoval, position: row.sequence });
+  if (event.type === 'participant.removed') {
+    hasRemoval = true;
+  } else if (previous?.row.event.type === 'participant.added') {
+    changeRow = previous.row;
+  }
+  const change = { row: changeRow, hasRemoval, position: row.sequence };
+  changes.set(memberId, change);
 }
 function changeCount(changes: Changes) {
   return changes.size;
@@ -53,9 +60,12 @@ const legacyKind: SummaryKind<Changes> = {
 
 function legacyReader(store: Pick<EventStore, 'readEvent' | 'clock'>, db: Query) {
   let reader = legacyReaders.get(store);
-  if (reader) return reader;
+  if (reader) {
+    return reader;
+  }
   async function* readStream(subject: string, fromSequence = 1, deadline = Infinity) {
-    const [silo, conversationId] = z.tuple([z.string(), z.string()]).parse(JSON.parse(subject));
+    const value: unknown = JSON.parse(subject);
+    const [silo, conversationId] = readerIdentity.parse(value);
     const result = await db.query<{ position: string; event_id: string }>(
       `SELECT position, event_id FROM conversation_legacy_participation
         WHERE silo = $1 AND conversation_id = $2 AND position >= $3 ORDER BY position`,
@@ -102,10 +112,14 @@ async function participationCreation(store: Pick<EventStore, 'readStream' | 'clo
 }
 
 function legacyChanges(legacy: StoredEvent[] | Changes, silo: string, conversationId: string) {
-  if (legacy instanceof Map) return legacy;
+  if (legacy instanceof Map) {
+    return legacy;
+  }
   const changes: Changes = new Map();
   for (const row of legacy) {
-    if (!row.event.type.startsWith('participant.')) continue;
+    if (!row.event.type.startsWith('participant.')) {
+      continue;
+    }
     if (row.event.silo !== silo || conversationEventId(row.event) !== conversationId) {
       throw new ParticipationRefused('Conversation refused');
     }
@@ -125,10 +139,14 @@ export async function participation(store: Pick<EventStore, 'readStream' | 'cloc
   const currentPosition = applyChanges(joins, current, conversationId);
   const accessPosition = Math.max(creation.sequence, legacyPosition, currentPosition);
   const join = joins.get(memberId);
-  if (!join) throw new ParticipationRefused('Conversation refused');
+  if (!join) {
+    throw new ParticipationRefused('Conversation refused');
+  }
   const authorityRows = [creation];
   for (const currentJoin of joins.values()) {
-    if (currentJoin.event.id !== creation.event.id) authorityRows.push(currentJoin);
+    if (currentJoin.event.id !== creation.event.id) {
+      authorityRows.push(currentJoin);
+    }
   }
   return { created, creation, participantIds: [...joins.keys()], joinPosition: join.sequence,
     joinEventId: join.event.id, join, historyPosition: conversationHistoryPosition(creation, join),
@@ -144,7 +162,9 @@ function applyChanges(joins: Map<string, StoredEvent>, changes: Changes,
       throw new ParticipationRefused('Conversation refused');
     }
     position = Math.max(position, change.position);
-    if (change.hasRemoval) joins.delete(participantId);
+    if (change.hasRemoval) {
+      joins.delete(participantId);
+    }
     if (row.event.type === 'participant.added' && !joins.has(participantId)) {
       joins.set(participantId, row);
     }
@@ -183,9 +203,12 @@ const closureReaders = new WeakMap<object, Pick<EventStore, 'readStream' | 'cloc
 
 function closureReader(store: Pick<EventStore, 'readStream' | 'readEvent' | 'clock'>, db: Query) {
   let reader = closureReaders.get(store);
-  if (reader) return reader;
+  if (reader) {
+    return reader;
+  }
   async function* readStream(subject: string, fromSequence = 1, deadline = Infinity) {
-    const identity = z.tuple([z.string(), z.string()]).parse(JSON.parse(subject));
+    const value: unknown = JSON.parse(subject);
+    const identity = readerIdentity.parse(value);
     const [silo, conversationId] = identity;
     yield* closureRecords(store, db, silo, conversationId, fromSequence, deadline);
   }
@@ -226,7 +249,9 @@ async function* closureRecords(store: Pick<EventStore, 'readStream' | 'readEvent
       throw new ParticipationRefused('Conversation refused');
     }
     yield row;
-    if (row.event.type === 'conversation.closed') return;
+    if (row.event.type === 'conversation.closed') {
+      return;
+    }
   }
 }
 
@@ -235,12 +260,19 @@ function emptyMembership(): Membership {
   return { active: false };
 }
 function addMembership(membership: Membership, row: StoredEvent) {
-  const memberId = z.object({ memberId: z.string() }).parse(row.event.data).memberId;
-  if (row.event.subject !== `member-${memberId}`) throw new Error('Membership history changed');
+  const memberFields = { memberId: z.string() };
+  const memberSchema = z.object(memberFields);
+  const member = memberSchema.parse(row.event.data);
+  const memberId = member.memberId;
+  if (row.event.subject !== `member-${memberId}`) {
+    throw new Error('Membership history changed');
+  }
   if (row.event.type === 'member.joined' || row.event.type === 'silo.owner_bootstrapped') {
     membership.active = true;
   }
-  if (row.event.type === 'member.removed') membership.active = false;
+  if (row.event.type === 'member.removed') {
+    membership.active = false;
+  }
 }
 function membershipActive(membership: Membership) {
   return membership.active;

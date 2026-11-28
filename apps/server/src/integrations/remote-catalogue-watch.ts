@@ -33,16 +33,16 @@ export function remoteCatalogueWatch(db: Query, store: EventStore, silo: string,
         throw new Error('Catalogue rows unavailable');
       }
       serverIds = serverIdsFromRows(result.rows, silo);
-    } catch {
+    } catch (cause) {
       await watch.reconcile([]);
-      throw new Error('Catalogue rows unavailable');
+      throw new Error('Catalogue rows unavailable', { cause });
     }
     await watch.reconcile(serverIds);
     return serverIds;
   }
   function checkServer(serverId: string) {
     const checking = watch.checkDue(serverId);
-    // Re-arm healthy servers even if another capture has already rejected the batch.
+    // Schedule healthy servers again even if another capture has rejected the batch.
     return checking.finally(schedule);
   }
   function checkServers(serverIds: string[]) {
@@ -83,7 +83,7 @@ export function remoteCatalogueWatch(db: Query, store: EventStore, silo: string,
     if (lifecycle.signal.aborted || active || !reportError) {
       return;
     }
-    // Wake for short catalogue TTLs even while the models loop is doing other work.
+    // Check short-lived catalogue entries even while the models loop is doing other work.
     const next = Math.min(nextRead, watch.nextCheckAt());
     const delayMs = Math.max(1, next - Date.now());
     timer = setTimeout(poll, delayMs);
@@ -152,7 +152,9 @@ function serverIdsFromRows(rows: Record<string, unknown>[], silo: string) {
   const serverIds: string[] = [];
   for (const raw of rows) {
     const row = candidate.parse(raw);
-    if (row.silo !== silo) throw new Error('Catalogue silo mismatch');
+    if (row.silo !== silo) {
+      throw new Error('Catalogue silo mismatch');
+    }
     serverIds.push(row.server_id);
   }
   return serverIds;

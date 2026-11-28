@@ -14,22 +14,26 @@ const serverRow = z.object({ server_id: recordIdSchema });
 export async function personalConnectionNeeds(options: PersonalConnectionNeedsOptions,
   requesterId: string, assistantId: string) {
   try {
+    const queryOptions = { deadline: performance.now() + 10_000 };
     const result = await options.db.query(`SELECT server_id FROM mcp_catalogue
       WHERE silo = $1 ORDER BY server_id LIMIT 32`, [options.silo],
-    { deadline: performance.now() + 10_000 });
+      queryOptions);
     const rows: { serverId: string }[] = [];
     for (const raw of result.rows) {
       const row = serverRow.parse(raw);
-      rows.push({ serverId: row.server_id });
+      const server = { serverId: row.server_id };
+      rows.push(server);
     }
     const needs: { serverId: string; name: string; reason?: 'assistant_not_allowed' }[] = [];
     function missingConnection(server: TurnToolServerState, reason?: 'assistant_not_allowed') {
-      needs.push({ serverId: server.serverId, name: server.serverInfo?.name ?? server.serverId,
-        ...(reason ? { reason } : {}) });
+      const missing = { serverId: server.serverId,
+        name: server.serverInfo?.name ?? server.serverId, ...(reason ? { reason } : {}) };
+      needs.push(missing);
     }
     const readers = turnToolReaders(options);
-    await buildTurnTools({ rows, requesterId, assistantId, ...readers,
-      baseMessageBytes: 0, missingConnection });
+    const toolInput = { rows, requesterId, assistantId, ...readers,
+      baseMessageBytes: 0, missingConnection };
+    await buildTurnTools(toolInput);
     return needs;
   } finally {
     await readActiveMember(options.store, options.binding, requesterId);

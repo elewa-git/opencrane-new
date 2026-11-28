@@ -100,11 +100,6 @@
       "count": 1
     }
   },
-  "apps/server/src/chat/approvals.ts": {
-    "max-params": {
-      "count": 1
-    }
-  },
   "apps/server/src/chat/bridge-approvals.ts": {
     "max-lines-per-function": {
       "count": 1
@@ -232,7 +227,7 @@
   },
   "apps/server/src/chat/turn-credentials.ts": {
     "max-params": {
-      "count": 2
+      "count": 1
     }
   },
   "apps/server/src/chat/turns.ts": {

@@ -53,13 +53,19 @@ export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
       reply.header('cache-control', 'no-store');
       const session = sessionFor(request, config, new Date());
       if (!session) {
-        return reply.code(401).send({ status: 'refused' });
+        reply.code(401);
+        const response = { status: 'refused' };
+        return reply.send(response);
       }
       if (!options) {
-        return reply.code(503).send({ status: 'unavailable' });
+        reply.code(503);
+        const response = { status: 'unavailable' };
+        return reply.send(response);
       }
       if (!trustedRequest(request, config, options, session)) {
-        return reply.code(403).send({ status: 'refused' });
+        reply.code(403);
+        const response = { status: 'refused' };
+        return reply.send(response);
       }
       try {
         const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
@@ -69,15 +75,20 @@ export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
         return await action(request, reply, options, memberId);
       } catch (error) {
         if (error instanceof AuthorityApplying) {
-          return reply.code(425).send({ status: 'access_applying' });
+          reply.code(425);
+          const response = { status: 'access_applying' };
+          return reply.send(response);
         }
         if (error instanceof ProviderChoiceRefused) {
-          return reply.code(403).send({ status: 'refused', reason: error.reason });
+          reply.code(403);
+          const response = { status: 'refused', reason: error.reason };
+          return reply.send(response);
         }
         const code = errorCode(error);
         const result = { status: code === 503 ? 'unavailable' : 'refused',
           ...(error instanceof ProviderUnpriced ? { reason: 'unknown_price' } : {}) };
-        return reply.code(code).send(result);
+        reply.code(code);
+        return reply.send(result);
       }
     }
   }
